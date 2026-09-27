@@ -29,7 +29,7 @@ services:
       - NEXT_PUBLIC_API_URL=https://api.flintapply.com
       - NEXTAUTH_URL=https://flintapply.com
       - AUTH_URL=https://flintapply.com
-      - AUTH_TRUST_HOST=false
+      - AUTH_TRUST_HOST=true
       - NEXT_PUBLIC_APP_ENV=production
       - NEXT_PUBLIC_LAUNCH_AT=${NEXT_PUBLIC_LAUNCH_AT:-2026-10-15T09:00:00-07:00}
       - LAUNCH_PREVIEW_SECRET=${LAUNCH_PREVIEW_SECRET:-}
