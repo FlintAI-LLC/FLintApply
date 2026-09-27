@@ -42,7 +42,6 @@ export function PostHeroScrollSequence({
 }) {
   const creditsLabel = startingCredits === 1 ? "credit" : "credits";
   const trackRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<number | null>(null);
   const [progress, setProgress] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
 
@@ -57,31 +56,26 @@ export function PostHeroScrollSequence({
   useEffect(() => {
     if (reducedMotion) return;
 
-    const sync = () => {
-      if (frameRef.current !== null) return;
-      frameRef.current = requestAnimationFrame(() => {
-        frameRef.current = null;
-        const track = trackRef.current;
-        if (!track) return;
+    const measure = () => {
+      const track = trackRef.current;
+      if (!track) return;
 
-        const rect = track.getBoundingClientRect();
-        setProgress(
-          pinnedProgressForSticky(
-            { top: rect.top, height: rect.height },
-            window.innerHeight,
-            PINNED_STICKY_TOP_PX,
-          ),
-        );
-      });
+      const rect = track.getBoundingClientRect();
+      setProgress(
+        pinnedProgressForSticky(
+          { top: rect.top, height: rect.height },
+          window.innerHeight,
+          PINNED_STICKY_TOP_PX,
+        ),
+      );
     };
 
-    sync();
-    window.addEventListener("scroll", sync, { passive: true });
-    window.addEventListener("resize", sync, { passive: true });
+    measure();
+    window.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure, { passive: true });
     return () => {
-      window.removeEventListener("scroll", sync);
-      window.removeEventListener("resize", sync);
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      window.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
     };
   }, [reducedMotion]);
 

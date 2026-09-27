@@ -71,36 +71,30 @@ function FlowList({
  */
 export function ComparisonSection() {
   const trackRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<number | null>(null);
   const [compareProgress, setCompareProgress] = useState(0);
   const flipped = compareProgress >= FLIP_AT;
   const overlayOpacity = 1 - compareProgress;
 
   useEffect(() => {
-    const sync = () => {
-      if (frameRef.current !== null) return;
-      frameRef.current = requestAnimationFrame(() => {
-        frameRef.current = null;
-        const track = trackRef.current;
-        if (!track) return;
+    const measure = () => {
+      const track = trackRef.current;
+      if (!track) return;
 
-        const rect = track.getBoundingClientRect();
-        const progress = pinnedProgressForSticky(
-          { top: rect.top, height: rect.height },
-          window.innerHeight,
-          PINNED_STICKY_TOP_PX,
-        );
-        setCompareProgress(comparisonProgressFromTrack(progress));
-      });
+      const rect = track.getBoundingClientRect();
+      const progress = pinnedProgressForSticky(
+        { top: rect.top, height: rect.height },
+        window.innerHeight,
+        PINNED_STICKY_TOP_PX,
+      );
+      setCompareProgress(comparisonProgressFromTrack(progress));
     };
 
-    sync();
-    window.addEventListener("scroll", sync, { passive: true });
-    window.addEventListener("resize", sync, { passive: true });
+    measure();
+    window.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure, { passive: true });
     return () => {
-      window.removeEventListener("scroll", sync);
-      window.removeEventListener("resize", sync);
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      window.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
     };
   }, []);
 
@@ -122,7 +116,15 @@ export function ComparisonSection() {
             className={`sticky ${PINNED_STICKY_TOP_CLASS} ${PINNED_PANEL_HEIGHT_CLASS} flex min-h-0 flex-col overflow-hidden py-4 sm:py-6`}
           >
             <header className="shrink-0 text-center">
-              <h2 className={SECTION_HEADING}>Same goal, days earlier</h2>
+              <h2
+                className={`text-center text-2xl font-semibold mb-3 transition-colors duration-500 motion-reduce:transition-none ${
+                  flipped
+                    ? "text-emerald-800 dark:text-emerald-300"
+                    : "text-slate-800 dark:text-slate-200"
+                }`}
+              >
+                Same goal, days earlier
+              </h2>
               <p className={`${SECTION_SUBHEADING} mb-4 sm:mb-6`}>
                 Scroll to compare doing it alone versus using {PRODUCT_NAME}.
               </p>

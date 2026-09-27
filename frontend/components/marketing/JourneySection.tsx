@@ -34,42 +34,36 @@ import {
  */
 export function JourneySection() {
   const trackRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<number | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [railProgressValue, setRailProgressValue] = useState(0);
 
   useEffect(() => {
-    const sync = () => {
-      if (frameRef.current !== null) return;
-      frameRef.current = requestAnimationFrame(() => {
-        frameRef.current = null;
-        const track = trackRef.current;
-        if (!track) return;
+    const measure = () => {
+      const track = trackRef.current;
+      if (!track) return;
 
-        const rect = track.getBoundingClientRect();
-        const progress = pinnedProgressForSticky(
-          { top: rect.top, height: rect.height },
-          window.innerHeight,
-          PINNED_STICKY_TOP_PX,
-        );
-        setRailProgressValue(progress);
+      const rect = track.getBoundingClientRect();
+      const progress = pinnedProgressForSticky(
+        { top: rect.top, height: rect.height },
+        window.innerHeight,
+        PINNED_STICKY_TOP_PX,
+      );
+      setRailProgressValue(progress);
 
-        const stageProgress = journeyStageProgressFromTrack(
-          progress,
-          JOURNEY_STEPS.length,
-        );
-        const next = activeStageFromProgress(stageProgress, JOURNEY_STEPS.length);
-        if (next !== null) setActiveIndex(next);
-      });
+      const stageProgress = journeyStageProgressFromTrack(
+        progress,
+        JOURNEY_STEPS.length,
+      );
+      const next = activeStageFromProgress(stageProgress, JOURNEY_STEPS.length);
+      if (next !== null) setActiveIndex(next);
     };
 
-    sync();
-    window.addEventListener("scroll", sync, { passive: true });
-    window.addEventListener("resize", sync, { passive: true });
+    measure();
+    window.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure, { passive: true });
     return () => {
-      window.removeEventListener("scroll", sync);
-      window.removeEventListener("resize", sync);
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      window.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
     };
   }, []);
 

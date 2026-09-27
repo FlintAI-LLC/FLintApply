@@ -99,6 +99,34 @@ async def test_save_jd_returns_jd_id_and_export_token(app_client: AsyncClient) -
 
 
 @pytest.mark.asyncio
+async def test_save_jd_strips_html_markup(app_client: AsyncClient) -> None:
+    token, _ = await _register(app_client, "html")
+
+    save_r = await app_client.post(
+        "/api/job-descriptions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "title": "QA Engineer",
+            "company": "Mitratech",
+            "text": "<p>Build <strong>automated tests</strong> with Selenium.</p><ul><li>Regression</li></ul>",
+            "source": "extension",
+        },
+    )
+    assert save_r.status_code == 200, save_r.text
+    jd_id = save_r.json()["jd_id"]
+
+    get_r = await app_client.get(
+        f"/api/job-descriptions/{jd_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert get_r.status_code == 200, get_r.text
+    body = get_r.json()
+    assert "<p>" not in body["text"]
+    assert "automated tests" in body["text"]
+    assert "Regression" in body["text"]
+
+
+@pytest.mark.asyncio
 async def test_save_jd_truncates_text_at_20k(app_client: AsyncClient) -> None:
     token, _ = await _register(app_client, "trunc")
 

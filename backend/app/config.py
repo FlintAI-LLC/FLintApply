@@ -124,6 +124,11 @@ class Settings(BaseSettings):
     # Base URL of the frontend, used to build email links (verify/reset/etc.)
     FRONTEND_BASE_URL: str = "http://localhost:3000"
 
+    # Pre-launch gate: block sign-up until this instant (ISO-8601). Empty = disabled.
+    LAUNCH_AT: str = ""
+    # Shared secret for early-access cookie (must match frontend LAUNCH_PREVIEW_SECRET).
+    LAUNCH_PREVIEW_SECRET: str = ""
+
     # Token TTLs (seconds) — overridable per environment for testing.
     ACCESS_TOKEN_TTL_SECONDS: int = 15 * 60        # 15 min — §18.2 hard cap
     REFRESH_TOKEN_TTL_SECONDS: int = 7 * 24 * 3600  # 7 days

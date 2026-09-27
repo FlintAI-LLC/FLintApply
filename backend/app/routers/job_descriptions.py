@@ -26,6 +26,7 @@ from app.services.autofill import (
     extract_contact,
     url_host,
 )
+from app.parsers.html_parser import strip_html_to_text
 from app.services.flint_handoff import create_jd_handoff_token
 from app.services.session_store import get_session
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -210,7 +211,7 @@ async def get_job_description(
         url=row.url,
         title=row.title,
         company=row.company,
-        text=row.text,
+        text=strip_html_to_text(row.text, max_chars=settings.JD_TEXT_MAX_CHARS),
         source=row.source,
         created_at=row.created_at.isoformat(),
         session_id=row.session_id,
@@ -236,8 +237,8 @@ async def save_job_description(
     intended coupling: a JD without a token is unreachable from the
     "Open in Flint" flow, and a token without a JD is dangling state.
     """
-    # Enforce the 20k-char cap server-side (extension may send raw DOM text).
-    text = body.text[: settings.JD_TEXT_MAX_CHARS]
+    # Extension capture may include boards-api HTML; normalize before storage.
+    text = strip_html_to_text(body.text, max_chars=settings.JD_TEXT_MAX_CHARS)
 
     jd = JobDescription(
         id=uuid.uuid4(),

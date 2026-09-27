@@ -11,7 +11,9 @@ import {
   replaceSessionNewUrlIfNeeded,
 } from "@/lib/extensionHandoff";
 import { clearCheckupHandoff, getCheckupHandoff } from "@/lib/checkupHandoff";
+import { formatApplicationLabel } from "@/lib/applicationLabel";
 import { shouldReviewExtensionJd } from "@/lib/jdCompleteness";
+import { plainTextFromMaybeHtml } from "@/lib/jdPlainText";
 import { PRODUCT_NAME } from "@/lib/brand";
 import { getJob } from "@/lib/jobs";
 import { ResumeUploader } from "@/components/wizard/ResumeUploader";
@@ -31,6 +33,7 @@ import {
 
 const SESSION_STORAGE_KEY = "smart_resume_session_id";
 const APP_NAME_STORAGE_KEY = "smart_resume_application_name";
+const APP_NAME_JD_KEY = "smart_resume_application_name_jd_id";
 
 // Resume → Job Description → Your Info (platform AI — no BYOK step)
 const STEPS = ["resume", "jd", "info"] as const;
@@ -277,9 +280,19 @@ function NewSessionContent() {
               }
             }
 
-            setJdText(saved.text);
+            setJdText(plainTextFromMaybeHtml(saved.text));
             if (saved.title?.trim()) {
               setJdTitle(saved.title.trim());
+            }
+            const suggestedName = formatApplicationLabel(saved.company, saved.title);
+            const lastNamedJdId = sessionStorage.getItem(APP_NAME_JD_KEY);
+            if (suggestedName && lastNamedJdId !== jdId) {
+              sessionStorage.setItem(APP_NAME_JD_KEY, jdId);
+              sessionStorage.setItem(APP_NAME_STORAGE_KEY, suggestedName);
+              lastPersistedNameRef.current = suggestedName;
+              setApplicationName(suggestedName);
+            } else if (suggestedName) {
+              setApplicationName((prev) => (prev.trim() ? prev : suggestedName));
             }
             const urlStep = searchParams.get("step");
             const onLaterWizardStep = urlStep === "info" || urlStep === "resume";

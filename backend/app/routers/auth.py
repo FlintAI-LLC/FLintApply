@@ -481,6 +481,10 @@ async def register(
     payload: RegisterRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AuthSuccessResponse:
+    from app.services.launch_gate import assert_signup_allowed
+
+    assert_signup_allowed(request)
+
     email = payload.email.lower().strip()
     email_canonical = canonicalize_email(email)
 
@@ -800,6 +804,10 @@ async def oauth_callback(
         )
     ).scalar_one_or_none()
     if user is None:
+        from app.services.launch_gate import assert_signup_allowed
+
+        assert_signup_allowed(request)
+
         email = profile["email"].lower().strip()
         email_canonical = canonicalize_email(email)
         # Also reject if the email already belongs to a different provider.

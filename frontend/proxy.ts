@@ -17,6 +17,8 @@ import {
   mustCompleteOnboarding,
   postAuthLandingPath,
 } from "@/lib/auth/onboarding"
+import { hasLaunchPreviewAccess, launchGateActive } from "@/lib/launchGate"
+import { isLaunchPublicPath } from "@/lib/launchPreview"
 
 // Prefix-match protected routes.
 const PROTECTED_PREFIXES = [
@@ -40,6 +42,18 @@ export default auth(async function proxy(req) {
   const nonce = createCspNonce()
   const { pathname } = req.nextUrl
   const session = req.auth
+
+  // ── Pre-launch gate (marketing only; early access via preview cookie) ───
+  if (launchGateActive() && !hasLaunchPreviewAccess(req)) {
+    const blocked =
+      !isLaunchPublicPath(pathname) ||
+      pathname.startsWith("/api/auth/signin")
+    if (blocked) {
+      const home = new URL("/", req.url)
+      home.searchParams.set("launch", "soon")
+      return redirectWithContentSecurityPolicy(home, nonce)
+    }
+  }
 
   // ── Separate admin guard (isolated from user NextAuth session) ────────────
   if (pathname.startsWith("/admin") && !pathname.startsWith(ADMIN_AUTH_PATH)) {
@@ -114,6 +128,6 @@ export const config = {
     // extension this pattern already skips, so without them every crawler hit
     // would run auth() to reach a file that is public by definition.
     // `opengraph-image.png` is already covered by the `.png` case.
-    "/((?!api/auth|_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|eot|css|js)$).*)",
+    "/((?!api/auth/callback|api/auth/session|api/auth/providers|api/auth/csrf|api/auth/error|_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|eot|css|js)$).*)",
   ],
 }
