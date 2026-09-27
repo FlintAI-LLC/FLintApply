@@ -25,7 +25,6 @@ import { clsx } from "clsx"
 import { NotificationBell } from "@/components/nav/NotificationBell"
 import { UsageWidget } from "@/components/nav/UsageWidget"
 import { ThemeToggle } from "@/components/theme/ThemeToggle"
-import { isLaunchOpen, launchAtFromEnv } from "@/lib/launch"
 
 export function NavBar() {
   const pathname = usePathname()
@@ -52,13 +51,6 @@ export function NavBar() {
 
   const renderUserMenu =
     showUserMenu || (status === "loading" && hadUserMenu)
-
-  const launchAt = launchAtFromEnv(process.env.NEXT_PUBLIC_LAUNCH_AT)
-  const launchGateOn = Boolean(
-    launchAt && !isLaunchOpen(new Date(), launchAt),
-  )
-  const signInHref = launchGateOn ? "/launch-preview" : "/auth"
-  const registerHref = launchGateOn ? "/launch-preview" : "/auth?mode=register"
 
   useEffect(() => {
     setActiveLandingHref(
@@ -259,13 +251,13 @@ export function NavBar() {
           ) : (
             <div className="flex items-center gap-2">
               <Link
-                href={signInHref}
+                href="/auth"
                 className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 text-sm font-medium px-3 py-1.5 transition-colors"
               >
                 Sign in
               </Link>
               <Link
-                href={registerHref}
+                href="/auth?mode=register"
                 className="bg-amber-400 text-slate-900 font-semibold text-sm px-4 py-1.5 rounded-lg hover:bg-amber-300 transition-colors"
               >
                 Register
