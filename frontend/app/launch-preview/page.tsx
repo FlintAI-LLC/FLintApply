@@ -12,7 +12,7 @@ export default function LaunchPreviewPage() {
   const launchAt = launchAtFromEnv(process.env.NEXT_PUBLIC_LAUNCH_AT);
   const launchLabel = launchAt
     ? formatLaunchDatePacific(launchAt)
-    : "Thursday, October 1, 2026 at 9:00 AM PDT";
+    : "Thursday, October 15, 2026 at 9:00 AM PDT";
   const router = useRouter();
   const searchParams = useSearchParams();
   const showError = searchParams.get("error") === "1";
@@ -29,6 +29,7 @@ export default function LaunchPreviewPage() {
     try {
       const res = await fetch("/api/launch-preview", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key }),
       });

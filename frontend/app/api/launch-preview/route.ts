@@ -1,7 +1,6 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { previewCookieValue, PREVIEW_COOKIE_NAME } from "@/lib/launchPreview";
-import { siteUrl } from "@/lib/siteUrl";
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
@@ -49,8 +48,10 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const secret = process.env.LAUNCH_PREVIEW_SECRET?.trim();
   const key = req.nextUrl.searchParams.get("key")?.trim() ?? "";
+  const origin = req.nextUrl.origin;
+
   if (!secret || key !== secret) {
-    return NextResponse.redirect(new URL("/launch-preview?error=1", siteUrl()));
+    return NextResponse.redirect(new URL("/launch-preview?error=1", origin));
   }
 
   const store = await cookies();
@@ -64,5 +65,5 @@ export async function GET(req: NextRequest) {
     ...(isProd ? { domain: ".flintapply.com" } : {}),
   });
 
-  return NextResponse.redirect(new URL("/?preview=ok", siteUrl()));
+  return NextResponse.redirect(new URL("/?preview=ok", origin));
 }

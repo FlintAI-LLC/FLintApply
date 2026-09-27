@@ -1,5 +1,5 @@
 /** Public launch instant (Pacific). Override with NEXT_PUBLIC_LAUNCH_AT (ISO-8601). */
-export const DEFAULT_LAUNCH_AT_ISO = "2026-10-01T09:00:00-07:00";
+export const DEFAULT_LAUNCH_AT_ISO = "2026-10-15T09:00:00-07:00";
 
 export function launchAtFromEnv(
   raw?: string | null,

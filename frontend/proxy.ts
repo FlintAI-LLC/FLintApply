@@ -49,9 +49,8 @@ export default auth(async function proxy(req) {
       !isLaunchPublicPath(pathname) ||
       pathname.startsWith("/api/auth/signin")
     if (blocked) {
-      const home = new URL("/", req.url)
-      home.searchParams.set("launch", "soon")
-      return redirectWithContentSecurityPolicy(home, nonce)
+      const invite = new URL("/launch-preview", req.url)
+      return redirectWithContentSecurityPolicy(invite, nonce)
     }
   }
 

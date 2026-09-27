@@ -13,7 +13,7 @@ describe("launch", () => {
   it("parses default Pacific launch instant", () => {
     const at = launchAtFromEnv(DEFAULT_LAUNCH_AT_ISO);
     assert.ok(at);
-    assert.equal(at!.toISOString(), "2026-10-01T16:00:00.000Z");
+    assert.equal(at!.toISOString(), "2026-10-15T16:00:00.000Z");
   });
 
   it("formats default launch as Thursday morning Pacific", () => {
@@ -21,7 +21,7 @@ describe("launch", () => {
     assert.ok(at);
     const label = formatLaunchDatePacific(at!);
     assert.match(label, /Thursday/);
-    assert.match(label, /October 1/);
+    assert.match(label, /October 15/);
     assert.match(label, /9:00\sAM/);
     assert.match(label, /PDT|GMT-7/);
   });

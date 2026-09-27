@@ -14,7 +14,7 @@ services:
     environment:
       - ALLOWED_ORIGINS=["https://flintapply.com"]
       - FRONTEND_BASE_URL=https://flintapply.com
-      - LAUNCH_AT=${LAUNCH_AT:-2026-10-01T09:00:00-07:00}
+      - LAUNCH_AT=${LAUNCH_AT:-2026-10-15T09:00:00-07:00}
       - LAUNCH_PREVIEW_SECRET=${LAUNCH_PREVIEW_SECRET:-}
 
   frontend:
@@ -24,9 +24,12 @@ services:
       args:
         NEXT_PUBLIC_API_URL: https://api.flintapply.com
         NEXT_PUBLIC_SITE_URL: https://flintapply.com
-        NEXT_PUBLIC_LAUNCH_AT: ${NEXT_PUBLIC_LAUNCH_AT:-2026-10-01T09:00:00-07:00}
+        NEXT_PUBLIC_LAUNCH_AT: ${NEXT_PUBLIC_LAUNCH_AT:-2026-10-15T09:00:00-07:00}
     environment:
       - NEXT_PUBLIC_API_URL=https://api.flintapply.com
       - NEXTAUTH_URL=https://flintapply.com
-      - NEXT_PUBLIC_LAUNCH_AT=${NEXT_PUBLIC_LAUNCH_AT:-2026-10-01T09:00:00-07:00}
+      - AUTH_URL=https://flintapply.com
+      - AUTH_TRUST_HOST=false
+      - NEXT_PUBLIC_APP_ENV=production
+      - NEXT_PUBLIC_LAUNCH_AT=${NEXT_PUBLIC_LAUNCH_AT:-2026-10-15T09:00:00-07:00}
       - LAUNCH_PREVIEW_SECRET=${LAUNCH_PREVIEW_SECRET:-}

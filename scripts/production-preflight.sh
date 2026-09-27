@@ -169,6 +169,7 @@ echo
 echo "OAuth redirect URIs to register (production):"
 echo "  https://flintapply.com/api/auth/callback/google"
 echo "  https://flintapply.com/api/auth/callback/github"
+echo "  https://flintapply.com/api/auth/callback/microsoft-entra-id"
 echo "  https://flintapply.com/api/auth/callback/linkedin"
 echo
 echo "Stripe webhook: https://api.flintapply.com/api/billing/webhook"
