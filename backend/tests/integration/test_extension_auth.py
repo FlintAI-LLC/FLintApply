@@ -425,6 +425,48 @@ async def test_extension_oauth_callback_email_collision_reports_existing_provide
 
 
 @pytest.mark.asyncio
+async def test_extension_oauth_callback_same_provider_email_match_logs_in(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Website Microsoft user with a different stored provider_id can sign in
+    via the extension (Graph id may differ from id_token oid on first web signup).
+    """
+    email = "ms-extension-link@example.com"
+    existing = User(
+        id=uuid.uuid4(),
+        email=email,
+        display_name="MS Web User",
+        auth_provider=AuthProvider.microsoft,
+        provider_id="legacy-oid-from-web",
+        credit_balance=0,
+        accepted_tos_version="oauth",
+    )
+    db_session.add(existing)
+    await db_session.commit()
+
+    profile = _fake_profile(email=email, provider_id="graph-id-from-extension")
+    calls = _patch_exchange(monkeypatch, microsoft=profile)
+
+    r = await app_client.post(
+        "/api/auth/extension/callback",
+        json={
+            "provider": "microsoft",
+            "code": "fake-ms-code",
+            "redirect_uri": _microsoft_callback_uri(),
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["user"]["email"] == email
+    assert len(calls["microsoft"]) == 1
+
+    await db_session.refresh(existing)
+    assert existing.provider_id == "graph-id-from-extension"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "redirect_uri",
     [

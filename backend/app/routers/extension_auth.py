@@ -496,43 +496,53 @@ async def extension_oauth_callback(
     ).scalar_one_or_none()
 
     if user is None:
+        email = profile["email"].lower().strip()
         existing = (
-            await db.execute(select(User).where(User.email == profile["email"]))
+            await db.execute(select(User).where(User.email == email))
         ).scalar_one_or_none()
         if existing is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "email_already_registered",
-                    "with_provider": existing.auth_provider.value,
-                },
-            )
-        grant_amount = await registration_grant_credits(db)
-        user = User(
-            id=uuid.uuid4(),
-            email=profile["email"],
-            display_name=profile["display_name"] or profile["email"].split("@", 1)[0],
-            auth_provider=auth_provider,
-            provider_id=profile["provider_id"],
-            email_verified_at=datetime.now(timezone.utc),
-            tier=UserTier.free,
-            credit_balance=grant_amount,
-            accepted_tos_version="oauth",
-            last_login_ip=_client_ip(request) or None,
-        )
-        db.add(user)
-        await db.flush()
-        db.add(
-            CreditTransaction(
+            if existing.auth_provider == auth_provider:
+                # Website OAuth may store a different provider_id shape than the
+                # extension code+Graph path (e.g. id_token oid vs Graph /me id).
+                user = existing
+                if existing.provider_id != profile["provider_id"]:
+                    existing.provider_id = profile["provider_id"]
+                    await db.flush()
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "email_already_registered",
+                        "with_provider": existing.auth_provider.value,
+                    },
+                )
+        if user is None:
+            grant_amount = await registration_grant_credits(db)
+            user = User(
                 id=uuid.uuid4(),
-                user_id=user.id,
-                delta=grant_amount,
-                action=CreditTransactionAction.registration_grant,
-                reason="registration_grant",
-                note=f"registration grant via {provider} (extension)",
+                email=email,
+                display_name=profile["display_name"] or email.split("@", 1)[0],
+                auth_provider=auth_provider,
+                provider_id=profile["provider_id"],
+                email_verified_at=datetime.now(timezone.utc),
+                tier=UserTier.free,
+                credit_balance=grant_amount,
+                accepted_tos_version="oauth",
+                last_login_ip=_client_ip(request) or None,
             )
-        )
-        await db.flush()
+            db.add(user)
+            await db.flush()
+            db.add(
+                CreditTransaction(
+                    id=uuid.uuid4(),
+                    user_id=user.id,
+                    delta=grant_amount,
+                    action=CreditTransactionAction.registration_grant,
+                    reason="registration_grant",
+                    note=f"registration grant via {provider} (extension)",
+                )
+            )
+            await db.flush()
 
     if user.is_suspended:
         raise HTTPException(
