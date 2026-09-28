@@ -835,20 +835,21 @@ async def oauth_callback(
         await db.flush()
 
     if user is None:
-        from app.services.launch_gate import assert_signup_allowed
-
-        assert_signup_allowed(request)
-
         email = profile["email"].lower().strip()
         email_canonical = canonicalize_email(email)
-        # Also reject if the email already belongs to a different provider.
         existing = (
             await db.execute(select(User).where(User.email == email))
         ).scalar_one_or_none()
         canonical_owner = (
             await db.execute(select(User).where(User.email_canonical == email_canonical))
         ).scalar_one_or_none()
-        if existing is not None or (
+
+        if existing is not None and existing.auth_provider == provider_enum:
+            user = existing
+            if existing.provider_id != profile["provider_id"]:
+                existing.provider_id = profile["provider_id"]
+                await db.flush()
+        elif existing is not None or (
             canonical_owner is not None and canonical_owner.email != email
         ):
             conflict = existing or canonical_owner
@@ -860,69 +861,75 @@ async def oauth_callback(
                     "with_provider": conflict.auth_provider.value,
                 },
             )
-        if is_disposable_email(email):
-            raise _disposable_email_http()
-        signup_ip = _client_ip(request) or None
-        signup_device_fingerprint_hash = derive_signup_device_fingerprint_hash(
-            request,
-            client_fingerprint=payload.device_fingerprint,
-        )
-        try:
-            await assert_signup_rate_limit_allowed(
+        else:
+            from app.services.launch_gate import assert_signup_allowed
+
+            assert_signup_allowed(request)
+
+        if user is None:
+            if is_disposable_email(email):
+                raise _disposable_email_http()
+            signup_ip = _client_ip(request) or None
+            signup_device_fingerprint_hash = derive_signup_device_fingerprint_hash(
+                request,
+                client_fingerprint=payload.device_fingerprint,
+            )
+            try:
+                await assert_signup_rate_limit_allowed(
+                    db,
+                    signup_email=email,
+                    signup_ip=signup_ip or "",
+                    device_fingerprint_hash=signup_device_fingerprint_hash,
+                )
+            except SignupRateLimitError as exc:
+                raise _signup_rate_limit_http(exc) from exc
+            grant_amount = await registration_grant_credits(db)
+            user = User(
+                id=uuid.uuid4(),
+                email=email,
+                email_canonical=email_canonical,
+                display_name=profile["display_name"] or email.split("@", 1)[0],
+                auth_provider=provider_enum,
+                provider_id=profile["provider_id"],
+                email_verified_at=datetime.now(timezone.utc) if oauth_verified else None,
+                tier=UserTier.free,
+                credit_balance=grant_amount,
+                accepted_tos_version="oauth",  # frontend records ToS on the consent step
+                signup_ip=signup_ip,
+                signup_device_fingerprint_hash=signup_device_fingerprint_hash,
+                last_login_ip=signup_ip,
+            )
+            db.add(user)
+            await db.flush()
+            abuse_flag = await analyze_signup_links(
                 db,
-                signup_email=email,
-                signup_ip=signup_ip or "",
+                signup_ip=signup_ip,
                 device_fingerprint_hash=signup_device_fingerprint_hash,
             )
-        except SignupRateLimitError as exc:
-            raise _signup_rate_limit_http(exc) from exc
-        grant_amount = await registration_grant_credits(db)
-        user = User(
-            id=uuid.uuid4(),
-            email=email,
-            email_canonical=email_canonical,
-            display_name=profile["display_name"] or email.split("@", 1)[0],
-            auth_provider=provider_enum,
-            provider_id=profile["provider_id"],
-            email_verified_at=datetime.now(timezone.utc) if oauth_verified else None,
-            tier=UserTier.free,
-            credit_balance=grant_amount,
-            accepted_tos_version="oauth",  # frontend records ToS on the consent step
-            signup_ip=signup_ip,
-            signup_device_fingerprint_hash=signup_device_fingerprint_hash,
-            last_login_ip=signup_ip,
-        )
-        db.add(user)
-        await db.flush()
-        abuse_flag = await analyze_signup_links(
-            db,
-            signup_ip=signup_ip,
-            device_fingerprint_hash=signup_device_fingerprint_hash,
-        )
-        if abuse_flag:
-            user.signup_abuse_review_flag = abuse_flag
-            await db.flush()
-        db.add(
-            CreditTransaction(
-                id=uuid.uuid4(),
-                user_id=user.id,
-                delta=grant_amount,
-                action=CreditTransactionAction.registration_grant,
-                reason="registration_grant",
-                note=f"registration grant via {provider_enum.value}",
-            )
-        )
-        await db.flush()
-
-        if not oauth_verified:
-            try:
-                await send_verification_email(
-                    to_email=user.email,
+            if abuse_flag:
+                user.signup_abuse_review_flag = abuse_flag
+                await db.flush()
+            db.add(
+                CreditTransaction(
+                    id=uuid.uuid4(),
                     user_id=user.id,
-                    display_name=user.display_name,
+                    delta=grant_amount,
+                    action=CreditTransactionAction.registration_grant,
+                    reason="registration_grant",
+                    note=f"registration grant via {provider_enum.value}",
                 )
-            except Exception as exc:  # pragma: no cover - email infra side
-                log.warning("auth.oauth.verification_send_failed", error=str(exc))
+            )
+            await db.flush()
+
+            if not oauth_verified:
+                try:
+                    await send_verification_email(
+                        to_email=user.email,
+                        user_id=user.id,
+                        display_name=user.display_name,
+                    )
+                except Exception as exc:  # pragma: no cover - email infra side
+                    log.warning("auth.oauth.verification_send_failed", error=str(exc))
 
     if user.is_suspended:
         raise HTTPException(
