@@ -22,6 +22,8 @@ describe("securityResponseHeaders", () => {
     assert.equal(map.get("referrer-policy"), "strict-origin-when-cross-origin");
     assert.equal(map.get("x-frame-options"), "DENY");
     assert.ok(map.get("permissions-policy")?.includes("camera=()"));
+    assert.ok(map.get("permissions-policy")?.includes("microphone=(self)"));
+    assert.equal(map.get("permissions-policy")?.includes("microphone=()"), false);
   });
 
   it("uses nonce + strict-dynamic for production script-src", () => {

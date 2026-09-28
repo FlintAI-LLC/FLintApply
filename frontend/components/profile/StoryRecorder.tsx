@@ -170,7 +170,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
   const segmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { voiceState, finalText, interimText, durationLabel, supportsWebSpeech,
-          start, stop, reset: resetVoice, setFinalText } = useVoiceRecorder({
+          start, stop, reset: resetVoice, setFinalText, error: voiceError } = useVoiceRecorder({
     onBlob: async (blob) => {
       const ext = blob.type.includes("ogg") ? "ogg" : blob.type.includes("mp4") ? "mp4" : "webm";
       const form = new FormData();
@@ -240,22 +240,38 @@ export function StoryRecorder({ token, onSaved }: Props) {
     await stop();
   }, [stop, clearSegmentTimer, stopTotalTimer]);
 
+  useEffect(() => {
+    if (!voiceError) return;
+    setError(voiceError);
+    if (recordingState === "idle") return;
+    setRecordingState("idle");
+    setReRecordingIndex(null);
+    clearSegmentTimer();
+    stopTotalTimer();
+  }, [voiceError, recordingState, clearSegmentTimer, stopTotalTimer]);
+
   // ── Start recording a new segment ─────────────────────────────────────────
   const startNewSegment = useCallback(async () => {
     if (segments.length >= MAX_SEGMENTS) return;
     setError(null);
     resetVoice();
+    const started = await start();
+    if (!started) return;
     setRecordingState("recording");
     startTotalTimer();
-    await start();
     segmentTimerRef.current = setTimeout(() => { void stopCurrentSegment(); }, SEGMENT_DURATION_MS);
   }, [segments.length, start, resetVoice, startTotalTimer, stopCurrentSegment]);
 
   // When voiceState reaches "preview", commit the segment
   useEffect(() => {
     if (voiceState !== "preview") return;
-    const text = finalText.trim();
-    if (!text) return;
+    const text = (finalText || interimText).trim();
+    if (!text) {
+      setRecordingState("idle");
+      setError("We didn't catch any speech. Allow the microphone and try again.");
+      resetVoice();
+      return;
+    }
 
     if (recordingState === "re-recording" && reRecordingIndex !== null) {
       setSegments((prev) => persistSegments(prev.map((s, i) => i === reRecordingIndex ? text : s), storyMode ?? "free"));
@@ -271,10 +287,11 @@ export function StoryRecorder({ token, onSaved }: Props) {
   // ── Re-record a specific segment ──────────────────────────────────────────
   const startReRecord = useCallback(async (index: number) => {
     resetVoice();
+    setError(null);
+    const started = await start();
+    if (!started) return;
     setReRecordingIndex(index);
     setRecordingState("re-recording");
-    setError(null);
-    await start();
     segmentTimerRef.current = setTimeout(() => { void stopCurrentSegment(); }, SEGMENT_DURATION_MS);
   }, [resetVoice, start, stopCurrentSegment]);
 
@@ -641,6 +658,9 @@ export function StoryRecorder({ token, onSaved }: Props) {
               Your browser supports live transcription. Words appear as you speak. First resume generate from story is{" "}
               <strong className="text-slate-900 dark:text-white">free</strong>; regenerates cost 1 credit. Saving to profile: first save free, later saves 1 credit.
             </p>
+            <p className="text-slate-600 dark:text-slate-400 text-xs">
+              The first time, your browser will ask to use the microphone. Click Allow — it remembers that for this site on this device.
+            </p>
           ) : (
             <div className="space-y-2">
               <p className="text-slate-600 dark:text-slate-400 text-sm">
@@ -682,6 +702,11 @@ export function StoryRecorder({ token, onSaved }: Props) {
           <Mic className="w-5 h-5" />
           {supportsWebSpeech ? "Start your story — free" : "Start your story — needs a paid plan"}
         </button>
+        {error && (
+          <p className="text-red-700 dark:text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-lg p-3">
+            {error}
+          </p>
+        )}
       </div>
     );
   }

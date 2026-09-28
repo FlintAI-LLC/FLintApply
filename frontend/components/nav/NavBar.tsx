@@ -21,6 +21,7 @@ import {
   navPillarIsActive,
 } from "@/components/nav/navPillars"
 import { fetchMe, logoutUser } from "@/lib/auth/api"
+import { liveBackendAccessToken } from "@/lib/auth/accessToken"
 import { clsx } from "clsx"
 import { NotificationBell } from "@/components/nav/NotificationBell"
 import { UsageWidget } from "@/components/nav/UsageWidget"
@@ -37,10 +38,9 @@ export function NavBar() {
   const [activeLandingHref, setActiveLandingHref] = useState<string | null>(null)
   const [locationHash, setLocationHash] = useState("")
 
-  const accessToken =
-    session?.error === "TokenExpired" ? undefined : session?.backendAccessToken
+  const accessToken = liveBackendAccessToken(session)
 
-  const showUserMenu = Boolean(accessToken)
+  const showUserMenu = Boolean(session?.backendAccessToken)
   useEffect(() => {
     if (showUserMenu) {
       setHadUserMenu(true)

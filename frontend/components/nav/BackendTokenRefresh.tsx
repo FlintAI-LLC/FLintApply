@@ -2,14 +2,15 @@
 
 import { useEffect, useRef } from "react"
 import { getSession, useSession } from "next-auth/react"
+import { liveBackendAccessToken } from "@/lib/auth/accessToken"
 import {
   refreshBackendSession,
   refreshBackendSessionIfNeeded,
 } from "@/lib/auth/refreshBackendSession"
 
-// 24 h access tokens: check every 10 min; refresh only in the last hour.
-const POLL_MS = 10 * 60 * 1000
-const REFRESH_BUFFER_MS = 60 * 60 * 1000
+// Access tokens last 15 minutes. Poll often enough to rotate before expiry.
+const POLL_MS = 60 * 1000
+const REFRESH_BUFFER_MS = 2 * 60 * 1000
 
 /** Keeps the embedded backend JWT fresh using the sr_refresh cookie. */
 export function BackendTokenRefresh() {
@@ -21,32 +22,40 @@ export function BackendTokenRefresh() {
 
   const expiredRecoveryRef = useRef(false)
 
-  // One-shot recovery when NextAuth marks the embedded JWT expired.
+  // One-shot recovery when the JWT is already dead on the client (or NextAuth
+  // has marked TokenExpired) — do not wait for the poll interval.
   useEffect(() => {
-    if (status !== "authenticated" || session?.error !== "TokenExpired") {
+    if (status !== "authenticated" || !session?.backendAccessToken) {
+      expiredRecoveryRef.current = false
+      return
+    }
+    if (liveBackendAccessToken(session)) {
       expiredRecoveryRef.current = false
       return
     }
     if (expiredRecoveryRef.current) return
     expiredRecoveryRef.current = true
     void refreshBackendSession(updateRef.current)
-  }, [status, session?.error])
+  }, [status, session])
 
   // Periodic proactive refresh — deps stable so session.update() does not re-arm loops.
   useEffect(() => {
     if (status !== "authenticated") return
 
+    const tick = async () => {
+      const current = await getSession()
+      const expiresAt = (current as { backendExpiresAt?: number } | null)
+        ?.backendExpiresAt
+      await refreshBackendSessionIfNeeded(
+        updateRef.current,
+        expiresAt,
+        REFRESH_BUFFER_MS,
+      )
+    }
+
+    void tick()
     const id = window.setInterval(() => {
-      void (async () => {
-        const current = await getSession()
-        const expiresAt = (current as { backendExpiresAt?: number } | null)
-          ?.backendExpiresAt
-        await refreshBackendSessionIfNeeded(
-          updateRef.current,
-          expiresAt,
-          REFRESH_BUFFER_MS,
-        )
-      })()
+      void tick()
     }, POLL_MS)
 
     return () => window.clearInterval(id)
