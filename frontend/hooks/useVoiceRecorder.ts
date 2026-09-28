@@ -131,12 +131,19 @@ export function useVoiceRecorder({ onBlob }: UseVoiceRecorderOptions = {}) {
     rec.onend = () => {
       // Chrome ends a recognition session after ~60s even with continuous=true.
       if (wantListeningRef.current) {
-        try {
-          rec.start();
-          return;
-        } catch {
-          wantListeningRef.current = false;
-        }
+        window.setTimeout(() => {
+          if (!wantListeningRef.current || recognitionRef.current !== rec) return;
+          try {
+            rec.start();
+          } catch {
+            wantListeningRef.current = false;
+            stopTimer();
+            flushTranscript();
+            recognitionRef.current = null;
+            setVoiceState((s) => (s === "speaking" ? "preview" : s));
+          }
+        }, 0);
+        return;
       }
       stopTimer();
       flushTranscript();

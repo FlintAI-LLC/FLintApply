@@ -88,7 +88,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const clearErrors = () => {
-    clearErrors();
+    setError(null);
     setErrorCode(null);
   };
   // Index of the segment whose coach panel is open (null = none)
@@ -217,7 +217,8 @@ export function StoryRecorder({ token, onSaved }: Props) {
 
   // ── Total time tracker ─────────────────────────────────────────────────────
   const startTotalTimer = useCallback(() => {
-    totalStartRef.current = Date.now() - totalMs;
+    totalStartRef.current = Date.now() - totalMsRef.current;
+    if (totalTimerRef.current) clearInterval(totalTimerRef.current);
     totalTimerRef.current = setInterval(() => {
       const elapsed = Date.now() - totalStartRef.current;
       setTotalMs(elapsed);
@@ -225,8 +226,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
         void stop();
       }
     }, 500);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalMs]);
+  }, [stop]);
 
   const stopTotalTimer = useCallback(() => {
     if (totalTimerRef.current) { clearInterval(totalTimerRef.current); totalTimerRef.current = null; }
