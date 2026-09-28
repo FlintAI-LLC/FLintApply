@@ -20,6 +20,18 @@ export const ONBOARDING_EXEMPT_PREFIXES = [
   "/auth/verify",
   "/settings",
   "/extension",
+  // proxy.ts's onboarding redirect is NOT gated on PROTECTED_PREFIXES (only
+  // the anon->/auth redirects are). Any authenticated-but-incomplete-onboarding
+  // request reaching this far gets redirected to /onboarding unless the
+  // pathname is exempt here. /auth/extension/{provider}/callback pages are
+  // the extension's OAuth tab-capture fallback: if the extension's
+  // webNavigation listener misses the redirect and the same browser profile
+  // happens to also have an incomplete-onboarding website session, the
+  // extension's ?code=...&state=... query string must not be dropped by a
+  // same-tab redirect to /onboarding. This was a pre-existing gap that
+  // affected the google callback page too; adding the whole /auth/extension
+  // prefix here covers google/github/microsoft uniformly.
+  "/auth/extension",
 ]
 
 export const ONBOARDING_STEP_COUNT = 5

@@ -46,6 +46,17 @@ describe("isOnboardingExempt", () => {
     assert.equal(isOnboardingExempt("/settingsfoo"), false);
     assert.equal(isOnboardingExempt("/jobs"), false);
   });
+
+  it("exempts extension OAuth callback pages for every provider", () => {
+    // Regression: proxy.ts's onboarding redirect is NOT gated on
+    // PROTECTED_PREFIXES, so any of these paths would otherwise be
+    // redirected to /onboarding for a signed-in-but-incomplete website
+    // session sharing the same browser profile as the extension's OAuth
+    // tab, dropping the ?code=...&state=... the extension needs.
+    assert.equal(isOnboardingExempt("/auth/extension/google/callback"), true);
+    assert.equal(isOnboardingExempt("/auth/extension/github/callback"), true);
+    assert.equal(isOnboardingExempt("/auth/extension/microsoft/callback"), true);
+  });
 });
 
 describe("mustCompleteOnboarding", () => {
