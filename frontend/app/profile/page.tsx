@@ -8,7 +8,7 @@ import { ArrowLeft, ArrowRight, Loader2, RefreshCw, UserCircle, XCircle } from "
 import { useRequireAuth } from "@/lib/auth/guards"
 import { liveBackendAccessToken } from "@/lib/auth/accessToken"
 import { patchOnboarding } from "@/lib/auth/api"
-import { needsOnboarding, postOnboardingDestination } from "@/lib/auth/onboarding"
+import { needsOnboarding, postAuthLandingPath, postOnboardingDestination } from "@/lib/auth/onboarding"
 import { ChunkCard } from "@/components/profile/ChunkCard"
 import { ProfileUploadZone } from "@/components/profile/ProfileUploadZone"
 import { TailoredUsagePanel } from "@/components/profile/TailoredUsagePanel"
@@ -110,7 +110,8 @@ function ProfilePageContent() {
             complete: true,
           })
           await updateSession({ backendUser: user })
-          window.location.assign(postOnboardingDestination(user))
+          // Finish setup → dashboard, not a stale auth return URL (e.g. /profile).
+          window.location.assign(postAuthLandingPath({ backendUser: user }))
           return
         }
         if (returnUrl) {
@@ -234,6 +235,7 @@ function ProfilePageContent() {
               token={token ?? ""}
               loading={uploading}
               compact={liveCount > 0}
+              existingChunkCount={liveCount}
               defaultStory={defaultStory}
               onStoryComplete={() => {
                 if (returnUrl) {

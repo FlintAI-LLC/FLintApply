@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { AlertCircle, FileText, Upload } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoryRecorder } from "@/components/profile/StoryRecorder"
+import { MasterResumeReplaceDialog } from "@/components/profile/MasterResumeReplaceDialog"
 import { hasMeaningfulStoryDraft, loadStoryDraft } from "@/lib/storyDraft"
 
 interface Props {
@@ -11,6 +12,8 @@ interface Props {
   token: string
   loading: boolean
   compact?: boolean
+  /** Live chunks already on profile — upload/paste replaces them entirely. */
+  existingChunkCount?: number
   defaultStory?: boolean
   onStoryComplete?: () => void
 }
@@ -23,11 +26,39 @@ const TABS: { id: Mode; label: string }[] = [
   { id: "paste",  label: "Paste text" },
 ]
 
-export function ProfileUploadZone({ onSubmit, token, loading, compact = false, defaultStory = false, onStoryComplete }: Props) {
+export function ProfileUploadZone({ onSubmit, token, loading, compact = false, existingChunkCount = 0, defaultStory = false, onStoryComplete }: Props) {
   const [mode, setMode]       = useState<Mode>(defaultStory ? "story" : "upload")
   const [dragging, setDragging] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [pasteText, setPasteText] = useState("")
+  const [replaceDialogOpen, setReplaceDialogOpen] = useState(false)
+  const [pendingReplace, setPendingReplace] = useState<
+    { kind: "file"; file: File } | { kind: "paste" } | null
+  >(null)
+
+  const hasExistingMaster = existingChunkCount > 0
+
+  const runReplace = useCallback(
+    async (payload: { file?: File; text?: string }) => {
+      setReplaceDialogOpen(false)
+      setPendingReplace(null)
+      await onSubmit(payload)
+    },
+    [onSubmit],
+  )
+
+  const requestReplace = useCallback(
+    (next: { kind: "file"; file: File } | { kind: "paste" }) => {
+      if (!hasExistingMaster) {
+        if (next.kind === "file") void runReplace({ file: next.file })
+        else void runReplace({ text: pasteText })
+        return
+      }
+      setPendingReplace(next)
+      setReplaceDialogOpen(true)
+    },
+    [hasExistingMaster, runReplace, pasteText],
+  )
 
   useEffect(() => {
     if (defaultStory) return
@@ -46,18 +77,33 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, d
         "text/plain",
       ]
       if (!allowed.includes(file.type)) { setError("Only PDF, DOCX, and TXT files are supported."); return }
-      try { await onSubmit({ file }) } catch (e) {
-        setError(e instanceof Error ? e.message : "Upload failed.")
-      }
+      requestReplace({ kind: "file", file })
     },
-    [onSubmit],
+    [requestReplace],
   )
 
   const handlePaste = async () => {
     if (!pasteText.trim()) return
     setError(null)
-    try { await onSubmit({ text: pasteText }) } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to process resume text.")
+    if (!hasExistingMaster) {
+      try { await onSubmit({ text: pasteText }) } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to process resume text.")
+      }
+      return
+    }
+    requestReplace({ kind: "paste" })
+  }
+
+  const confirmReplace = () => {
+    if (!pendingReplace) return
+    if (pendingReplace.kind === "file") {
+      void runReplace({ file: pendingReplace.file }).catch((e) => {
+        setError(e instanceof Error ? e.message : "Upload failed.")
+      })
+    } else {
+      void runReplace({ text: pasteText }).catch((e) => {
+        setError(e instanceof Error ? e.message : "Failed to process resume text.")
+      })
     }
   }
 
@@ -90,6 +136,14 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, d
           </button>
         ))}
       </div>
+
+      {hasExistingMaster && (
+        <div className="rounded-xl border border-amber-500/35 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
+          You already have a master resume indexed ({existingChunkCount} chunk
+          {existingChunkCount === 1 ? "" : "s"}). Upload, paste, or saving from Tell your story{" "}
+          <strong>replaces</strong> it entirely — nothing merges. Story credits already spent are not refunded.
+        </div>
+      )}
 
       {/* Story */}
       {mode === "story" && (
@@ -169,12 +223,23 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, d
         </div>
       )}
 
-      {compact && mode === "upload" && (
+      {compact && mode === "upload" && !hasExistingMaster && (
         <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
           <FileText className="w-3.5 h-3.5" />
           Replacing your master resume re-chunks and re-embeds all sections.
         </p>
       )}
+
+      <MasterResumeReplaceDialog
+        open={replaceDialogOpen}
+        actionLabel={pendingReplace?.kind === "paste" ? "Pasting new text" : "Uploading a file"}
+        chunkCount={existingChunkCount}
+        onClose={() => {
+          setReplaceDialogOpen(false)
+          setPendingReplace(null)
+        }}
+        onConfirm={confirmReplace}
+      />
     </div>
   )
 }
