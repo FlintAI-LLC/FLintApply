@@ -23,6 +23,7 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id"
 import LinkedIn from "next-auth/providers/linkedin"
 import Credentials from "next-auth/providers/credentials"
 import { SIGNUP_DEVICE_FP_COOKIE } from "@/lib/auth/deviceFingerprint"
+import { PREVIEW_COOKIE_NAME, previewCookieValue } from "@/lib/launchPreview"
 
 const API_URL =
   process.env.INTERNAL_API_URL ??
@@ -89,12 +90,19 @@ async function syncOAuthWithBackend(
   idToken: string | undefined,
   callbackUrl: string,
   deviceFingerprint?: string,
+  previewCookie?: string,
 ): Promise<OAuthSyncResult> {
   if (!idToken && !accessToken) return { ok: false, error: "OAuthBackendSyncPending" }
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" }
+    // Server-side fetch to the API does not include the browser cookie jar.
+    // Forward the early-access cookie so pre-launch SSO signup is allowed.
+    if (previewCookie) {
+      headers.Cookie = `${PREVIEW_COOKIE_NAME}=${previewCookie}`
+    }
     const res = await fetch(`${API_URL}/api/auth/callback`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         provider,
         ...(idToken ? { id_token: idToken } : {}),
@@ -346,12 +354,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const cookieStore = await cookies()
         const fpCookie = cookieStore.get(SIGNUP_DEVICE_FP_COOKIE)?.value
         const deviceFingerprint = fpCookie ? decodeURIComponent(fpCookie) : undefined
+        const previewCookie =
+          cookieStore.get(PREVIEW_COOKIE_NAME)?.value ??
+          (process.env.LAUNCH_PREVIEW_SECRET?.trim()
+            ? previewCookieValue(process.env.LAUNCH_PREVIEW_SECRET.trim())
+            : undefined)
         const synced = await syncOAuthWithBackend(
           backendProvider,
           account.access_token ?? undefined,
           account.id_token ?? undefined,
           `${NEXTAUTH_URL}/api/auth/callback/${account.provider}`,
           deviceFingerprint,
+          previewCookie,
         )
         if (synced.ok) {
           token.backendAccessToken = synced.access_token

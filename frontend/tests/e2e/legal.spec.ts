@@ -11,6 +11,7 @@
  *   - Backend on http://localhost:8000 (or DPO contact route mocked).
  */
 import { test, expect } from "@playwright/test"
+import { PRIVACY_EMAIL } from "@/lib/brand"
 
 const BASE = "http://localhost:3000"
 
@@ -46,8 +47,8 @@ test.describe("footer", () => {
     await expect(footer).toContainText(`© ${new Date().getFullYear()} The Flint AI`)
     await expect(footer).toContainText("BSL 1.1")
     await expect(
-      footer.getByRole("link", { name: "privacy@zanganehai.com" }),
-    ).toHaveAttribute("href", "mailto:privacy@zanganehai.com")
+      footer.getByRole("link", { name: PRIVACY_EMAIL }),
+    ).toHaveAttribute("href", `mailto:${PRIVACY_EMAIL}`)
   })
 
   test("legal links are reachable from the footer", async ({ page }) => {

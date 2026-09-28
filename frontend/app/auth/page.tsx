@@ -372,6 +372,15 @@ function AuthPageContent() {
                   Go to Sign in
                 </button>
               )}
+              {status === "authenticated" && !session?.backendAccessToken && (
+                <button
+                  type="button"
+                  onClick={() => void signOut({ callbackUrl: "/auth" })}
+                  className="block text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 underline underline-offset-2"
+                >
+                  Sign out and try again
+                </button>
+              )}
             </div>
           )}
           {successMsg && (
@@ -690,6 +699,18 @@ function AuthPageContent() {
             </>
           )}
         </div>
+
+        {status === "authenticated" && (
+          <p className="text-center mt-4">
+            <button
+              type="button"
+              onClick={() => void signOut({ callbackUrl: "/auth" })}
+              className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 underline underline-offset-2"
+            >
+              Sign out
+            </button>
+          </p>
+        )}
 
         <p className="text-center text-slate-600 dark:text-slate-400 text-xs mt-6">
           By using {PRODUCT_NAME} you agree to our{" "}

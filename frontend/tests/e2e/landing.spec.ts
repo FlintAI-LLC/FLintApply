@@ -15,6 +15,7 @@
  * expectations below will fail rather than pass vacuously.
  */
 import { test, expect } from "@playwright/test"
+import { SALES_INQUIRY_EMAIL } from "@/lib/brand"
 import { suppressIntro } from "./helpers/intro"
 import { scrollPostHeroProgress } from "./helpers/postHero"
 
@@ -207,7 +208,7 @@ test.describe("pricing", () => {
       pricingSection.getByRole("link", { name: "Contact us", exact: true }),
     ).toHaveAttribute(
       "href",
-      /^mailto:privacy@zanganehai\.com\?subject=/,
+      new RegExp(`^mailto:${SALES_INQUIRY_EMAIL.replace(".", "\\.")}\\?subject=`),
     )
     await expect(
       pricingSection.getByRole("link", { name: "Choose Customized", exact: true }),

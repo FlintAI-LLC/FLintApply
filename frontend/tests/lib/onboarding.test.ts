@@ -48,8 +48,8 @@ describe("isOnboardingExempt", () => {
 });
 
 describe("mustCompleteOnboarding", () => {
-  it("treats missing backendUser as incomplete", () => {
-    assert.equal(mustCompleteOnboarding({}), true);
+  it("does not treat a Google-only session as onboarding", () => {
+    assert.equal(mustCompleteOnboarding({}), false);
     assert.equal(mustCompleteOnboarding(null), false);
   });
 
@@ -67,7 +67,7 @@ describe("mustCompleteOnboarding", () => {
 describe("postAuthLandingPath", () => {
   it("sends incomplete users to onboarding", () => {
     assert.equal(postAuthLandingPath({ backendUser: baseUser }), "/onboarding");
-    assert.equal(postAuthLandingPath({}), "/onboarding");
+    assert.equal(postAuthLandingPath({}), "/dashboard");
   });
 
   it("sends completed users to dashboard", () => {

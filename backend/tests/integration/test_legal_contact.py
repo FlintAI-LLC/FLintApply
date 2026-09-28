@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from app.routers.legal import _DPO_INBOX
+
 import pytest
 from httpx import AsyncClient
 
@@ -65,7 +67,7 @@ async def test_dpo_contact_calls_resend_when_configured(
     assert body["provider"] == "resend"
     assert len(sent_payloads) == 1
     sent = sent_payloads[0]
-    assert sent["to"] == ["privacy@zanganehai.com"]
+    assert sent["to"] == [_DPO_INBOX]
     assert sent["reply_to"] == ["jane@example.com"]
     assert "data_subject_request" in sent["subject"]
 

@@ -54,6 +54,17 @@ export default auth(async function proxy(req) {
     }
   }
 
+  // NextAuth JSON endpoints must never be redirected to HTML pages.
+  // /api/auth/signout is the one that broke logout during onboarding:
+  // proxy sent it to /onboarding, the client parsed "<!DOCTYPE" as JSON,
+  // and the session cookie stayed put.
+  if (
+    pathname.startsWith("/api/") &&
+    !pathname.startsWith("/api/auth/signin")
+  ) {
+    return nextWithContentSecurityPolicy(req, nonce)
+  }
+
   // ── Separate admin guard (isolated from user NextAuth session) ────────────
   if (pathname.startsWith("/admin") && !pathname.startsWith(ADMIN_AUTH_PATH)) {
     const cookie = req.cookies.get(ADMIN_COOKIE)?.value
@@ -69,6 +80,14 @@ export default auth(async function proxy(req) {
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(prefix + "/") || pathname.startsWith(prefix),
   )
+
+  // Google/GitHub can create a NextAuth session before FastAPI creates the user.
+  // Do not send that half-session into onboarding — it loops and blocks sign-out.
+  if (isProtected && session && !session.backendAccessToken) {
+    const url = new URL("/auth", req.url)
+    if (session.error) url.searchParams.set("error", String(session.error))
+    return redirectWithContentSecurityPolicy(url, nonce)
+  }
 
   if (isProtected && !session) {
     const url = new URL("/auth", req.url)
@@ -87,7 +106,11 @@ export default auth(async function proxy(req) {
     return redirectWithContentSecurityPolicy(url, nonce)
   }
 
-  if (session && mustCompleteOnboarding(session) && !isOnboardingExempt(pathname)) {
+  if (
+    session?.backendAccessToken &&
+    mustCompleteOnboarding(session) &&
+    !isOnboardingExempt(pathname)
+  ) {
     const onboardingUrl = new URL("/onboarding", req.url)
     // Preserve deep links (e.g. return from email verify → settings).
     if (pathname !== "/onboarding" && req.nextUrl.search) {
@@ -127,6 +150,6 @@ export const config = {
     // extension this pattern already skips, so without them every crawler hit
     // would run auth() to reach a file that is public by definition.
     // `opengraph-image.png` is already covered by the `.png` case.
-    "/((?!api/auth/callback|api/auth/session|api/auth/providers|api/auth/csrf|api/auth/error|_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|eot|css|js)$).*)",
+    "/((?!api/auth/callback|api/auth/session|api/auth/providers|api/auth/csrf|api/auth/error|api/auth/signout|_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|eot|css|js)$).*)",
   ],
 }

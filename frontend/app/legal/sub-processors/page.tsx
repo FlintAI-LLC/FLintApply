@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { LegalPageShell } from "@/components/legal/LegalPageShell"
+import { PRIVACY_EMAIL } from "@/lib/brand"
 
 export const metadata: Metadata = {
   title: "Sub-processors — TalioCV",
@@ -123,7 +124,7 @@ export default function SubProcessorsPage() {
       <p>
         If you object to a new sub-processor within the 30-day notice
         window, contact{" "}
-        <a href="mailto:privacy@zanganehai.com">privacy@zanganehai.com</a>.
+        <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>.
         We will discuss reasonable alternatives or, where impossible,
         provide an exit path with a refund of pre-paid unused fees.
       </p>

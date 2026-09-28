@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { LegalPageShell } from "@/components/legal/LegalPageShell"
+import { PRIVACY_EMAIL } from "@/lib/brand"
 
 export const metadata: Metadata = {
   title: "Privacy Policy — TalioCV",
@@ -17,7 +18,7 @@ export default function PrivacyPage() {
         &quot;us&quot;) collects, uses, shares, and protects your information.
         TalioCV is operated by Alireza Barzin Zanganeh.  Our Data Protection
         Officer (DPO) can be reached at{" "}
-        <a href="mailto:privacy@zanganehai.com">privacy@zanganehai.com</a>.
+        <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>.
       </p>
 
       <h2>1. Lawful Bases (GDPR Art. 6)</h2>
@@ -187,7 +188,7 @@ export default function PrivacyPage() {
       <h2>10. Contact &amp; SLA</h2>
       <p>
         Reach our DPO at{" "}
-        <a href="mailto:privacy@zanganehai.com">privacy@zanganehai.com</a>{" "}
+        <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>{" "}
         or via the <a href="/legal/contact">contact form</a>.  We respond
         to formal data-subject requests within 30 days.
       </p>

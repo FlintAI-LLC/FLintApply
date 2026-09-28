@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { LegalPageShell } from "@/components/legal/LegalPageShell"
+import { PRIVACY_EMAIL } from "@/lib/brand"
 
 export const metadata: Metadata = {
   title: "Do Not Sell My Personal Information — TalioCV",
@@ -102,7 +103,7 @@ export default function CcpaPage() {
       <h2>Submitting a request</h2>
       <p>
         Use the in-product Settings → Privacy controls, or contact our DPO at{" "}
-        <a href="mailto:privacy@zanganehai.com">privacy@zanganehai.com</a> /
+        <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a> /
         the <a href="/legal/contact">contact form</a>.  We verify identity by
         confirming the request from the email associated with your account
         and respond within 45 days.

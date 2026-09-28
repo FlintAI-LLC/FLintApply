@@ -40,7 +40,7 @@ export function NavBar() {
   const accessToken =
     session?.error === "TokenExpired" ? undefined : session?.backendAccessToken
 
-  const showUserMenu = Boolean(session?.user ?? session?.backendAccessToken)
+  const showUserMenu = Boolean(accessToken)
   useEffect(() => {
     if (showUserMenu) {
       setHadUserMenu(true)
@@ -248,6 +248,14 @@ export function NavBar() {
               dropdownRef={dropdownRef}
               onLogout={handleLogout}
             />
+          ) : status === "authenticated" ? (
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 px-3 py-1.5"
+            >
+              Sign out
+            </button>
           ) : (
             <div className="flex items-center gap-2">
               <Link

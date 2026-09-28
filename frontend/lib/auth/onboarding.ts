@@ -46,8 +46,7 @@ export function needsOnboarding(user?: BackendUser | null): boolean {
 export function mustCompleteOnboarding(
   session?: { backendUser?: BackendUser | null } | null,
 ): boolean {
-  if (!session) return false
-  if (!session.backendUser) return true
+  if (!session?.backendUser) return false
   return needsOnboarding(session.backendUser)
 }
 

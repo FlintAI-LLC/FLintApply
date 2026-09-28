@@ -52,6 +52,8 @@ export function friendlyAuthError(code: string): string {
     "Failed to fetch": "Could not reach the API. Is the backend running?",
     tfa_invalid: "Invalid TOTP code or recovery code.",
     challenge_token_invalid: "Your 2FA session has expired. Please log in again.",
+    launch_closed:
+      "Early access is required to create an account before launch. Enter your invite code, then sign in again.",
     OAuthBackendSyncPending:
       "Sign-in succeeded but the app could not reach the API. Sign out and try again.",
     missing_api_token:

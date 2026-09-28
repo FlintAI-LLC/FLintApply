@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { LegalPageShell } from "@/components/legal/LegalPageShell"
+import { PRIVACY_EMAIL } from "@/lib/brand"
 
 export const metadata: Metadata = {
   title: "Terms of Service — TalioCV",
@@ -140,7 +141,7 @@ export default function TermsPage() {
       <h2>11. Contact</h2>
       <p>
         Questions about these Terms?  Reach our Data Protection Officer at{" "}
-        <a href="mailto:privacy@zanganehai.com">privacy@zanganehai.com</a> or
+        <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a> or
         via the{" "}
         <a href="/legal/contact">DPO contact form</a>.
       </p>

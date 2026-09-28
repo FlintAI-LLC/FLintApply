@@ -23,10 +23,10 @@ export const FLINT_MARK_SRC = "/brand/flintguide-mark.png" as const;
 /** When false, session export shows Coming soon instead of the handoff deep link. */
 export const FLINT_HANDOFF_ENABLED = false as const;
 
-export const PRIVACY_EMAIL = "privacy@zanganehai.com" as const;
+export const PRIVACY_EMAIL = "privacy@flintapply.com" as const;
 
 /** Customized / enterprise plan inquiries from the public pricing grid. */
-export const SALES_INQUIRY_EMAIL = "privacy@zanganehai.com" as const;
+export const SALES_INQUIRY_EMAIL = "privacy@flintapply.com" as const;
 
 /** FlintApply text wordmark PNGs — replace in place when art updates. */
 export const WORDMARK_LIGHT_SRC = "/brand/flintapply-wordmark-light.png" as const;
