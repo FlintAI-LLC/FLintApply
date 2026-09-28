@@ -22,13 +22,14 @@ async def _seed_recent_signups(
     signup_ip: str,
     fp_hash: str,
     count: int,
+    email_domain: str = "example.com",
 ) -> None:
     now = datetime.now(timezone.utc)
-    for _ in range(count):
+    for idx in range(count):
         user = User(
             id=uuid.uuid4(),
-            email=f"{uuid.uuid4().hex[:10]}@example.com",
-            email_canonical=f"{uuid.uuid4().hex[:10]}@example.com",
+            email=f"{uuid.uuid4().hex[:10]}-{idx}@{email_domain}",
+            email_canonical=f"{uuid.uuid4().hex[:10]}-{idx}@{email_domain}",
             display_name="Rate",
             auth_provider=AuthProvider.email,
             password_hash="hash",
@@ -43,14 +44,14 @@ async def _seed_recent_signups(
 
 
 @pytest.mark.asyncio
-async def test_register_returns_rate_limit_when_ip_device_cap_hit(
+async def test_register_returns_rate_limit_when_corporate_daily_cap_hit(
     app_client: AsyncClient,
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.services.auth.signup_rate_limit.settings.SIGNUP_IP_DEVICE_DAILY_LIMIT",
-        3,
+        "app.services.auth.signup_rate_limit.settings.SIGNUP_CORPORATE_IP_DEVICE_DAILY_LIMIT",
+        2,
     )
     monkeypatch.setattr(
         "app.services.auth.signup_rate_limit.settings.SIGNUP_IP_DAILY_LIMIT",
@@ -63,7 +64,7 @@ async def test_register_returns_rate_limit_when_ip_device_cap_hit(
         db_session,
         signup_ip="testclient",
         fp_hash=fp_hash,
-        count=3,
+        count=2,
     )
     await db_session.commit()
 
@@ -76,4 +77,5 @@ async def test_register_returns_rate_limit_when_ip_device_cap_hit(
     assert resp.status_code == 429, resp.text
     detail = resp.json()["detail"]
     assert detail["code"] == "signup_rate_limited"
-    assert "try again tomorrow" in detail["message"].lower()
+    assert detail["reason"] == "signup_corporate_daily_limit"
+    assert "tomorrow" in detail["message"].lower()

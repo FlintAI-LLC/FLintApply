@@ -283,7 +283,8 @@ async def _microsoft_profile_from_access_token(
         "email": email,
         "provider_id": str(sub),
         "display_name": display,
-        "email_verified": False,
+        # User completed Microsoft sign-in; treat inbox as verified for AI spend gates.
+        "email_verified": True,
     }
 
 

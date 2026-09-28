@@ -31,7 +31,7 @@ export function friendlyAuthError(code: string): string {
     weak_password:
       "Please choose a stronger password (Fair or better on the strength meter).",
     signup_rate_limited:
-      "Too many signups from your network today. Try again tomorrow or use a different network.",
+      "Too many signups from this device or network. Try again later or contact support.",
     disposable_email_not_allowed:
       "Disposable email addresses cannot be used to sign up. Use a personal or work email you can receive mail at.",
     verify_token_expired:

@@ -61,10 +61,37 @@ export interface StorySaveResponse {
 }
 
 function parseApiError(body: unknown, fallback: string): string {
-  const detail = (body as { detail?: { message?: string } | string })?.detail;
-  if (typeof detail === "object" && detail?.message) return detail.message;
-  if (typeof detail === "string") return detail;
-  return fallback;
+  return parseApiErrorDetail(body, fallback).message;
+}
+
+export class StoryApiError extends Error {
+  code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = "StoryApiError";
+    this.code = code;
+  }
+}
+
+function parseApiErrorDetail(
+  body: unknown,
+  fallback: string,
+): { message: string; code?: string } {
+  const detail = (body as { detail?: { message?: string; code?: string } | string })?.detail;
+  if (typeof detail === "object" && detail) {
+    return {
+      message: detail.message ?? fallback,
+      code: detail.code,
+    };
+  }
+  if (typeof detail === "string") return { message: detail };
+  return { message: fallback };
+}
+
+function throwStoryApiError(body: unknown, fallback: string): never {
+  const { message, code } = parseApiErrorDetail(body, fallback);
+  throw new StoryApiError(message, code);
 }
 
 export async function generateStoryPreview(
@@ -91,7 +118,7 @@ export async function generateStoryPreview(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(parseApiError(body, "Story conversion failed"));
+    throwStoryApiError(body, "Story conversion failed");
   }
 
   return res.json() as Promise<StoryPreviewResponse>;
@@ -153,7 +180,7 @@ export async function saveStoryResume(
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(parseApiError(body, "Save to profile failed"));
+    throwStoryApiError(body, "Save to profile failed");
   }
 
   return res.json() as Promise<StorySaveResponse>;

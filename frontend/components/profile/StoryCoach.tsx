@@ -19,6 +19,7 @@ import { dispatchCreditsExhausted } from "@/lib/offerPopup";
 import { ExhaustionPaywall } from "@/components/billing/ExhaustionPaywall";
 import { type CoachMessage, streamCoach } from "@/lib/story";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import { EmailVerificationCallout } from "@/components/auth/EmailVerificationCallout";
 
 const MAX_EXCHANGES = 3;
 const COACH_MIC_DURATION_MS = 30_000;
@@ -49,6 +50,7 @@ export function StoryCoach({
   const [isStreaming, setIsStreaming] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [showExhaustionPaywall, setShowExhaustionPaywall] = useState(false);
   const [isSegmentComplete, setIsSegmentComplete] = useState(false);
   const [creditAccepted, setCreditAccepted] = useState(
@@ -96,6 +98,7 @@ export function StoryCoach({
       setStreamingText("");
       setIsStreaming(true);
       setError(null);
+      setErrorCode(null);
 
       let accumulated = "";
       try {
@@ -128,13 +131,20 @@ export function StoryCoach({
       } catch (err: unknown) {
         const e = err as Error & { code?: string };
         if (e.code === "insufficient_credits") {
+          setErrorCode(null);
           setError("You need at least 1 credit to start a coaching session.");
           setShowExhaustionPaywall(true);
           dispatchCreditsExhausted();
         } else if (e.code === "free_tier_ai_cap_reached") {
+          setErrorCode(null);
           setError("You've used up the free-plan AI allowance. Upgrade to keep using the coach.");
           setShowExhaustionPaywall(true);
+        } else if (e.code === "email_verification_required") {
+          setErrorCode("email_verification_required");
+          setError(null);
+          setShowExhaustionPaywall(false);
         } else {
+          setErrorCode(null);
           setError(e.message ?? "Coach request failed. Please try again.");
           setShowExhaustionPaywall(false);
         }
@@ -280,6 +290,9 @@ export function StoryCoach({
       </div>
 
       {/* Error */}
+      {errorCode === "email_verification_required" && (
+        <EmailVerificationCallout />
+      )}
       {error && (
         <p className="text-red-700 dark:text-red-400 text-xs rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-500/20 px-3 py-2">
           {error}

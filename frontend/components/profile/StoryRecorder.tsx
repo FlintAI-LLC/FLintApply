@@ -22,6 +22,7 @@ import { StoryInterview } from "./StoryInterview";
 import { type StoryMode, StoryModeSelector } from "./StoryModeSelector";
 import { StorySegment } from "./StorySegment";
 import { StorySaveConfirmDialog } from "./StorySaveConfirmDialog";
+import { StoryInlineError, storyErrorFromUnknown } from "./StoryInlineError";
 import { StoryVerifyPanel } from "./StoryVerifyPanel";
 import {
   generateStoryPreview,
@@ -85,6 +86,11 @@ export function StoryRecorder({ token, onSaved }: Props) {
   const [totalMs, setTotalMs] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const clearErrors = () => {
+    clearErrors();
+    setErrorCode(null);
+  };
   // Index of the segment whose coach panel is open (null = none)
   const [openCoachIndex, setOpenCoachIndex] = useState<number | null>(null);
   const [storyBuildSessionId, setStoryBuildSessionId] = useState("");
@@ -148,7 +154,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
     setHasGeneratedOnce(false);
     setPrevText(null);
     setOpenCoachIndex(null);
-    setError(null);
+    clearErrors();
     const nextId = resetStoryBuildSessionId();
     setStoryBuildSessionId(nextId);
     setCoachSessionUnlocked(false);
@@ -253,7 +259,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
   // ── Start recording a new segment ─────────────────────────────────────────
   const startNewSegment = useCallback(async () => {
     if (segments.length >= MAX_SEGMENTS) return;
-    setError(null);
+    clearErrors();
     resetVoice();
     const started = await start();
     if (!started) return;
@@ -287,7 +293,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
   // ── Re-record a specific segment ──────────────────────────────────────────
   const startReRecord = useCallback(async (index: number) => {
     resetVoice();
-    setError(null);
+    clearErrors();
     const started = await start();
     if (!started) return;
     setReRecordingIndex(index);
@@ -304,7 +310,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
   const handleSubmit = async () => {
     if (segments.length === 0) return;
     setSubmitting(true);
-    setError(null);
+    clearErrors();
     try {
       const result = await generateStoryPreview(segments, token, {
         whisperPath: !supportsWebSpeech,
@@ -319,7 +325,9 @@ export function StoryRecorder({ token, onSaved }: Props) {
       setAttestationChecked(false);
       patchStoryDraft({ reviewText: text, storyMode: storyMode ?? "free", segments });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to generate resume from story.");
+      const parsed = storyErrorFromUnknown(e);
+      setErrorCode(parsed.code);
+      setError(parsed.message);
     } finally {
       setSubmitting(false);
     }
@@ -342,7 +350,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
   const handleConfirmSave = async () => {
     if (!reviewText || !attestationChecked) return;
     setSaving(true);
-    setError(null);
+    clearErrors();
     try {
       const result = await saveStoryResume(reviewText, token, {
         segments,
@@ -354,7 +362,9 @@ export function StoryRecorder({ token, onSaved }: Props) {
       setSaveDialogOpen(false);
       finishAndSave();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save resume to profile.");
+      const parsed = storyErrorFromUnknown(e);
+      setErrorCode(parsed.code);
+      setError(parsed.message);
     } finally {
       setSaving(false);
     }
@@ -567,10 +577,8 @@ export function StoryRecorder({ token, onSaved }: Props) {
             Back
           </button>
         </div>
-        {error && (
-          <p className="text-red-700 dark:text-red-400 text-xs bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
-            {error}
-          </p>
+        {(error || errorCode) && (
+          <StoryInlineError error={error} errorCode={errorCode} />
         )}
         <p className="text-slate-600 dark:text-slate-400 text-xs">
           Nothing is saved to your profile until you confirm. First complete journey: generate + save are free.
@@ -704,10 +712,8 @@ export function StoryRecorder({ token, onSaved }: Props) {
           <Mic className="w-5 h-5" />
           {supportsWebSpeech ? "Start your story — free" : "Start your story — needs a paid plan"}
         </button>
-        {error && (
-          <p className="text-red-700 dark:text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-lg p-3">
-            {error}
-          </p>
+        {(error || errorCode) && (
+          <StoryInlineError error={error} errorCode={errorCode} />
         )}
       </div>
     );
@@ -870,10 +876,8 @@ export function StoryRecorder({ token, onSaved }: Props) {
         )}
       </div>
 
-      {error && (
-        <div className="text-red-700 dark:text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-lg p-3">
-          {error}
-        </div>
+      {(error || errorCode) && (
+        <StoryInlineError error={error} errorCode={errorCode} />
       )}
     </div>
   );

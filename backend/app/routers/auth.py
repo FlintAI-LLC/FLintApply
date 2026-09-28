@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import is_production_grade, settings
 from app.db.engine import get_db
-from app.limiter import limiter
+from app.limiter import authenticated_user_rate_limit_key, limiter
 from app.models.billing import CreditKind
 from app.models.user import (
     AuthAuditEvent,
@@ -243,15 +243,27 @@ def _client_ip(request: Request) -> str:
     return resolve_client_ip(request)
 
 
-def _signup_rate_limit_http() -> HTTPException:
+def _signup_rate_limit_http(exc: SignupRateLimitError) -> HTTPException:
+    messages = {
+        "signup_consumer_monthly_limit": (
+            "Too many signups with a personal email (Gmail, Outlook, Yahoo, etc.) "
+            "from this device this month. Try again next month or contact support."
+        ),
+        "signup_corporate_daily_limit": (
+            "Too many signups from this device today. Try again tomorrow or contact support."
+        ),
+        "signup_ip_daily_limit": (
+            "Too many signups from your network today — try again tomorrow, "
+            "or contact support."
+        ),
+    }
+    message = messages.get(exc.reason, messages["signup_ip_daily_limit"])
     return HTTPException(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         detail={
             "code": "signup_rate_limited",
-            "message": (
-                "Too many signups from your network today — try again tomorrow, "
-                "or contact support."
-            ),
+            "reason": exc.reason,
+            "message": message,
         },
     )
 
@@ -554,11 +566,12 @@ async def register(
     try:
         await assert_signup_rate_limit_allowed(
             db,
+            signup_email=email,
             signup_ip=signup_ip or "",
             device_fingerprint_hash=signup_device_fingerprint_hash,
         )
     except SignupRateLimitError as exc:
-        raise _signup_rate_limit_http() from exc
+        raise _signup_rate_limit_http(exc) from exc
 
     grant_amount = await registration_grant_credits(db)
     user = User(
@@ -793,6 +806,9 @@ async def oauth_callback(
             detail={"code": "oauth_failed", "message": str(exc)},
         ) from exc
 
+    if payload.provider == "microsoft":
+        profile["email_verified"] = True
+
     provider_enum = AuthProvider(payload.provider)
 
     user = (
@@ -803,6 +819,12 @@ async def oauth_callback(
             )
         )
     ).scalar_one_or_none()
+
+    oauth_verified = profile.get("email_verified", False)
+    if user is not None and not user.is_email_verified and oauth_verified:
+        user.email_verified_at = datetime.now(timezone.utc)
+        await db.flush()
+
     if user is None:
         from app.services.launch_gate import assert_signup_allowed
 
@@ -839,13 +861,13 @@ async def oauth_callback(
         try:
             await assert_signup_rate_limit_allowed(
                 db,
+                signup_email=email,
                 signup_ip=signup_ip or "",
                 device_fingerprint_hash=signup_device_fingerprint_hash,
             )
         except SignupRateLimitError as exc:
-            raise _signup_rate_limit_http() from exc
+            raise _signup_rate_limit_http(exc) from exc
         grant_amount = await registration_grant_credits(db)
-        oauth_verified = profile.get("email_verified", False)
         user = User(
             id=uuid.uuid4(),
             email=email,
@@ -1059,7 +1081,7 @@ async def refresh(
 
 # 7. GET /me ---------------------------------------------------------------
 @router.get("/me")
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=authenticated_user_rate_limit_key)
 async def me(
     request: Request,
     response: Response,

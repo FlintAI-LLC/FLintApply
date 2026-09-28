@@ -131,7 +131,10 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section className="mb-8 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
+      <section
+        id="email-verification"
+        className="mb-8 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3 scroll-mt-24"
+      >
         <h2 className="font-medium text-slate-800 dark:text-slate-200">Email</h2>
         <p className="text-sm text-slate-600 dark:text-slate-400">{email}</p>
         {verified ? (
