@@ -10,6 +10,7 @@ type SessionUpdate = (data?: {
 
 let inflightRefresh: Promise<boolean> | null = null
 let refreshBlockedUntil = 0
+let lastRefreshFailureStatus: number | null = null
 
 const REFRESH_429_BLOCK_MS = 60_000
 const REFRESH_401_BLOCK_MS = 5 * 60_000
@@ -17,6 +18,11 @@ const REFRESH_401_BLOCK_MS = 5 * 60_000
 /** True while refresh is in cooldown after a 429 or hard 401. */
 export function isRefreshRateLimited(): boolean {
   return Date.now() < refreshBlockedUntil
+}
+
+/** HTTP status of the last failed refresh, if any. */
+export function lastRefreshFailureHttpStatus(): number | null {
+  return lastRefreshFailureStatus
 }
 
 class RefreshHttpError extends Error {
@@ -61,6 +67,7 @@ export async function refreshBackendSession(update: SessionUpdate): Promise<bool
     try {
       const data = await fetchRefresh()
       invalidateSubscriptionCache()
+      lastRefreshFailureStatus = null
       await update({
         backendAccessToken: data.access_token,
         backendExpiresAt: Date.now() + data.expires_in * 1000,
@@ -68,14 +75,16 @@ export async function refreshBackendSession(update: SessionUpdate): Promise<bool
       })
       return true
     } catch (err) {
+      if (err instanceof RefreshHttpError) {
+        lastRefreshFailureStatus = err.status
+      }
       if (err instanceof RefreshHttpError && err.status === 429) {
         refreshBlockedUntil = Date.now() + REFRESH_429_BLOCK_MS
       }
       if (err instanceof RefreshHttpError && err.status === 401) {
         refreshBlockedUntil = Date.now() + REFRESH_401_BLOCK_MS
-        // Do not auto sign-out here — it races with open menus and causes flicker.
-        // Callers with an expired access token will get 401 on API calls; pages
-        // using useRequireAuth handle redirect to /auth.
+        // Callers decide whether to sign out. useRequireAuth signs out on 401
+        // so pages never sit on "Access token expired".
       }
       return false
     } finally {

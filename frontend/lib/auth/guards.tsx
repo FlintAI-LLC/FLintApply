@@ -7,8 +7,13 @@ import { signOut, useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef, ComponentType } from "react"
 import { fetchMe } from "@/lib/auth/api"
+import { expiredSessionAuthUrl, needsBackendAccessRefresh } from "@/lib/auth/accessToken"
 import { isOnboardingExempt, mustCompleteOnboarding, needsOnboarding } from "@/lib/auth/onboarding"
-import { refreshBackendSession, isRefreshRateLimited } from "@/lib/auth/refreshBackendSession"
+import {
+  refreshBackendSession,
+  isRefreshRateLimited,
+  lastRefreshFailureHttpStatus,
+} from "@/lib/auth/refreshBackendSession"
 import { isStaleAuthError } from "@/lib/auth/staleSession"
 import { saveAuthReturnUrl } from "@/lib/auth/returnUrl"
 
@@ -50,21 +55,27 @@ export function useRequireAuth(callbackUrl?: string) {
       return
     }
 
-    if (session.error === "TokenExpired") {
-      if (refreshingRef.current || isRefreshRateLimited()) return
+    if (needsBackendAccessRefresh(session)) {
+      if (refreshingRef.current) return
+      if (isRefreshRateLimited() && lastRefreshFailureHttpStatus() === 429) return
+      if (isRefreshRateLimited()) {
+        saveAuthReturnUrl(dest)
+        void signOut({ callbackUrl: expiredSessionAuthUrl(dest) })
+        return
+      }
       refreshingRef.current = true
       void refreshBackendSession(update).then((ok) => {
         refreshingRef.current = false
-        if (!ok && !isRefreshRateLimited()) {
-          saveAuthReturnUrl(dest)
-          void signOut({ callbackUrl: authUrl })
-        }
+        if (ok) return
+        if (lastRefreshFailureHttpStatus() === 429) return
+        saveAuthReturnUrl(dest)
+        void signOut({ callbackUrl: expiredSessionAuthUrl(dest) })
       }).catch((err: unknown) => {
         refreshingRef.current = false
         const message = err instanceof Error ? err.message : ""
-        if (isStaleAuthError(message)) {
+        if (isStaleAuthError(message) || lastRefreshFailureHttpStatus() === 401) {
           saveAuthReturnUrl(dest)
-          void signOut({ callbackUrl: authUrl })
+          void signOut({ callbackUrl: expiredSessionAuthUrl(dest) })
         }
       })
       return

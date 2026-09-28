@@ -6,7 +6,7 @@
 import { Suspense, useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useSession } from "next-auth/react"
+import { signOut, useSession } from "next-auth/react"
 import {
   ArrowLeft,
   ArrowRight,
@@ -22,6 +22,12 @@ import { useRequireAuth } from "@/lib/auth/guards"
 import { PRODUCT_NAME } from "@/lib/brand"
 import { friendlyAuthError } from "@/lib/auth/errors"
 import { fetchMe, patchOnboarding } from "@/lib/auth/api"
+import {
+  expiredSessionAuthUrl,
+  liveBackendAccessToken,
+} from "@/lib/auth/accessToken"
+import { isStaleAuthError } from "@/lib/auth/staleSession"
+import { saveAuthReturnUrl } from "@/lib/auth/returnUrl"
 import {
   needsOnboarding,
   onboardingStepAfterMasterUpload,
@@ -160,13 +166,31 @@ function OnboardingPageContent() {
     updateRef.current = update
   }, [update])
 
-  const token = session?.backendAccessToken
+  const token = liveBackendAccessToken(session)
+  const tokenRef = useRef(token)
+  tokenRef.current = token
+
+  function signOutExpired() {
+    const dest = `/onboarding${typeof window !== "undefined" ? window.location.search : ""}`
+    saveAuthReturnUrl(dest)
+    void signOut({ callbackUrl: expiredSessionAuthUrl(dest) })
+  }
+
+  function failOrSignOut(err: unknown, fallback: string) {
+    const msg = err instanceof Error ? err.message : ""
+    if (msg === "signed_out") return
+    if (isStaleAuthError(msg)) {
+      signOutExpired()
+      return
+    }
+    setError(msg || fallback)
+  }
 
   useEffect(() => {
     if (status === "loading" || !session) return
     if (initialHydrateDoneRef.current) return
 
-    if (status === "authenticated" && !token) {
+    if (status === "authenticated" && !session.backendAccessToken) {
       setError(
         friendlyAuthError(session.error ?? "missing_api_token"),
       )
@@ -175,11 +199,15 @@ function OnboardingPageContent() {
       return
     }
 
-    if (!token) return
+    if (!token) {
+      // Access JWT is stale. useRequireAuth refreshes or signs out — keep the spinner.
+      return
+    }
 
     let cancelled = false
 
     void (async () => {
+      let signedOut = false
       try {
         const [user, chunks, prefs] = await Promise.all([
           fetchMe(token),
@@ -211,10 +239,16 @@ function OnboardingPageContent() {
         setStep(Math.max(0, stepIndex))
       } catch (err: unknown) {
         if (!cancelled) {
-          setError((err as Error).message || "Could not load onboarding progress.")
+          const msg = err instanceof Error ? err.message : ""
+          if (isStaleAuthError(msg)) {
+            signedOut = true
+            signOutExpired()
+            return
+          }
+          setError(msg || "Could not load onboarding progress.")
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && !signedOut) {
           initialHydrateDoneRef.current = true
           setHydrated(true)
         }
@@ -239,15 +273,21 @@ function OnboardingPageContent() {
   }
 
   async function saveAiChoice(choice: AiChoice) {
-    const token = session?.backendAccessToken
-    if (!token) throw new Error("Not signed in")
-    const user = await patchOnboarding(token, { ai_choice: choice })
+    const accessToken = tokenRef.current
+    if (!accessToken) {
+      signOutExpired()
+      throw new Error("signed_out")
+    }
+    const user = await patchOnboarding(accessToken, { ai_choice: choice })
     await syncSession(user)
   }
 
   async function completeOnboarding(choice: AiChoice) {
-    const accessToken = session?.backendAccessToken
-    if (!accessToken) throw new Error("Not signed in")
+    const accessToken = tokenRef.current
+    if (!accessToken) {
+      signOutExpired()
+      return
+    }
     const user = await patchOnboarding(accessToken, { ai_choice: choice, complete: true })
     await syncSession(user)
     // Hard navigation so middleware reads the updated JWT (avoids race with client session).
@@ -265,8 +305,11 @@ function OnboardingPageContent() {
   }
 
   async function handleMasterUpload(payload: { file?: File; text?: string }) {
-    const accessToken = session?.backendAccessToken
-    if (!accessToken) throw new Error("Not signed in")
+    const accessToken = tokenRef.current
+    if (!accessToken) {
+      signOutExpired()
+      return
+    }
     setUploadingMaster(true)
     setError(null)
     try {
@@ -274,6 +317,10 @@ function OnboardingPageContent() {
       await advanceAfterMasterResume()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ""
+      if (isStaleAuthError(msg)) {
+        signOutExpired()
+        return
+      }
       if (
         msg.includes("Verify your email") ||
         msg === "email_verification_required"
@@ -325,7 +372,7 @@ function OnboardingPageContent() {
         }
         setStep((s) => s + 1)
       } catch (err: unknown) {
-        setError((err as Error).message || "Something went wrong. Please try again.")
+        failOrSignOut(err, "Something went wrong. Please try again.")
       }
     })
   }
@@ -343,7 +390,7 @@ function OnboardingPageContent() {
       try {
         await advancePastMasterStep()
       } catch (err: unknown) {
-        setError((err as Error).message || "Something went wrong. Please try again.")
+        failOrSignOut(err, "Something went wrong. Please try again.")
       }
     })
   }
@@ -385,7 +432,7 @@ function OnboardingPageContent() {
             onSubmit={handleMasterUpload}
             onStoryComplete={() => {
               void advanceAfterMasterResume().catch((err: unknown) => {
-                setError((err as Error).message || "Could not continue after saving your story.")
+                failOrSignOut(err, "Could not continue after saving your story.")
               })
             }}
           />

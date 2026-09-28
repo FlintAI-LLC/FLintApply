@@ -14,3 +14,22 @@ export function liveBackendAccessToken(session: {
   }
   return session.backendAccessToken
 }
+
+/** True when NextAuth still has a backend JWT that the API will reject. */
+export function needsBackendAccessRefresh(session: {
+  error?: string
+  backendAccessToken?: string
+  backendExpiresAt?: number
+} | null | undefined): boolean {
+  return Boolean(session?.backendAccessToken) && !liveBackendAccessToken(session)
+}
+
+/** Sign-in URL after the refresh cookie cannot recover the session. */
+export function expiredSessionAuthUrl(dest?: string): string {
+  const path =
+    dest ??
+    (typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : "/")
+  return `/auth?callbackUrl=${encodeURIComponent(path)}`
+}
