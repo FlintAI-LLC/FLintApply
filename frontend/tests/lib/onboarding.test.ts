@@ -31,7 +31,8 @@ describe("isOnboardingExempt", () => {
   it("lets password reset complete before onboarding", () => {
     assert.equal(isOnboardingExempt("/auth/reset"), true);
     assert.equal(isOnboardingExempt("/auth"), false);
-    assert.equal(isOnboardingExempt("/dashboard"), false);
+    assert.equal(isOnboardingExempt("/dashboard"), true);
+    assert.equal(isOnboardingExempt("/billing"), true);
   });
 
   it("lets email verification and settings complete before onboarding", () => {
@@ -43,7 +44,7 @@ describe("isOnboardingExempt", () => {
   it("does not over-match auth or settings prefixes", () => {
     assert.equal(isOnboardingExempt("/auth"), false);
     assert.equal(isOnboardingExempt("/settingsfoo"), false);
-    assert.equal(isOnboardingExempt("/dashboard"), false);
+    assert.equal(isOnboardingExempt("/jobs"), false);
   });
 });
 

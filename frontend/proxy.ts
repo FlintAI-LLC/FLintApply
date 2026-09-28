@@ -25,6 +25,7 @@ const PROTECTED_PREFIXES = [
   "/session/new",
   "/session/",
   "/profile",
+  "/settings",
   "/billing",
   "/dashboard",
   "/onboarding",
@@ -112,9 +113,12 @@ export default auth(async function proxy(req) {
     !isOnboardingExempt(pathname)
   ) {
     const onboardingUrl = new URL("/onboarding", req.url)
-    // Preserve deep links (e.g. return from email verify → settings).
-    if (pathname !== "/onboarding" && req.nextUrl.search) {
-      onboardingUrl.searchParams.set("returnTo", `${pathname}${req.nextUrl.search}`)
+    // Remember where they were headed (dashboard, jobs, etc.) for after the wizard.
+    if (pathname !== "/onboarding") {
+      onboardingUrl.searchParams.set(
+        "returnTo",
+        `${pathname}${req.nextUrl.search}`,
+      )
     }
     return redirectWithContentSecurityPolicy(onboardingUrl, nonce)
   }

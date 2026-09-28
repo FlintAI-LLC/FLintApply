@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import { NavBar } from "@/components/nav/NavBar"
+import { EmailVerificationBanner } from "@/components/nav/EmailVerificationBanner"
 import { SiteFooter } from "@/components/nav/SiteFooter"
 import { OfferPopupHost } from "@/components/billing/OfferPopupHost"
 
@@ -16,7 +17,12 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {showPublicChrome && <NavBar />}
+      {showPublicChrome && (
+        <>
+          <NavBar />
+          <EmailVerificationBanner />
+        </>
+      )}
       <div className="flex-1">{children}</div>
       {showPublicChrome && <SiteFooter />}
       {showPublicChrome && <OfferPopupHost />}

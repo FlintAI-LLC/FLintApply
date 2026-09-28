@@ -1,5 +1,19 @@
 const RETURN_URL_KEY = "sr_auth_return_url"
 
+/** Reject open redirects; only same-origin relative paths. */
+export function safeReturnPath(raw: string | null, fallback = "/dashboard"): string {
+  const value = (raw ?? "").trim()
+  if (
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.startsWith("/\\") ||
+    value.includes(":")
+  ) {
+    return fallback
+  }
+  return value
+}
+
 /** Remember where to return after sign-in (survives OAuth round-trips). */
 export function saveAuthReturnUrl(path?: string): void {
   if (typeof window === "undefined") return

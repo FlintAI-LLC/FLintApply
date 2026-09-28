@@ -27,7 +27,7 @@ import {
   liveBackendAccessToken,
 } from "@/lib/auth/accessToken"
 import { isStaleAuthError } from "@/lib/auth/staleSession"
-import { saveAuthReturnUrl } from "@/lib/auth/returnUrl"
+import { safeReturnPath, saveAuthReturnUrl } from "@/lib/auth/returnUrl"
 import {
   needsOnboarding,
   onboardingStepAfterMasterUpload,
@@ -185,6 +185,13 @@ function OnboardingPageContent() {
     }
     setError(msg || fallback)
   }
+
+  useEffect(() => {
+    const returnTo = searchParams.get("returnTo")
+    if (returnTo) {
+      saveAuthReturnUrl(safeReturnPath(returnTo))
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (status === "loading" || !session) return
@@ -425,17 +432,28 @@ function OnboardingPageContent() {
         return <OnboardingAiStep />
       case "master":
         return token ? (
-          <ProfileUploadZone
-            token={token}
-            compact
-            loading={uploadingMaster}
-            onSubmit={handleMasterUpload}
-            onStoryComplete={() => {
-              void advanceAfterMasterResume().catch((err: unknown) => {
-                failOrSignOut(err, "Could not continue after saving your story.")
-              })
-            }}
-          />
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600 dark:text-slate-400 text-center">
+              Prefer the full profile page?{" "}
+              <Link
+                href="/profile?mode=story&from=onboarding"
+                className="font-medium text-amber-800 dark:text-amber-300 underline underline-offset-2"
+              >
+                Continue Tell your story on Master resume →
+              </Link>
+            </p>
+            <ProfileUploadZone
+              token={token}
+              compact
+              loading={uploadingMaster}
+              onSubmit={handleMasterUpload}
+              onStoryComplete={() => {
+                void advanceAfterMasterResume().catch((err: unknown) => {
+                  failOrSignOut(err, "Could not continue after saving your story.")
+                })
+              }}
+            />
+          </div>
         ) : null
       case "jobTitles":
         return token ? (

@@ -4,9 +4,15 @@ import {
   getExtensionHandoff,
 } from "@/lib/extensionHandoff"
 
-/** Paths reachable while onboarding is incomplete (AI choice not finished). */
+/**
+ * Paths reachable while the onboarding wizard is incomplete.
+ * Dashboard and billing stay open so nav items work; profile/settings already
+ * allowed building a master resume outside the wizard.
+ */
 export const ONBOARDING_EXEMPT_PREFIXES = [
   "/onboarding",
+  "/dashboard",
+  "/billing",
   "/profile",
   "/session/new",
   "/jobs/setup",

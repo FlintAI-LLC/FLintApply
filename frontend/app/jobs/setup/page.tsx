@@ -8,23 +8,14 @@ import { useRequireAuth } from "@/lib/auth/guards"
 import { PRODUCT_NAME } from "@/lib/brand"
 import { JobTitlePicker } from "@/components/jobs/JobTitlePicker"
 
-/** Exported for unit tests. Reject anything that isn't a same-origin path. */
-export function safeReturnPath(raw: string | null): string {
-  const value = (raw ?? "").trim()
-  if (
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    value.startsWith("/\\")
-  ) {
-    return "/jobs"
-  }
-  return value
-}
+import { safeReturnPath } from "@/lib/auth/returnUrl"
+
+export { safeReturnPath } from "@/lib/auth/returnUrl"
 
 function SetupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const returnTo = safeReturnPath(searchParams.get("return"))
+  const returnTo = safeReturnPath(searchParams.get("return"), "/jobs")
   const { session, status } = useRequireAuth("/jobs/setup")
   const token = session?.backendAccessToken ?? ""
 

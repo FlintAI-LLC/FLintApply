@@ -22,6 +22,10 @@ import { StoryInterview } from "./StoryInterview";
 import { type StoryMode, StoryModeSelector } from "./StoryModeSelector";
 import { StorySegment } from "./StorySegment";
 import { StorySaveConfirmDialog } from "./StorySaveConfirmDialog";
+import {
+  StoryGenerateConfirmDialog,
+  type StoryGenerateConfirmVariant,
+} from "./StoryGenerateConfirmDialog";
 import { StoryInlineError, storyErrorFromUnknown } from "./StoryInlineError";
 import { StoryVerifyPanel } from "./StoryVerifyPanel";
 import {
@@ -100,6 +104,9 @@ export function StoryRecorder({ token, onSaved }: Props) {
   const [verifyReviewCount, setVerifyReviewCount] = useState(0);
   const [attestationChecked, setAttestationChecked] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [generateConfirmOpen, setGenerateConfirmOpen] = useState(false);
+  const [generateConfirmVariant, setGenerateConfirmVariant] =
+    useState<StoryGenerateConfirmVariant>("first_generate");
   const [saving, setSaving] = useState(false);
   const [lastGenerateBilling, setLastGenerateBilling] = useState<string | undefined>();
   const [lastSaveBilling, setLastSaveBilling] = useState<string | undefined>();
@@ -306,10 +313,48 @@ export function StoryRecorder({ token, onSaved }: Props) {
     setSegments((prev) => persistSegments(prev.filter((_, i) => i !== index), storyMode ?? "free"));
   };
 
+  const openGenerateConfirm = (variant: StoryGenerateConfirmVariant) => {
+    if (openCoachIndex !== null) {
+      setError(
+        `Close Coach me on segment ${openCoachIndex + 1} (or add the coach answer as a segment) before generating your resume.`,
+      );
+      setErrorCode(null);
+      return;
+    }
+    clearErrors();
+    setGenerateConfirmVariant(variant);
+    setGenerateConfirmOpen(true);
+  };
+
+  const openBackToSegmentsConfirm = () => {
+    if (hasGeneratedOnce && isFreeUser) {
+      setGenerateConfirmVariant("back_to_segments");
+      setGenerateConfirmOpen(true);
+      return;
+    }
+    setReviewText(null);
+    setVerifyItems([]);
+    setVerifyReviewCount(0);
+    setAttestationChecked(false);
+    setPrevText(null);
+    patchStoryDraft({ reviewText: null });
+  };
+
+  const confirmBackToSegments = () => {
+    setGenerateConfirmOpen(false);
+    setReviewText(null);
+    setVerifyItems([]);
+    setVerifyReviewCount(0);
+    setAttestationChecked(false);
+    setPrevText(null);
+    patchStoryDraft({ reviewText: null });
+  };
+
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (segments.length === 0) return;
     setSubmitting(true);
+    setGenerateConfirmOpen(false);
     clearErrors();
     try {
       const result = await generateStoryPreview(segments, token, {
@@ -554,7 +599,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
           </button>
           <button
             type="button"
-            onClick={() => void handleSubmit()}
+            onClick={() => openGenerateConfirm("regenerate")}
             className="px-5 py-3 border border-slate-300 dark:border-slate-700 hover:border-amber-400/50 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium rounded-xl transition-colors text-sm"
           >
             Regenerate
@@ -564,14 +609,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setReviewText(null);
-              setVerifyItems([]);
-              setVerifyReviewCount(0);
-              setAttestationChecked(false);
-              setPrevText(null);
-              patchStoryDraft({ reviewText: null });
-            }}
+            onClick={openBackToSegmentsConfirm}
             className="px-5 py-3 border border-slate-300 dark:border-slate-700 hover:border-slate-500 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium rounded-xl transition-colors text-sm"
           >
             Back
@@ -583,6 +621,27 @@ export function StoryRecorder({ token, onSaved }: Props) {
         <p className="text-slate-600 dark:text-slate-400 text-xs">
           Nothing is saved to your profile until you confirm. First complete journey: generate + save are free.
         </p>
+
+        <StoryGenerateConfirmDialog
+          open={generateConfirmOpen}
+          variant={generateConfirmVariant}
+          segmentCount={segments.length}
+          creditLabel={storyGenerateCreditLabel(
+            generateConfirmVariant === "first_generate"
+              ? "first_story_generate"
+              : "free_credit",
+            isFreeUser,
+          )}
+          submitting={submitting}
+          onClose={() => setGenerateConfirmOpen(false)}
+          onConfirm={() => {
+            if (generateConfirmVariant === "back_to_segments") {
+              confirmBackToSegments();
+              return;
+            }
+            void handleSubmit();
+          }}
+        />
 
         <StorySaveConfirmDialog
           open={saveDialogOpen}
@@ -839,6 +898,14 @@ export function StoryRecorder({ token, onSaved }: Props) {
       )}
 
       {/* Action buttons */}
+      {segments.length > 0 && !isRecordingAnything && (
+        <div className="rounded-xl border border-amber-400/35 bg-amber-50/80 dark:bg-amber-950/25 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
+          Record every segment you want before you generate. Your first generate is free; if you go
+          back to add more and generate again, that costs{" "}
+          <strong>{isFreeUser ? "1 credit" : "another generate on your plan"}</strong>.
+        </div>
+      )}
+
       <div className="flex items-center gap-3 pt-2">
         {canAddSegment && (
           <button
@@ -854,7 +921,9 @@ export function StoryRecorder({ token, onSaved }: Props) {
         {segments.length > 0 && !isRecordingAnything && (
           <button
             type="button"
-            onClick={() => void handleSubmit()}
+            onClick={() =>
+              openGenerateConfirm(hasGeneratedOnce ? "regenerate" : "first_generate")
+            }
             disabled={submitting}
             className="flex-1 py-3 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
           >
@@ -879,6 +948,27 @@ export function StoryRecorder({ token, onSaved }: Props) {
       {(error || errorCode) && (
         <StoryInlineError error={error} errorCode={errorCode} />
       )}
+
+      <StoryGenerateConfirmDialog
+        open={generateConfirmOpen}
+        variant={generateConfirmVariant}
+        segmentCount={segments.length}
+        creditLabel={storyGenerateCreditLabel(
+          generateConfirmVariant === "first_generate"
+            ? "first_story_generate"
+            : "free_credit",
+          isFreeUser,
+        )}
+        submitting={submitting}
+        onClose={() => setGenerateConfirmOpen(false)}
+        onConfirm={() => {
+          if (generateConfirmVariant === "back_to_segments") {
+            confirmBackToSegments();
+            return;
+          }
+          void handleSubmit();
+        }}
+      />
     </div>
   );
 }
