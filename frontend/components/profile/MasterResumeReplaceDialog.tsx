@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 
 interface Props {
   open: boolean;
+  busy?: boolean;
   actionLabel: string;
   chunkCount?: number;
   onClose: () => void;
@@ -13,6 +14,7 @@ interface Props {
 /** Confirms full replace of the stored master resume (upload, paste, or story save). */
 export function MasterResumeReplaceDialog({
   open,
+  busy = false,
   actionLabel,
   chunkCount,
   onClose,
@@ -51,14 +53,16 @@ export function MasterResumeReplaceDialog({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            disabled={busy}
+            className="flex-1 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
           >
             Keep current resume
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="flex-1 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl text-sm"
+            disabled={busy}
+            className="flex-1 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl text-sm disabled:opacity-50"
           >
             Replace master resume
           </button>

@@ -10,7 +10,8 @@ import {
   Sparkles,
   Target,
 } from "lucide-react"
-import { COMPANY_LINE, COMPANY_URL, FLINT_DESKTOP_URL, FLINT_MARK_SRC, FLINT_PRODUCT_NAME, PRODUCT_NAME } from "@/lib/brand"
+import { FLINT_DESKTOP_URL, FLINT_MARK_SRC, FLINT_PRODUCT_NAME, PRODUCT_NAME } from "@/lib/brand"
+import { EXTENSION_INSTALL_PATH } from "@/lib/extensionInstall"
 import { DashboardStepCard } from "@/components/dashboard/DashboardStepCard"
 import {
   computeStepStates,
@@ -183,15 +184,17 @@ export function DashboardStepStack({
           captureReady
             ? ""
             : rolesEffectivelyReady
-              ? `Use the ${PRODUCT_NAME} browser extension on Greenhouse, Lever, Ashby, and similar sites — or save a posting from in-app search.`
+              ? `Three ways: install the ${PRODUCT_NAME} browser extension on a job site, save a posting from in-app search, or paste a description when you tailor.`
               : "Complete your master resume and job roles first."
         }
         ready={captureReady}
         locked={states.capture === "locked"}
-        primaryHref={rolesEffectivelyReady ? COMPANY_URL : undefined}
-        primaryLabel="Learn more"
+        primaryHref={rolesEffectivelyReady ? EXTENSION_INSTALL_PATH : undefined}
+        primaryLabel="Get the extension"
         secondaryHref={rolesEffectivelyReady ? "/jobs" : undefined}
         secondaryLabel={rolesEffectivelyReady ? "Search & save jobs" : undefined}
+        tertiaryHref={rolesEffectivelyReady ? "/session/new" : undefined}
+        tertiaryLabel={rolesEffectivelyReady ? "Paste a job description" : undefined}
         skipHref={
           states.capture === "locked" && hasMasterResume
             ? "/jobs/setup?return=/dashboard"
@@ -260,8 +263,8 @@ export function DashboardStepStack({
         }
         ready={applyReady}
         locked={states.apply === "locked"}
-        primaryHref={hasTailored ? COMPANY_URL : undefined}
-        primaryLabel="Learn more"
+        primaryHref={hasTailored ? EXTENSION_INSTALL_PATH : undefined}
+        primaryLabel="Get the extension"
         secondaryHref={hasTailored ? "/tracker" : undefined}
         secondaryLabel={hasTailored ? "Track application" : undefined}
         skipHref={
@@ -329,7 +332,7 @@ export function DashboardStepStack({
             </p>
             <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
               <span className="font-semibold text-slate-900 dark:text-white">{FLINT_PRODUCT_NAME}</span>
-              {` — live interview co-pilot (separate desktop app ${COMPANY_LINE}). `}
+              {` — live interview co-pilot (separate desktop app by The Flint AI). `}
               Not included in your {PRODUCT_NAME} subscription.{" "}
               <Link
                 href={FLINT_DESKTOP_URL}

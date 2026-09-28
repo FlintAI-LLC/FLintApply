@@ -1,7 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import { AlertCircle, FileText, Upload } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { AlertCircle, CheckCircle2, FileText, Upload } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoryRecorder } from "@/components/profile/StoryRecorder"
 import { MasterResumeReplaceDialog } from "@/components/profile/MasterResumeReplaceDialog"
@@ -32,23 +32,45 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
   const [error, setError]     = useState<string | null>(null)
   const [pasteText, setPasteText] = useState("")
   const [replaceDialogOpen, setReplaceDialogOpen] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [pendingReplace, setPendingReplace] = useState<
     { kind: "file"; file: File } | { kind: "paste" } | null
   >(null)
 
   const hasExistingMaster = existingChunkCount > 0
 
+  const finishSubmit = useCallback(() => {
+    setPasteText("")
+    setSuccessMessage("Master resume saved. Your chunks below are updated.")
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }, [])
+
   const runReplace = useCallback(
     async (payload: { file?: File; text?: string }) => {
+      if (submitting || loading) return
+      setSubmitting(true)
       setReplaceDialogOpen(false)
       setPendingReplace(null)
-      await onSubmit(payload)
+      setSuccessMessage(null)
+      setError(null)
+      try {
+        await onSubmit(payload)
+        finishSubmit()
+      } catch (e) {
+        throw e
+      } finally {
+        setSubmitting(false)
+      }
     },
-    [onSubmit],
+    [onSubmit, loading, finishSubmit, submitting],
   )
 
   const requestReplace = useCallback(
     (next: { kind: "file"; file: File } | { kind: "paste" }) => {
+      if (loading || submitting) return
+      setSuccessMessage(null)
       if (!hasExistingMaster) {
         if (next.kind === "file") void runReplace({ file: next.file })
         else void runReplace({ text: pasteText })
@@ -57,7 +79,7 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
       setPendingReplace(next)
       setReplaceDialogOpen(true)
     },
-    [hasExistingMaster, runReplace, pasteText],
+    [hasExistingMaster, runReplace, pasteText, loading, submitting],
   )
 
   useEffect(() => {
@@ -83,11 +105,18 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
   )
 
   const handlePaste = async () => {
-    if (!pasteText.trim()) return
+    if (!pasteText.trim() || loading || submitting) return
     setError(null)
+    setSuccessMessage(null)
     if (!hasExistingMaster) {
-      try { await onSubmit({ text: pasteText }) } catch (e) {
+      setSubmitting(true)
+      try {
+        await onSubmit({ text: pasteText })
+        finishSubmit()
+      } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to process resume text.")
+      } finally {
+        setSubmitting(false)
       }
       return
     }
@@ -95,7 +124,7 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
   }
 
   const confirmReplace = () => {
-    if (!pendingReplace) return
+    if (!pendingReplace || loading || submitting) return
     if (pendingReplace.kind === "file") {
       void runReplace({ file: pendingReplace.file }).catch((e) => {
         setError(e instanceof Error ? e.message : "Upload failed.")
@@ -173,6 +202,7 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
           <p className="text-slate-700 dark:text-slate-300 font-medium">Drop your resume here</p>
           <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">PDF, DOCX, or TXT · Max 5MB</p>
           <input
+            ref={fileInputRef}
             id="profile-file-input"
             type="file"
             accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
@@ -187,7 +217,10 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
         <div className="space-y-3">
           <textarea
             value={pasteText}
-            onChange={(e) => setPasteText(e.target.value)}
+            onChange={(e) => {
+              setPasteText(e.target.value)
+              if (successMessage) setSuccessMessage(null)
+            }}
             placeholder="Paste your master resume text here…"
             disabled={loading}
             className="w-full h-48 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-4 text-slate-800 dark:text-slate-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder-slate-600 disabled:opacity-60"
@@ -197,10 +230,14 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
             <button
               type="button"
               onClick={() => void handlePaste()}
-              disabled={!pasteText.trim() || loading}
+              disabled={!pasteText.trim() || loading || submitting}
               className="px-5 py-2 bg-amber-400 text-slate-900 font-semibold rounded-lg hover:bg-amber-300 disabled:opacity-40 transition-colors text-sm"
             >
-              {loading ? "Processing…" : "Save master resume"}
+              {loading
+                ? "Processing…"
+                : hasExistingMaster
+                  ? "Replace master resume…"
+                  : "Save master resume"}
             </button>
           </div>
         </div>
@@ -213,6 +250,13 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
             <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
             Chunking and embedding your resume…
           </div>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="flex items-start gap-2 text-emerald-800 dark:text-emerald-300 text-sm bg-emerald-500/10 border border-emerald-500/25 rounded-lg p-3">
+          <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+          {successMessage}
         </div>
       )}
 
@@ -232,6 +276,7 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
 
       <MasterResumeReplaceDialog
         open={replaceDialogOpen}
+        busy={loading || submitting}
         actionLabel={pendingReplace?.kind === "paste" ? "Pasting new text" : "Uploading a file"}
         chunkCount={existingChunkCount}
         onClose={() => {

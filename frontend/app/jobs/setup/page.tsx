@@ -57,6 +57,18 @@ function SetupContent() {
             }}
           />
         </div>
+
+        <p className="text-center text-sm text-slate-600 dark:text-slate-400 mt-6">
+          Prefer to grab jobs on employer sites?{" "}
+          <Link href="/extension" className="text-amber-800 dark:text-amber-300 font-medium hover:underline">
+            Install the browser extension
+          </Link>{" "}
+          or{" "}
+          <Link href="/session/new" className="text-amber-800 dark:text-amber-300 font-medium hover:underline">
+            paste a job description
+          </Link>{" "}
+          when you tailor.
+        </p>
       </div>
     </div>
   )

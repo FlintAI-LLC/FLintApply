@@ -19,6 +19,7 @@ export const ONBOARDING_EXEMPT_PREFIXES = [
   "/auth/reset",
   "/auth/verify",
   "/settings",
+  "/extension",
 ]
 
 export const ONBOARDING_STEP_COUNT = 5

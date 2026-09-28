@@ -33,6 +33,7 @@ export const NAV_PILLARS: readonly NavPillar[] = [
     links: [
       { href: "/jobs/setup", label: "Job roles" },
       { href: "/jobs", label: "Search jobs" },
+      { href: "/extension", label: "Browser extension" },
       { href: "/tracker", label: "Applications" },
       { href: "/career-watch", label: "Career Watch" },
     ],
