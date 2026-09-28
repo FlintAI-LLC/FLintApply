@@ -64,7 +64,12 @@ from app.services.auth.exceptions import (
     TokenExpiredError,
     TokenInvalidError,
 )
-from app.services.auth.oauth import exchange_google_code
+from app.services.auth.oauth import (
+    NormalisedOAuthProfile,
+    exchange_github_code,
+    exchange_google_code,
+    exchange_microsoft_code,
+)
 from app.services.auth.password import verify_password
 from app.services.auth.tokens import (
     create_access_token,
@@ -80,35 +85,47 @@ log = structlog.get_logger("auth.extension")
 router = APIRouter(prefix="/api/auth/extension", tags=["auth-extension"])
 
 
-def _is_valid_extension_redirect_uri(redirect_uri: str) -> bool:
-    """Accept the two legitimate extension redirect URIs.
+def _extension_web_callback(provider: str) -> str:
+    return f"{settings.FRONTEND_BASE_URL.rstrip('/')}/auth/extension/{provider}/callback"
+
+
+def _is_valid_extension_redirect_uri(redirect_uri: str, provider: str) -> bool:
+    """Accept only the legitimate redirect URI(s) for ``provider``.
 
     Chrome uses chrome.identity.getRedirectURL() which returns a URI of the
     form ``https://<ext-id>.chromiumapp.org/``.  Google already validates that
-    this matches the registered OAuth client, so a suffix-check here is safe.
+    this matches the registered OAuth client, so a suffix-check here is safe
+    -- but ONLY for Google. GitHub OAuth Apps allow exactly one registered
+    callback URL (no wildcards), so a github/microsoft code paired with a
+    chromiumapp.org redirect_uri must be rejected outright: there is no
+    provider-side registration that URI could ever match, and accepting it
+    here would let a caller skip the tab-callback code path entirely.
 
-    Firefox uses the dedicated web-app callback registered in Google Console.
+    Firefox (and, for github/microsoft, every browser) uses the dedicated
+    web-app callback registered with that provider's OAuth app.
     """
     normalised = redirect_uri.rstrip("/")
-    web_callback = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/auth/extension/google/callback"
+    web_callback = _extension_web_callback(provider)
     if normalised == web_callback:
         return True
-    if normalised.endswith(".chromiumapp.org") or ".chromiumapp.org/" in redirect_uri:
+    if provider == "google" and (
+        normalised.endswith(".chromiumapp.org") or ".chromiumapp.org/" in redirect_uri
+    ):
         return True
     return False
 
 
-def _validate_extension_oauth_redirect(redirect_uri: str) -> None:
-    if not _is_valid_extension_redirect_uri(redirect_uri):
-        web_callback = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/auth/extension/google/callback"
+def _validate_extension_oauth_redirect(redirect_uri: str, provider: str) -> None:
+    if not _is_valid_extension_redirect_uri(redirect_uri, provider):
+        web_callback = _extension_web_callback(provider)
+        message = f"redirect_uri must be {web_callback}"
+        if provider == "google":
+            message += " (Firefox) or a *.chromiumapp.org URL (Chrome)"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "invalid_redirect_uri",
-                "message": (
-                    f"redirect_uri must be {web_callback} (Firefox) "
-                    "or a *.chromiumapp.org URL (Chrome)"
-                ),
+                "message": message,
             },
         )
 
@@ -124,7 +141,7 @@ class ExtensionRefreshRequest(BaseModel):
 
 
 class ExtensionOAuthCallbackRequest(BaseModel):
-    provider: Literal["google"]
+    provider: Literal["google", "github", "microsoft"]
     code: str = Field(..., min_length=1, max_length=4096)
     redirect_uri: str = Field(..., min_length=1, max_length=1024)
 
@@ -413,6 +430,28 @@ async def extension_refresh(
     )
 
 
+async def _exchange_oauth_code(
+    provider: str, code: str, redirect_uri: str
+) -> NormalisedOAuthProfile:
+    """Dispatch to the provider's code-exchange helper.
+
+    Deliberately NOT a ``{provider: function}`` dict built at import time:
+    that would capture the original function objects as closures, and
+    ``monkeypatch.setattr("app.routers.extension_auth.exchange_github_code",
+    ...)`` (used by tests) only rebinds the module's global name -- it would
+    never be seen by a dict that already holds the pre-patch reference. A
+    plain call by name re-resolves the module global on every invocation, so
+    it stays patchable.
+    """
+    if provider == "google":
+        return await exchange_google_code(code, redirect_uri)
+    if provider == "github":
+        return await exchange_github_code(code, redirect_uri)
+    if provider == "microsoft":
+        return await exchange_microsoft_code(code, redirect_uri)
+    raise AssertionError(f"unhandled provider: {provider}")  # pragma: no cover
+
+
 @router.post("/callback", response_model=ExtensionAuthResponse)
 @limiter.limit("10/minute")
 async def extension_oauth_callback(
@@ -420,27 +459,37 @@ async def extension_oauth_callback(
     payload: ExtensionOAuthCallbackRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ExtensionAuthResponse:
-    """Exchange a Google OAuth code for extension tokens (body-based, no cookie).
+    """Exchange a provider OAuth code for extension tokens (body-based, no cookie).
 
-    The extension opens Google OAuth in a tab and intercepts the redirect to
-    ``{FRONTEND_BASE_URL}/auth/extension/google/callback``. That URI is shared
-    by Chrome and Firefox (unlike per-browser ``chromiumapp.org`` URLs).
+    Google, GitHub, and Microsoft each land the browser at
+    ``{FRONTEND_BASE_URL}/auth/extension/{provider}/callback`` after the user
+    authorizes. Google additionally accepts a ``*.chromiumapp.org`` redirect
+    on Chrome (``chrome.identity``); GitHub and Microsoft never do — see
+    ``_is_valid_extension_redirect_uri`` for why that is a hard architectural
+    line, not an oversight.
     """
     _require_enabled()
-    _validate_extension_oauth_redirect(payload.redirect_uri)
+    provider = payload.provider
+    _validate_extension_oauth_redirect(payload.redirect_uri, provider)
 
     try:
-        profile = await exchange_google_code(payload.code, payload.redirect_uri)
+        profile = await _exchange_oauth_code(provider, payload.code, payload.redirect_uri)
     except OAuthError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "oauth_failed", "message": str(exc)},
         ) from exc
 
+    # AuthProvider(provider) directly, like app/routers/auth.py's web OAuth
+    # callback (see `provider_enum = AuthProvider(payload.provider)`) —
+    # avoids a second provider->enum mapping in this module that could
+    # silently drift out of sync with the AuthProvider enum itself.
+    auth_provider = AuthProvider(provider)
+
     user = (
         await db.execute(
             select(User).where(
-                User.auth_provider == AuthProvider.google,
+                User.auth_provider == auth_provider,
                 User.provider_id == profile["provider_id"],
             )
         )
@@ -463,7 +512,7 @@ async def extension_oauth_callback(
             id=uuid.uuid4(),
             email=profile["email"],
             display_name=profile["display_name"] or profile["email"].split("@", 1)[0],
-            auth_provider=AuthProvider.google,
+            auth_provider=auth_provider,
             provider_id=profile["provider_id"],
             email_verified_at=datetime.now(timezone.utc),
             tier=UserTier.free,
@@ -480,7 +529,7 @@ async def extension_oauth_callback(
                 delta=grant_amount,
                 action=CreditTransactionAction.registration_grant,
                 reason="registration_grant",
-                note="registration grant via google (extension)",
+                note=f"registration grant via {provider} (extension)",
             )
         )
         await db.flush()
@@ -497,6 +546,6 @@ async def extension_oauth_callback(
         event=AuthAuditEvent.login_success,
         ip=_client_ip(request),
         user_agent=_user_agent(request),
-        metadata={"provider": "google", "source": "extension"},
+        metadata={"provider": provider, "source": "extension"},
     )
     return await _issue_extension_session(db, request, user)
