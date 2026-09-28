@@ -38,6 +38,8 @@ export function friendlyAuthError(code: string): string {
       "This verification link has expired. Request a new one in Settings.",
     verify_token_invalid:
       "This verification link is invalid. Request a new one in Settings.",
+    verify_send_rate_limited:
+      "You can resend the verification email a few times per hour. Wait a few minutes, then try again.",
     email_verification_required:
       "Verify your email before using AI features. Check your inbox or resend from Settings.",
     credits_locked_until_verification:

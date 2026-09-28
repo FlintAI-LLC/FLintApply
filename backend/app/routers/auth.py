@@ -333,8 +333,17 @@ def _me(user: User, *, credit_balance: int | None = None) -> MeResponse:
     )
 
 
+async def _trust_sso_email_if_needed(db: AsyncSession, user: User) -> None:
+    """OAuth sign-in already proved inbox control — no separate verify email."""
+    if user.is_email_verified or user.auth_provider == AuthProvider.email:
+        return
+    user.email_verified_at = datetime.now(timezone.utc)
+    await db.flush()
+
+
 async def _me_from_ledger(db: AsyncSession, user: User) -> MeResponse:
     """Return profile fields with the authoritative free-credit ledger balance."""
+    await _trust_sso_email_if_needed(db, user)
     balance = await get_balance(db, user_id=user.id, credit_kind=CreditKind.free)
     if user.credit_balance != balance:
         user.credit_balance = max(0, balance)
@@ -1186,13 +1195,14 @@ async def revoke_session(
 
 # 10. POST /verify/send ----------------------------------------------------
 @router.post("/verify/send")
-@limiter.limit("1/5minute")
+@limiter.limit("6/hour", key_func=authenticated_user_rate_limit_key)
 async def verify_send(
     request: Request,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict[str, Any]:
+    await _trust_sso_email_if_needed(db, user)
     if user.is_email_verified:
         _attach_closure_header(request, response)
         return {"ok": True, "already_verified": True}
