@@ -654,13 +654,15 @@ export function StoryRecorder({ token, onSaved }: Props) {
             </span>
           </div>
           {supportsWebSpeech ? (
-            <p className="text-slate-600 dark:text-slate-400 text-sm">
-              Your browser supports live transcription. Words appear as you speak. First resume generate from story is{" "}
-              <strong className="text-slate-900 dark:text-white">free</strong>; regenerates cost 1 credit. Saving to profile: first save free, later saves 1 credit.
-            </p>
-            <p className="text-slate-600 dark:text-slate-400 text-xs">
-              The first time, your browser will ask to use the microphone. Click Allow — it remembers that for this site on this device.
-            </p>
+            <div className="space-y-2">
+              <p className="text-slate-600 dark:text-slate-400 text-sm">
+                Your browser supports live transcription. Words appear as you speak. First resume generate from story is{" "}
+                <strong className="text-slate-900 dark:text-white">free</strong>; regenerates cost 1 credit. Saving to profile: first save free, later saves 1 credit.
+              </p>
+              <p className="text-slate-600 dark:text-slate-400 text-xs">
+                The first time, your browser will ask to use the microphone. Click Allow — it remembers that for this site on this device.
+              </p>
+            </div>
           ) : (
             <div className="space-y-2">
               <p className="text-slate-600 dark:text-slate-400 text-sm">
