@@ -31,7 +31,11 @@ def test_hollow_llm_output_gets_bullets_from_parsed_resume() -> None:
     )
     assert len(result.experience) == 1
     assert phase3_total_bullets(result) > 0
-    assert any("Kubernetes" in b for b in result.experience[0].bullets)
+    assert result.experience[0].bullets == [
+        "Built APIs for payments.",
+        "Led migration to Kubernetes.",
+    ]
+    assert not any(re.match(r"^\w+:\s", b) for b in result.experience[0].bullets)
     assert any("fallback" in n.lower() for n in result.rewrite_notes)
 
 
@@ -138,3 +142,44 @@ def test_non_hollow_output_with_all_bullets_unchanged() -> None:
     )
     assert result.experience[0].bullets == ["Existing bullet."]
     assert not result.rewrite_notes
+
+
+def test_fallback_never_prefixes_bullets_with_must_have_keywords() -> None:
+    parsed = ParsedResume(
+        experience=[
+            ExperienceEntry(
+                company="Acme",
+                bullets=["Built APIs for payments.", "Led a team of engineers."],
+            )
+        ]
+    )
+    result = apply_experience_fallback(
+        TailoredResumeOutput(),
+        resume_parsed=parsed,
+        phase2_output=None,
+        prior_output=None,
+        must_have_keywords=["Kubernetes", "Terraform", "AWS"],
+    )
+    for bullet in result.experience[0].bullets:
+        assert not re.match(r"^\w+:\s", bullet)
+    assert result.experience[0].bullets == [
+        "Built APIs for payments.",
+        "Led a team of engineers.",
+    ]
+
+
+def test_partial_hollow_restore_copies_bullets_verbatim() -> None:
+    output = TailoredResumeOutput(
+        experience=[TailoredExperienceEntry(company="Acceptto", bullets=[])]
+    )
+    parsed = ParsedResume(
+        experience=[ExperienceEntry(company="Acceptto", bullets=["Built auth flows."])]
+    )
+    result = apply_experience_fallback(
+        output,
+        resume_parsed=parsed,
+        phase2_output=None,
+        prior_output=None,
+        must_have_keywords=["Kubernetes"],
+    )
+    assert result.experience[0].bullets == ["Built auth flows."]

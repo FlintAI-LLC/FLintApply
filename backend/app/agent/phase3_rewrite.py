@@ -606,6 +606,7 @@ async def run(
         must_have,
         tone_profile=tone_profile,
         truthfulness=truth_ctx,
+        place_keywords=not scoped,
     )
 
     account_email = await resolve_account_email(session.user_id)

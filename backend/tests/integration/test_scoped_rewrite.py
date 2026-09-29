@@ -279,3 +279,71 @@ async def test_full_run_rejects_output_that_drops_source_sections(monkeypatch) -
         experience=[TailoredExperienceEntry(company="Acme", bullets=["Rewrote APIs"])]
     )
     assert accept(dropped) is not None
+
+
+async def _run_with_must_have(monkeypatch, *, scope: PhaseRunScope | None):
+    from app.agent.phase3_postprocess import flatten_skill_terms
+    from app.models.keywords import Keyword
+
+    session = await create_session()
+    session.phase1_output = KeywordExtractionOutput(
+        must_have_keywords=[
+            Keyword(
+                term="Kubernetes",
+                source_sentence="Run Kubernetes.",
+                category="tool",
+                tier="must_have",
+                reason="core",
+            )
+        ]
+    )
+    session.phase2_output = AuditOutput(
+        keyword_coverage=KeywordCoverage(present=["Python"]),
+        overall_score=70,
+        summary="Audit ok",
+    )
+    session.phase3_output = _sample_tailored()
+    session.resume_raw = "Operated Kubernetes clusters for payments."
+    session.phase1_status = PhaseStatus.done
+    session.phase2_status = PhaseStatus.done
+    session.phase3_status = PhaseStatus.done
+    await update_session(session)
+
+    async def fake_complete(*args, **kwargs):
+        return TailoredResumeOutput(
+            summary="New summary.",
+            skills=["Python", "SQL"],
+            experience=[
+                TailoredExperienceEntry(
+                    title="Engineer",
+                    company="Acme",
+                    dates="2020",
+                    bullets=["Scoped rewrite bullet"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr("app.agent.phase3_rewrite.complete_structured", fake_complete)
+
+    class FakeLLM:
+        provider_name = "test"
+        model_name = "test-model"
+
+    refreshed = await get_session(session.session_id)
+    assert refreshed is not None
+    output = await run(refreshed, FakeLLM(), asyncio.Queue(), scope=scope)
+    return {t.lower() for t in flatten_skill_terms(output.skills)}
+
+
+@pytest.mark.asyncio
+async def test_scoped_run_does_not_place_keywords(monkeypatch) -> None:
+    terms = await _run_with_must_have(
+        monkeypatch, scope=PhaseRunScope(section="experience", company="Acme")
+    )
+    assert "kubernetes" not in terms
+
+
+@pytest.mark.asyncio
+async def test_full_run_places_evidenced_keywords(monkeypatch) -> None:
+    terms = await _run_with_must_have(monkeypatch, scope=None)
+    assert "kubernetes" in terms

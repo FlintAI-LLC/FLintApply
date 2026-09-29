@@ -279,6 +279,7 @@ def postprocess_tailored_output(
     must_have_keywords: list[str] | None = None,
     tone_profile: JDToneProfile | None = None,
     truthfulness: TruthfulnessContext | None = None,
+    place_keywords: bool = True,
 ) -> TailoredResumeOutput:
     """Apply deterministic structure rules after LLM generation.
 
@@ -313,6 +314,11 @@ def postprocess_tailored_output(
     if truthfulness is not None:
         interim = apply_truthfulness_guards(interim, truthfulness)
         interim = _apply_invariants(interim, truthfulness, must_have_keywords)
+        if place_keywords:
+            # Deferred import: the placer builds on this module's skill helpers.
+            from app.agent.phase3_keyword_placement import place_evidenced_keywords
+
+            interim = place_evidenced_keywords(interim, must_have_keywords, truthfulness)
 
     return interim
 
