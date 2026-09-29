@@ -17,11 +17,20 @@ from app.models.qa import QAOutput
 from app.models.rewrite import TailoredExperienceEntry, TailoredResumeOutput
 from app.models.session import PhaseStatus
 from app.models.userinfo import UserInfo
+from app.db.engine import engine as app_engine
 from app.services.dashboard.resume_record import compute_jd_text_hash
 from app.services.session_store import create_session, update_session
 from tests.integration.test_auth import REGISTER_PAYLOAD
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+async def _fresh_app_engine_pool() -> None:
+    """App engine connections are bound to the prior test's event loop."""
+    await app_engine.dispose()
+    yield
+    await app_engine.dispose()
 
 
 def _sample_tailored() -> TailoredResumeOutput:

@@ -315,6 +315,7 @@ async def save_application_label(
     session_id: str,
     body: ApplicationLabelRequest,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
     authorization: str | None = Header(default=None, alias="Authorization"),
 ):
     """Persist the user-facing application name for this tailoring run."""
@@ -324,6 +325,8 @@ async def save_application_label(
         authorization=authorization,
     )
     if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id and session.user_id != str(user.id):
         raise HTTPException(status_code=404, detail="Session not found")
 
     label = body.display_name.strip()
