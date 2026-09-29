@@ -601,6 +601,28 @@ async def patch_tailored_resume(
     label = "User edit"
     skills_edited = False
 
+    if body.get("snapshot_only"):
+        raw_label = body.get("snapshot_label")
+        label = str(raw_label).strip()[:200] if raw_label is not None else "Snapshot"
+        if not label:
+            label = "Snapshot"
+        version = _append_version_snapshot(
+            session,
+            label=label,
+            output=output.model_copy(deep=True),
+        )
+        await update_session(session)
+        return {
+            "version": version.version,
+            "snapshot_id": version.snapshot_id,
+            "phase3_versions": _versions_payload(session),
+            "stale": {
+                "4": session.phase4_stale_since.isoformat()
+                if session.phase4_stale_since
+                else None,
+            },
+        }
+
     if "section_id" in body:
         section_id = str(body["section_id"])
         content = body.get("content", "")

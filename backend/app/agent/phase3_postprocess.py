@@ -33,7 +33,15 @@ _CATEGORY_RULES: list[tuple[str, re.Pattern[str]]] = [
         "Programming Languages & Frameworks",
         re.compile(
             r"\b(python|java|javascript|typescript|go\b|rust|c\+\+|c#|sql|"
-            r"fastapi|django|flask|spring|react|node\.?js|rest\s*api)\b",
+            r"fastapi|django|flask|spring|node\.?js|rest\s*api|grpc)\b",
+            re.I,
+        ),
+    ),
+    (
+        "Frontend & Mobile",
+        re.compile(
+            r"\b(react|react\s+native|vue|angular|svelte|next\.?js|swift|swiftui|"
+            r"kotlin|flutter|android|ios|tailwind|redux)\b",
             re.I,
         ),
     ),
@@ -49,7 +57,8 @@ _CATEGORY_RULES: list[tuple[str, re.Pattern[str]]] = [
         "DevOps & Infrastructure",
         re.compile(
             r"\b(kubernetes|docker|ci/?cd|mlops|terraform|ansible|jenkins|"
-            r"helm|container|infrastructure|devops|pipeline)\b",
+            r"helm|container|infrastructure|devops|pipeline|observability|"
+            r"prometheus|grafana|opentelemetry)\b",
             re.I,
         ),
     ),
@@ -57,7 +66,8 @@ _CATEGORY_RULES: list[tuple[str, re.Pattern[str]]] = [
         "Data Engineering",
         re.compile(
             r"\b(spark|kafka|airflow|etl|data\s+pipeline|warehouse|"
-            r"snowflake|databricks|dbt|data\s+engineering)\b",
+            r"snowflake|databricks|dbt|data\s+engineering|postgresql|mysql|"
+            r"mongodb|redis|dynamodb)\b",
             re.I,
         ),
     ),
@@ -69,6 +79,19 @@ _CATEGORY_RULES: list[tuple[str, re.Pattern[str]]] = [
         ),
     ),
 ]
+
+# Same-technology spellings. Used for category matching and evidence checks only;
+# the user's own skill text is never rewritten.
+_SKILL_SYNONYMS: dict[str, str] = {
+    "k8s": "kubernetes",
+    "postgres": "postgresql",
+    "golang": "go",
+    "node": "node.js",
+    "nextjs": "next.js",
+    "amazon web services": "aws",
+}
+# Ordinary English words: never accepted as evidence for a *different* spelling.
+_AMBIGUOUS_SPELLINGS = frozenset({"go", "node"})
 
 _FALLBACK_CATEGORY = "Engineering & Tools"
 _MAX_CATEGORIES = 5
@@ -150,9 +173,23 @@ def _flatten_skills(skills: list[str]) -> list[str]:
     return flat
 
 
+def canonical_skill(term: str) -> str:
+    """Lowercased canonical spelling for known same-technology synonyms."""
+    key = term.strip().lower()
+    return _SKILL_SYNONYMS.get(key, key)
+
+
+def skill_spellings(term: str) -> frozenset[str]:
+    """Spellings that count as evidence for ``term`` (its own plus safe synonyms)."""
+    canon = canonical_skill(term)
+    group = {canon, *(alias for alias, target in _SKILL_SYNONYMS.items() if target == canon)}
+    return frozenset({term.strip().lower(), *(g for g in group if g not in _AMBIGUOUS_SPELLINGS)})
+
+
 def _match_category(skill: str) -> str:
+    text = canonical_skill(skill)
     for category, pattern in _CATEGORY_RULES:
-        if pattern.search(skill):
+        if pattern.search(text):
             return category
     return _FALLBACK_CATEGORY
 
@@ -169,33 +206,54 @@ def normalize_skills_to_categories(
     if not flat:
         return skills
 
-    # Boost categories that appear in must-have JD keywords.
     jd_text = " ".join(must_have_keywords or []).lower()
     buckets: dict[str, list[str]] = defaultdict(list)
     for skill in flat:
         category = _match_category(skill)
-        if category == _FALLBACK_CATEGORY and must_have_keywords:
-            for cat_name, pattern in _CATEGORY_RULES:
-                if pattern.search(jd_text):
-                    category = cat_name
-                    break
         if skill not in buckets[category]:
             buckets[category].append(skill)
 
-    ordered_categories: list[str] = []
-    for cat_name, _ in _CATEGORY_RULES:
-        if cat_name in buckets:
-            ordered_categories.append(cat_name)
-    if _FALLBACK_CATEGORY in buckets and _FALLBACK_CATEGORY not in ordered_categories:
-        ordered_categories.append(_FALLBACK_CATEGORY)
+    ordered_categories = _order_categories(buckets, jd_text)
 
     result: list[str] = []
-    for cat in ordered_categories[:_MAX_CATEGORIES]:
+    for cat in ordered_categories:
         items = buckets[cat][:_MAX_SKILLS_PER_CATEGORY]
         if items:
             result.append(f"{cat}: {', '.join(items)}")
 
     return result or skills
+
+
+def _order_categories(buckets: dict[str, list[str]], jd_text: str) -> list[str]:
+    """JD-relevant categories first; overflow beyond the line cap merges into the fallback.
+
+    Skills are never silently dropped because a resume happens to span more than
+    ``_MAX_CATEGORIES`` domains.
+    """
+    patterns = dict(_CATEGORY_RULES)
+    named = [name for name, _ in _CATEGORY_RULES if name in buckets]
+
+    def jd_rank(name: str) -> int:
+        return 0 if jd_text and patterns[name].search(jd_text) else 1
+
+    display = sorted(named, key=jd_rank)
+    has_misc = _FALLBACK_CATEGORY in buckets
+    if len(named) + int(has_misc) <= _MAX_CATEGORIES:
+        return display + ([_FALLBACK_CATEGORY] if has_misc else [])
+
+    rule_order = {name: i for i, name in enumerate(named)}
+    keep = set(
+        sorted(named, key=lambda n: (jd_rank(n), -len(buckets[n]), rule_order[n]))[
+            : _MAX_CATEGORIES - 1
+        ]
+    )
+    misc = list(buckets.get(_FALLBACK_CATEGORY, []))
+    for name in display:
+        if name in keep:
+            continue
+        misc.extend(skill for skill in buckets[name] if skill not in misc)
+    buckets[_FALLBACK_CATEGORY] = misc
+    return [name for name in display if name in keep] + [_FALLBACK_CATEGORY]
 
 
 def _trim_category_lines(skills: list[str]) -> list[str]:

@@ -6,13 +6,14 @@ import hashlib
 import json
 import re
 from datetime import datetime
-from html import unescape
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from app.config import settings
 from app.models.career_watch import WatchedCompany
+from app.parsers.jd_normalize import normalize_job_description
 from app.services.career_watch.fetch import fetch_text
 from app.services.career_watch.types import ParsedJob
 
@@ -24,7 +25,6 @@ _JSONLD_SCRIPT_RE = re.compile(
     r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(?P<body>.*?)</script>',
     re.IGNORECASE | re.DOTALL,
 )
-_TAG_RE = re.compile(r"<[^>]+>")
 _JOB_KEYWORDS = (
     "job",
     "career",
@@ -37,8 +37,8 @@ _JOB_KEYWORDS = (
 _JOB_POSTING_TYPES = frozenset({"JobPosting", "jobposting"})
 
 
-def _strip_html(value: str) -> str:
-    return unescape(_TAG_RE.sub(" ", value or "")).strip()
+def _normalize_description(value: str) -> str:
+    return normalize_job_description(value or "", max_chars=settings.JD_TEXT_MAX_CHARS).text
 
 
 def _parse_posted_at(value: object) -> datetime | None:
@@ -140,7 +140,7 @@ def _title_from_job_posting(node: dict[str, Any]) -> str:
 def _description_from_job_posting(node: dict[str, Any]) -> str:
     raw = node.get("description")
     if isinstance(raw, str):
-        return _strip_html(raw)
+        return _normalize_description(raw)
     return ""
 
 

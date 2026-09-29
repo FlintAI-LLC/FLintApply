@@ -53,7 +53,7 @@ export const CAPABILITIES: readonly Capability[] = [
     title: "Job Search",
     blurb: "Search your confirmed titles and block companies you skip.",
     detail:
-      "Search live roles against the titles you confirmed, and permanently block employers you have no interest in. Corpus search is free once you confirm titles; expanded search needs a paid plan.",
+      "Search live tech roles against the titles you confirmed, and permanently block employers you have no interest in. Tech corpus search is free once you confirm titles; expanded search needs a paid plan. More industries are planned after we grow the corpus.",
     access: "mixed",
   },
   {

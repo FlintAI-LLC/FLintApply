@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.parsers.jd_normalize import normalize_job_description
 from app.models.career_watch import CareerJobCache, WatchedCompany
 from app.models.jobs import JobCache
 from app.services.career_watch.corpus_privacy import (
@@ -33,6 +34,12 @@ from app.services.jobs.cache_writer import upsert_job_cache
 
 def _description_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _normalize_description(raw: str) -> str:
+    return normalize_job_description(
+        raw, max_chars=settings.JD_TEXT_MAX_CHARS
+    ).text
 
 
 def _job_cache_record_from_poll(
@@ -71,7 +78,7 @@ def _job_cache_record_from_poll(
         "salary_currency_original": None,
         "employment_type": "",
         "posted_date": posted_date,
-        "description": job.description_text,
+        "description": _normalize_description(job.description_text),
         "apply_url": job.apply_url,
         "raw_json": job.raw_payload,
         "cached_at": now,
@@ -101,7 +108,8 @@ async def _upsert_career_job_cache(
             .where(CareerJobCache.external_job_id == job.external_job_id)
         )
     ).scalar_one_or_none()
-    desc_hash = _description_hash(job.description_text)
+    desc_norm = _normalize_description(job.description_text)
+    desc_hash = _description_hash(desc_norm)
     if existing is None:
         session.add(
             CareerJobCache(
@@ -111,7 +119,7 @@ async def _upsert_career_job_cache(
                 title=job.title,
                 location=job.location,
                 apply_url=job.apply_url,
-                description_text=job.description_text,
+                description_text=desc_norm,
                 description_hash=desc_hash,
                 posted_at=job.posted_at,
                 first_seen_at=now,
@@ -125,7 +133,7 @@ async def _upsert_career_job_cache(
     existing.title = job.title
     existing.location = job.location
     existing.apply_url = job.apply_url
-    existing.description_text = job.description_text
+    existing.description_text = desc_norm
     existing.description_hash = desc_hash
     existing.posted_at = job.posted_at
     existing.last_seen_at = now

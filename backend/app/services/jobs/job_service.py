@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.jobs import JobCache, JobSearchLog, JobSearchSource, SavedJob
 from app.models.master_resume import MasterResume
+from app.parsers.jd_normalize import normalize_job_description
 from app.services.jobs.cache_writer import normalize_apify_record, upsert_job_cache
 from app.services.jobs.circuit_breaker import (
     HirebaseUnavailableError,
@@ -62,6 +63,30 @@ _JOB_SEARCH_TERM_ALIASES: dict[str, tuple[str, ...]] = {
     ),
     "sde": ("software engineer", "sde"),
     "pm": ("product manager", "pm"),
+    "swe": ("software engineer", "software developer", "swe"),
+    "sre": ("site reliability engineer", "site reliability", "sre"),
+    "mle": ("machine learning engineer", "ml engineer", "mle"),
+    "etl": ("data engineer", "etl"),
+    "sdet": ("quality engineer", "test engineer", "sdet"),
+    "devops": ("devops engineer", "devops"),
+    "k8s": ("kubernetes", "k8s"),
+    "llm": ("large language model", "llm"),
+    "frontend": ("front end", "front-end", "frontend"),
+    "front-end": ("frontend", "front end", "front-end"),
+    "backend": ("back end", "back-end", "backend"),
+    "back-end": ("backend", "back end", "back-end"),
+    "fullstack": ("full stack", "full-stack", "fullstack"),
+    "full-stack": ("full stack", "fullstack", "full-stack"),
+    # Two-letter and ambiguous tokens expand WITHOUT the raw token: ilike '%be%' or
+    # '%ai%' would match nearly every description.
+    "ml": ("machine learning", "ml engineer"),
+    "ds": ("data scientist", "data science"),
+    "fe": ("frontend", "front end", "front-end"),
+    "be": ("backend", "back end", "back-end"),
+    "fs": ("full stack", "full-stack", "fullstack"),
+    "ts": ("typescript",),
+    "js": ("javascript",),
+    "ai": ("artificial intelligence", "ai engineer", "machine learning"),
 }
 
 
@@ -164,6 +189,9 @@ def _job_cache_relevance_score(terms: list[str]):
 
 
 def job_cache_to_result(row: JobCache, *, score: float | None = None) -> JobResult:
+    description = normalize_job_description(
+        row.description or "", max_chars=settings.JD_TEXT_MAX_CHARS
+    ).text
     return JobResult(
         id=row.id,
         title=row.title,
@@ -174,7 +202,7 @@ def job_cache_to_result(row: JobCache, *, score: float | None = None) -> JobResu
         salary_max_usd=row.salary_max_usd,
         employment_type=row.employment_type,
         posted_date=row.posted_date,
-        description=row.description,
+        description=description,
         apply_url=row.apply_url,
         sources=list(row.sources or []),
         score=score,

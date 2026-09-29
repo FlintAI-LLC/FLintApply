@@ -37,13 +37,24 @@ async def _seed_user(db_session: AsyncSession) -> User:
 async def test_patch_application_label_persists_on_session(
     app_client: AsyncClient,
 ) -> None:
-    created = await app_client.post("/api/sessions")
+    from tests.integration.test_auth import REGISTER_PAYLOAD
+
+    payload = {
+        **REGISTER_PAYLOAD,
+        "email": f"label-{uuid.uuid4().hex[:8]}@example.com",
+    }
+    reg = await app_client.post("/api/auth/register", json=payload)
+    assert reg.status_code == 201, reg.text
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+    created = await app_client.post("/api/sessions", headers=headers)
     assert created.status_code == 201
     session_id = created.json()["session_id"]
 
     r = await app_client.patch(
         f"/api/sessions/{session_id}/application",
         json={"display_name": "Acme Health — Senior Backend"},
+        headers=headers,
     )
     assert r.status_code == 200
     assert r.json()["display_name"] == "Acme Health — Senior Backend"
@@ -61,25 +72,26 @@ async def test_patch_application_label_syncs_resume_record_metadata(
     app_client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    user = await _seed_user(db_session)
+    token, user_id = await _register_for_tracker(app_client)
     session = await create_session()
-    session.user_id = str(user.id)
+    session.user_id = str(user_id)
     session.resume_raw = "Ali Barzin\nSoftware Engineer"
     session.resume_parsed = ParsedResume(contact=ContactInfo(name="Ali Barzin"))
     await update_session(session)
-    await ensure_in_progress_resume_record(db_session, user_id=user.id, session=session)
+    await ensure_in_progress_resume_record(db_session, user_id=user_id, session=session)
     await db_session.commit()
 
     r = await app_client.patch(
         f"/api/sessions/{session.session_id}/application",
         json={"display_name": "Acme Health — Senior Backend"},
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 200, r.text
 
     record = (
         await db_session.execute(
             select(ResumeRecord).where(
-                ResumeRecord.user_id == user.id,
+                ResumeRecord.user_id == user_id,
                 ResumeRecord.session_id == session.session_id,
             )
         )

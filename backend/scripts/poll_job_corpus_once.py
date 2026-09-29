@@ -5,6 +5,8 @@ Usage (from ``backend/``, or inside the staging backend container):
 
   uv run python scripts/poll_job_corpus_once.py
   uv run python scripts/poll_job_corpus_once.py --limit 80
+
+Exits 0 without polling when another run already holds the advisory lock.
 """
 
 from __future__ import annotations
@@ -13,7 +15,8 @@ import argparse
 import asyncio
 import sys
 
-from app.db.engine import async_session_factory
+from app.db.engine import async_session_factory, engine
+from app.services.career_watch.poll_lock import try_poll_lock
 from app.services.career_watch.poller import poll_due_companies
 
 
@@ -34,9 +37,13 @@ async def main() -> None:
         print("ERROR: --limit must be >= 1", file=sys.stderr)
         sys.exit(1)
 
-    async with async_session_factory() as session:
-        stats = await poll_due_companies(session, limit=args.limit)
-        await session.commit()
+    async with try_poll_lock(engine) as acquired:
+        if not acquired:
+            print("Another job corpus poll is already running; exiting.")
+            return
+        async with async_session_factory() as session:
+            stats = await poll_due_companies(session, limit=args.limit)
+            await session.commit()
 
     print("Job corpus poll complete")
     print(f"  companies_polled:       {stats.companies_polled}")

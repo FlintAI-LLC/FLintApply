@@ -175,11 +175,32 @@ describe("session page wiring", () => {
       source.indexOf('lastEvent.event === "partial"'),
       source.indexOf('lastEvent.event === "cost_estimate"'),
     )
-    assert.doesNotMatch(partialBranch, /regenPriorRef/)
+    assert.doesNotMatch(partialBranch, /regenPriorRef\.current\s*=/)
   })
 
-  it("snapshots the resume before a forced regenerate clears it", () => {
-    assert.match(source, /regenPriorRef\.current = tailoredBackupRef\.current;\s*setTailored\(null\)/)
+  it("snapshots regenPriorRef on forced phase 3 without clearing tailored", () => {
+    const forcePhase3 = source.slice(
+      source.indexOf("if (options?.force)"),
+      source.indexOf("setProgressLog([]);", source.indexOf("if (options?.force)")),
+    )
+    assert.match(forcePhase3, /regenPriorRef\.current = tailoredBackupRef\.current/)
+    assert.doesNotMatch(forcePhase3, /setTailored\(null\)/)
+  })
+
+  it("skips phase 3 partial updates while a forced re-tailor is in flight", () => {
+    assert.match(
+      source,
+      /skipPhase3Partial[\s\S]*regenPriorRef\.current !== null/,
+    )
+  })
+
+  it("saves a named version snapshot before forced re-tailor", () => {
+    assert.match(source, /saveTailoredVersionSnapshot\([\s\S]*RE_TAILOR_VERSION_SNAPSHOT_LABEL/)
+  })
+
+  it("shows the re-tailor confirm gate before running", () => {
+    assert.match(source, /ReTailorFromScratchConfirm/)
+    assert.match(source, /setReTailorConfirmOpen\(true\)/)
   })
 
   it("clears a stale snapshot when a non-forced phase 3 run starts", () => {

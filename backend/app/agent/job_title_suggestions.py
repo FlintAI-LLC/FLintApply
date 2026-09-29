@@ -54,7 +54,65 @@ _ADJACENT_BY_KEYWORD: list[tuple[tuple[str, ...], list[str]]] = [
             "Test Automation Engineer",
         ],
     ),
+    (
+        ("golang", "rust", "kotlin", "grpc", "microservices", "distributed systems"),
+        [
+            "Backend Engineer",
+            "Software Engineer Backend",
+            "Distributed Systems Engineer",
+            "Platform Engineer",
+        ],
+    ),
+    (
+        ("kubernetes", "k8s", "terraform", "devops", "sre", "ci/cd", "observability"),
+        [
+            "DevOps Engineer",
+            "Site Reliability Engineer",
+            "Platform Engineer",
+            "Cloud Engineer",
+            "Infrastructure Engineer",
+        ],
+    ),
+    (
+        ("spark", "airflow", "dbt", "etl", "snowflake", "kafka", "data pipeline"),
+        [
+            "Data Engineer",
+            "Analytics Engineer",
+            "Data Platform Engineer",
+            "Software Engineer Data",
+        ],
+    ),
+    (
+        ("oauth", "iam", "appsec", "security engineer", "penetration testing"),
+        [
+            "Security Engineer",
+            "Application Security Engineer",
+            "Cloud Security Engineer",
+        ],
+    ),
+    (
+        ("react", "vue", "angular", "svelte", "typescript"),
+        [
+            "Frontend Engineer",
+            "Software Engineer Frontend",
+            "UI Engineer",
+            "Full Stack Engineer",
+        ],
+    ),
+    (
+        ("full stack", "fullstack", "full-stack", "next.js", "nextjs"),
+        [
+            "Full Stack Engineer",
+            "Software Engineer Full Stack",
+            "Web Developer",
+        ],
+    ),
 ]
+
+_LEVEL_TITLES: dict[str, list[str]] = {
+    "principal": ["Principal Software Engineer", "Principal Engineer"],
+    "staff": ["Staff Software Engineer", "Staff Engineer"],
+}
 
 _GENERIC_TITLES = [
     "Software Engineer",
@@ -95,6 +153,11 @@ def extract_held_titles(parsed_sections: dict[str, Any] | None) -> list[str]:
     return titles
 
 
+def _contains_term(blob: str, term: str) -> bool:
+    """Whole-word match so 'ml' does not fire on 'html' or 'ios' on 'studios'."""
+    return re.search(rf"(?<![\w]){re.escape(term)}(?![\w])", blob) is not None
+
+
 def _heuristic_suggestions(
     *,
     held_titles: list[str],
@@ -119,8 +182,14 @@ def _heuristic_suggestions(
     for title in held_titles:
         add(title)
 
+    for held in held_titles:
+        for level, titles in _LEVEL_TITLES.items():
+            if _contains_term(held.casefold(), level):
+                for title in titles:
+                    add(title)
+
     for keywords, candidates in _ADJACENT_BY_KEYWORD:
-        if any(kw in blob for kw in keywords):
+        if any(_contains_term(blob, kw) for kw in keywords):
             for title in candidates:
                 add(title)
                 if len(out) >= count:

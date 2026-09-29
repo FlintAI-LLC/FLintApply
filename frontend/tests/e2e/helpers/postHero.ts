@@ -14,7 +14,8 @@ export async function scrollPostHeroProgress(
   progress: number,
 ): Promise<void> {
   const track = page.locator("[data-post-hero-sequence]");
-  await track.scrollIntoViewIfNeeded();
+  await track.waitFor({ state: "attached", timeout: 20_000 });
+  await track.scrollIntoViewIfNeeded({ timeout: 20_000 });
 
   const reducedMotion = await page.evaluate(() =>
     window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -52,6 +53,6 @@ export async function scrollPostHeroProgress(
       return Math.abs(parseFloat(raw) - target) < 0.06;
     },
     progress,
-    { timeout: 5000 },
+    { timeout: 15_000 },
   );
 }

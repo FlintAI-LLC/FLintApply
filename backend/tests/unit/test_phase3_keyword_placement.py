@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from app.agent.phase3_keyword_placement import place_evidenced_keywords
 from app.agent.phase3_postprocess import (
     flatten_skill_terms,
@@ -311,3 +313,86 @@ def test_unevidenced_note_is_bounded() -> None:
     note = next(n for n in out.rewrite_notes if n.startswith(NOTE_PREFIX))
     assert "(+10 more)" in note
     assert note.count(",") == 9
+
+
+def _terms(out: TailoredResumeOutput) -> set[str]:
+    return {t.lower() for t in flatten_skill_terms(out.skills)}
+
+
+def test_jd_spelling_is_placed_when_resume_uses_synonym() -> None:
+    out = place_evidenced_keywords(
+        _output(), ["Kubernetes"], _ctx(resume_raw="Operated k8s clusters in prod.")
+    )
+    assert "kubernetes" in _terms(out)
+    assert "Kubernetes" in flatten_skill_terms(out.skills)  # JD spelling, not the resume's
+
+
+@pytest.mark.parametrize(
+    ("jd_term", "resume"),
+    [
+        ("PostgreSQL", "Tuned Postgres queries."),
+        ("Postgres", "Tuned PostgreSQL queries."),
+        ("AWS", "Deployed on Amazon Web Services."),
+        ("Amazon Web Services", "Deployed on AWS."),
+        ("Next.js", "Built Nextjs storefronts."),
+        ("Go", "Wrote services in Golang."),
+        ("Golang", "Wrote services in golang."),
+        ("Node", "Ran Node.js services."),
+        ("Node.js", "Ran Node.js services."),
+    ],
+)
+def test_synonym_evidence_is_accepted(jd_term: str, resume: str) -> None:
+    out = place_evidenced_keywords(_output(), [jd_term], _ctx(resume_raw=resume))
+    assert jd_term.lower() in _terms(out)
+
+
+@pytest.mark.parametrize(
+    ("jd_term", "resume"),
+    [
+        ("Golang", "We go to market fast and go deep on APIs."),
+        ("Node.js", "Sized every compute node and edge node."),
+    ],
+)
+def test_ambiguous_english_words_are_not_evidence_for_synonyms(jd_term: str, resume: str) -> None:
+    out = place_evidenced_keywords(_output(), [jd_term], _ctx(resume_raw=resume))
+    assert jd_term.lower() not in _terms(out)
+    assert any(n.startswith(NOTE_PREFIX) and jd_term in n for n in out.rewrite_notes)
+
+
+def test_synonym_without_any_evidence_is_still_unevidenced() -> None:
+    out = place_evidenced_keywords(
+        _output(), ["Kubernetes"], _ctx(resume_raw="Managed Docker Swarm only.")
+    )
+    assert "kubernetes" not in _terms(out)
+    assert any(n.startswith(NOTE_PREFIX) and "Kubernetes" in n for n in out.rewrite_notes)
+
+
+def test_synonym_placement_never_touches_bullets_summary_or_titles() -> None:
+    original = _output()
+    out = place_evidenced_keywords(
+        original, ["Kubernetes", "PostgreSQL"], _ctx(resume_raw="Ran k8s and postgres.")
+    )
+    assert _bullets(out) == _bullets(original)
+    assert out.summary == original.summary
+    assert [(e.title, e.company) for e in out.experience] == [
+        (e.title, e.company) for e in original.experience
+    ]
+
+
+def test_jd_spelling_is_added_even_when_resume_synonym_is_already_in_skills() -> None:
+    original = _output(skills=["Infrastructure: k8s, Docker"])
+    out = place_evidenced_keywords(original, ["Kubernetes"], _ctx(resume_raw="Ran k8s."))
+    flat = flatten_skill_terms(out.skills)
+    assert "k8s" in flat and "Kubernetes" in flat
+
+
+def test_synonym_placement_is_idempotent() -> None:
+    ctx = _ctx(resume_raw="Ran k8s and postgres.")
+    once = place_evidenced_keywords(_output(), ["Kubernetes", "PostgreSQL"], ctx)
+    assert place_evidenced_keywords(once, ["Kubernetes", "PostgreSQL"], ctx) == once
+
+
+@pytest.mark.parametrize("noisy", ["React 18", "Python 3.11", "Java 17", "99.9", "Python3"])
+def test_version_noise_terms_never_create_skills(noisy: str) -> None:
+    out = place_evidenced_keywords(_output(), [noisy], _ctx(resume_raw=f"Used {noisy} daily."))
+    assert out.skills == _output().skills

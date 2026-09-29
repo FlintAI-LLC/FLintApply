@@ -49,6 +49,17 @@ def reset_fetch_circuits_for_tests() -> None:
     _failures.clear()
 
 
+GONE_STATUS_CODES = frozenset({404, 410})
+
+
+def is_gone_error(exc: BaseException) -> bool:
+    """True for a definitive 404/410: the board is gone, the host is healthy."""
+    return (
+        isinstance(exc, httpx.HTTPStatusError)
+        and exc.response.status_code in GONE_STATUS_CODES
+    )
+
+
 def record_fetch_failure(url: str) -> None:
     _failures[_host_key(url)].append(time.monotonic())
 
@@ -79,7 +90,8 @@ async def fetch_text(
         )
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        record_fetch_failure(url)
+        if not is_gone_error(exc):
+            record_fetch_failure(url)
         raise CareerWatchFetchError(str(exc)) from exc
 
     record_fetch_success(url)
@@ -114,7 +126,8 @@ async def fetch_json(
         )
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        record_fetch_failure(url)
+        if not is_gone_error(exc):
+            record_fetch_failure(url)
         raise CareerWatchFetchError(str(exc)) from exc
 
     record_fetch_success(url)
@@ -126,6 +139,8 @@ __all__ = [
     "CareerWatchFetchError",
     "FETCH_TIMEOUT_SECONDS",
     "FetchCircuitOpenError",
+    "GONE_STATUS_CODES",
+    "is_gone_error",
     "fetch_json",
     "fetch_text",
     "record_fetch_failure",

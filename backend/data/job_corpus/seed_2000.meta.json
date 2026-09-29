@@ -1,0 +1,25 @@
+{
+  "generated_at": "2026-09-29T18:07:37.365183+00:00",
+  "target": 2000,
+  "total": 2000,
+  "pool_size": 2299,
+  "sha256": "a3911186f2498064468c381bc949ac64c71345536840012bfe72a9e75dd37295",
+  "tier_counts": {
+    "1": 400,
+    "2": 700,
+    "3": 900
+  },
+  "ats_counts": {
+    "greenhouse": 811,
+    "ashby": 693,
+    "lever": 226,
+    "smartrecruiters": 163,
+    "workable": 107
+  },
+  "source_counts": {
+    "baseline": 669,
+    "simplify_new_grad": 871,
+    "simplify_summer2026": 459,
+    "vanshb03_summer2026": 1
+  }
+}

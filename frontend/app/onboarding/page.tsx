@@ -97,7 +97,8 @@ function OnboardingAiStep() {
         <p className="text-xs text-slate-600 dark:text-slate-400 pt-1">
           {FREE_TIER_NON_CREDIT_LIMITS_COPY} {VOICE_AVAILABILITY_COPY} You can also upload or
           paste a resume. After your master resume, {PRODUCT_NAME} suggests job titles to search
-          our company job corpus. Fit analysis and expanded search need a paid plan.
+          our tech job corpus (more industries in a later phase). Fit analysis and expanded
+          search need a paid plan.
         </p>
       </div>
     </div>

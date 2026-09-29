@@ -48,3 +48,54 @@ async def test_suggest_job_titles_heuristic_without_llm() -> None:
     assert source == "heuristic"
     assert "QA Engineer" in held
     assert len(suggestions) == 10
+
+
+def _heuristic(resume: str, held: list[str] | None = None, count: int = 10) -> list[str]:
+    return jts._heuristic_suggestions(held_titles=held or [], resume_text=resume, count=count)
+
+
+@pytest.mark.parametrize(
+    "resume",
+    [
+        "Built landing pages with HTML and CSS. Deployed to the latest studios site.",
+        "Wrote YAML configs and shipped the latest release for design studios.",
+    ],
+)
+def test_keywords_do_not_match_inside_other_words(resume: str) -> None:
+    titles = _heuristic(resume)
+    assert "Machine Learning Engineer" not in titles
+    assert "QA Engineer" not in titles
+    assert "iOS Developer" not in titles
+
+
+@pytest.mark.parametrize(
+    ("resume", "expected"),
+    [
+        ("Wrote Go and Rust services for a payments ledger.", "Distributed Systems Engineer"),
+        ("Ran Kubernetes and Terraform for CI/CD on-call rotations.", "Site Reliability Engineer"),
+        ("Airflow and Spark ETL pipelines into Snowflake.", "Data Engineer"),
+        ("Built React and TypeScript storefronts.", "Frontend Engineer"),
+        ("Implemented OAuth and IAM policies, led an appsec review.", "Security Engineer"),
+        ("Full stack developer on a Next.js product.", "Full Stack Engineer"),
+    ],
+)
+def test_tech_families_get_adjacent_titles(resume: str, expected: str) -> None:
+    assert expected in _heuristic(resume)
+
+
+def test_staff_and_principal_holders_get_level_matched_titles() -> None:
+    staff = _heuristic("Distributed systems in Go.", held=["Staff Software Engineer"])
+    assert "Staff Software Engineer" in staff
+    principal = _heuristic("Distributed systems in Go.", held=["Principal Engineer"])
+    assert any(t.startswith("Principal") for t in principal)
+
+
+def test_junior_resume_gets_no_staff_titles() -> None:
+    titles = _heuristic("Junior developer, Python.", held=["Software Engineer"])
+    assert not any("Staff" in t or "Principal" in t for t in titles)
+
+
+def test_held_titles_come_first_and_output_is_deduped() -> None:
+    titles = _heuristic("Python and Go.", held=["Backend Engineer"])
+    assert titles[0] == "Backend Engineer"
+    assert len({t.casefold() for t in titles}) == len(titles)

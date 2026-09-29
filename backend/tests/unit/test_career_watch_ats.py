@@ -130,6 +130,68 @@ def test_generic_html_extracts_job_links() -> None:
     assert "Backend Engineer" in jobs[0].title
 
 
+def test_greenhouse_parse_strips_tags_and_entities() -> None:
+    jobs = parse_greenhouse_payload(
+        [
+            {
+                "id": 1,
+                "title": "Engineer",
+                "location": {"name": "Remote"},
+                "absolute_url": "https://example.com/1",
+                "content": "<p>Build &amp; ship</p>",
+            }
+        ]
+    )
+    assert jobs[0].description_text == "Build & ship"
+    assert "<p" not in jobs[0].description_text.lower()
+
+
+def test_lever_html_description_normalized() -> None:
+    jobs = parse_lever_payload(
+        [
+            {
+                "id": "x",
+                "text": "SWE",
+                "hostedUrl": "https://jobs.lever.co/acme/x",
+                "description": "<ul><li>Own APIs</li></ul>",
+                "categories": {"location": "Remote"},
+            }
+        ]
+    )
+    assert "- Own APIs" in jobs[0].description_text
+    assert "<ul" not in jobs[0].description_text.lower()
+
+
+def test_job_cache_to_result_normalizes_stale_html() -> None:
+    from datetime import datetime, timezone
+    from uuid import uuid4
+
+    from app.models.jobs import JobCache
+    from app.services.jobs.job_service import job_cache_to_result
+
+    row = JobCache(
+        id=uuid4(),
+        sources=["corpus"],
+        external_ids={},
+        title="Role",
+        company="Co",
+        company_normalized="co",
+        location="Remote",
+        remote=True,
+        employment_type="",
+        posted_date=datetime.now(timezone.utc),
+        description="<p>Legacy HTML body</p>",
+        apply_url="https://example.com",
+        raw_json={},
+        cached_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc),
+        dedup_key="test-key",
+    )
+    result = job_cache_to_result(row)
+    assert result.description == "Legacy HTML body"
+    assert "<p" not in result.description.lower()
+
+
 def test_registry_returns_greenhouse_adapter() -> None:
     adapter = get_adapter(CareerAtsType.greenhouse)
     assert adapter.__class__.__name__ == "GreenhouseAdapter"

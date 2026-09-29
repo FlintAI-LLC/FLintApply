@@ -1,0 +1,8 @@
+title = "FlintApply"
+
+[allowlist]
+description = "Test fixtures and integration helpers use synthetic credentials."
+paths = [
+  '''(?i)(^|/)backend/tests/''',
+  '''(?i)(^|/)frontend/tests/''',
+]

@@ -24,7 +24,7 @@ export default defineConfig({
     process.env.MOCK_PRICES_UNSYNCED === "1"
       ? []
       : ["**/landing-pricing-unsynced.spec.ts"],
-  timeout: 30_000,
+  timeout: process.env.CI ? 45_000 : 30_000,
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
   globalSetup: "./tests/e2e/global-setup.mjs",

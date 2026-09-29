@@ -13,6 +13,7 @@ from app.models.career_watch import CareerAtsType, WatchedCompany
 from app.services.career_watch.job_corpus_seed import (
     MAX_CORPUS_SIZE,
     MIN_CORPUS_SIZE,
+    PHASE_B_TARGET,
     TOTAL_TARGET,
     VALID_ATS_TYPES,
     careers_page_url,
@@ -56,6 +57,40 @@ def test_tier_targets_for_total_scales_proportions() -> None:
     assert tier_targets_for_total(500) == {1: 100, 2: 175, 3: 225}
     assert tier_targets_for_total(2000) == {1: 400, 2: 700, 3: 900}
     assert sum(tier_targets_for_total(750).values()) == 750
+
+
+def test_phase_a_defaults_are_unchanged() -> None:
+    assert TOTAL_TARGET == 2000
+    assert MAX_CORPUS_SIZE == 10_000
+    assert PHASE_B_TARGET == 10_000
+
+
+@pytest.mark.parametrize(
+    ("total", "expected"),
+    [
+        (2001, {1: 200, 2: 400, 3: 1401}),
+        (5000, {1: 500, 2: 1000, 3: 3500}),
+        (10_000, {1: 1000, 2: 2000, 3: 7000}),
+    ],
+)
+def test_phase_b_tier_split_is_ten_twenty_seventy(total: int, expected: dict[int, int]) -> None:
+    assert tier_targets_for_total(total) == expected
+    assert sum(expected.values()) == total
+
+
+def test_tier_split_switches_exactly_above_two_thousand() -> None:
+    assert tier_targets_for_total(2000) == {1: 400, 2: 700, 3: 900}
+    assert tier_targets_for_total(2001)[1] < tier_targets_for_total(2000)[1]
+
+
+def test_tier_targets_reject_above_phase_b_maximum() -> None:
+    with pytest.raises(ValueError, match=str(MAX_CORPUS_SIZE)):
+        tier_targets_for_total(MAX_CORPUS_SIZE + 1)
+
+
+@pytest.mark.parametrize("total", [2001, 5000, MAX_CORPUS_SIZE])
+def test_validate_accepts_phase_b_sized_corpora(total: int) -> None:
+    validate_seed_records(_sample_rows(total))
 
 
 def test_careers_page_url_supported_ats_types() -> None:
@@ -138,12 +173,9 @@ async def test_load_seed_records_inserts_and_updates() -> None:
     )
 
     session = MagicMock()
-    results = [
-        MagicMock(scalar_one_or_none=MagicMock(return_value=existing)),
-        MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
-        MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
-    ]
-    session.execute = AsyncMock(side_effect=results)
+    mock_result = MagicMock()
+    mock_result.scalars.return_value = [existing]
+    session.execute = AsyncMock(return_value=mock_result)
     session.add = MagicMock()
 
     stats = await load_seed_records(session, rows, require_full_corpus=False)
@@ -152,6 +184,54 @@ async def test_load_seed_records_inserts_and_updates() -> None:
     assert stats.updated == 0
     assert existing.is_global_seed is False
     assert session.add.call_count == 2
+
+
+def _empty_session() -> MagicMock:
+    session = MagicMock()
+    result = MagicMock()
+    result.scalars.return_value = []
+    session.execute = AsyncMock(return_value=result)
+    session.add = MagicMock()
+    session.commit = AsyncMock()
+    return session
+
+
+@pytest.mark.asyncio
+async def test_load_commits_every_batch_when_requested() -> None:
+    rows = _sample_rows(MIN_CORPUS_SIZE)
+    session = _empty_session()
+
+    stats = await load_seed_records(session, rows, commit_every=200)
+
+    assert stats.inserted == MIN_CORPUS_SIZE
+    assert session.add.call_count == MIN_CORPUS_SIZE
+    assert session.commit.await_count == 3  # 200 + 200 + 100
+
+
+@pytest.mark.asyncio
+async def test_load_without_commit_every_never_commits() -> None:
+    session = _empty_session()
+    await load_seed_records(session, _sample_rows(MIN_CORPUS_SIZE))
+    session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_invalid_corpus_commits_nothing() -> None:
+    rows = _sample_rows(MIN_CORPUS_SIZE)
+    rows[0]["ats_board_token"] = "../evil"
+    session = _empty_session()
+
+    with pytest.raises(ValueError):
+        await load_seed_records(session, rows, commit_every=200)
+
+    session.commit.assert_not_awaited()
+    session.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_commit_every_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="commit_every"):
+        await load_seed_records(_empty_session(), _sample_rows(MIN_CORPUS_SIZE), commit_every=0)
 
 
 @pytest.mark.asyncio
@@ -166,9 +246,9 @@ async def test_load_seed_records_updates_existing_global_seed() -> None:
     )
 
     session = MagicMock()
-    session.execute = AsyncMock(
-        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=existing))
-    )
+    mock_result = MagicMock()
+    mock_result.scalars.return_value = [existing]
+    session.execute = AsyncMock(return_value=mock_result)
     session.add = MagicMock()
 
     stats = await load_seed_records(session, rows, require_full_corpus=False)
@@ -176,6 +256,30 @@ async def test_load_seed_records_updates_existing_global_seed() -> None:
     assert stats.inserted == 0
     assert stats.updated == 1
     assert existing.ats_type == CareerAtsType.greenhouse
+
+
+@pytest.mark.asyncio
+async def test_load_seed_records_leaves_deactivated_inactive() -> None:
+    rows = _sample_rows(MIN_CORPUS_SIZE)[:1]
+    existing = WatchedCompany(
+        name="Old",
+        slug=rows[0]["slug"],
+        careers_page_url=rows[0]["careers_page_url"],
+        ats_type=CareerAtsType.greenhouse,
+        is_global_seed=True,
+        is_active=False,
+    )
+    session = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value = [existing]
+    session.execute = AsyncMock(return_value=mock_result)
+    session.add = MagicMock()
+
+    stats = await load_seed_records(session, rows, require_full_corpus=False)
+
+    assert existing.is_active is False
+    assert stats.updated == 1
+    assert stats.inserted == 0
 
 
 def test_seed_file_on_disk_when_present() -> None:

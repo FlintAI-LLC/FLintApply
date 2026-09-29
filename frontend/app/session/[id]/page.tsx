@@ -63,7 +63,13 @@ import { ExhaustionPaywall } from "@/components/billing/ExhaustionPaywall";
 import { CreditChargeConfirm } from "@/components/billing/CreditChargeConfirm";
 import { CreditMeter } from "@/components/billing/CreditMeter";
 import { useEntitlement } from "@/hooks/useEntitlement";
-import { saveTailoredResume, commitTailoredResume, type ResumePatch } from "@/lib/api";
+import {
+  saveTailoredResume,
+  saveTailoredVersionSnapshot,
+  commitTailoredResume,
+  chatWithResume,
+  type ResumePatch,
+} from "@/lib/api";
 import {
   enrichIssuesWithInferredAnchors,
   hydratePatchesFromIssues,
@@ -73,6 +79,23 @@ import { reconcileAddressedKeys } from "@/lib/reconcileAddressedKeys";
 import { applyResumePatch, normalizeResumePatch } from "@/lib/applyResumePatch";
 import { isPatchPlaceable } from "@/lib/suggestionHighlight";
 import { mergeSuggestionBatch, type ResumeSuggestion } from "@/lib/suggestions";
+import {
+  applyMechanicalQuickWins,
+  applyPatchesDeterministically,
+  buildApplyAllChatMessage,
+  buildApplyAllReport,
+  countNotAttemptedIssues,
+  issuesForAddressedKeys,
+  partitionMechanicalAndChatIssues,
+  selectOpenImprovementIssues,
+} from "@/lib/applyAllImprovements";
+import { ReTailorFromScratchConfirm } from "@/components/session/ReTailorFromScratchConfirm";
+import {
+  countOpenAtsImprovements,
+  countPendingSuggestions,
+  RE_TAILOR_ACTION_LABEL,
+  RE_TAILOR_VERSION_SNAPSHOT_LABEL,
+} from "@/lib/reTailor";
 import {
   formatDuplicateApplicationPrompt,
   formatTrackerLimitError,
@@ -148,6 +171,9 @@ function SessionContent() {
   const [originalAtsScore, setOriginalAtsScore] = useState<number | null>(null);
   const [pendingSuggestions, setPendingSuggestions] = useState<ResumeSuggestion[]>([]);
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
+  const [applyAllRunning, setApplyAllRunning] = useState(false);
+  const [applyAllStatus, setApplyAllStatus] = useState<string | null>(null);
+  const [reTailorConfirmOpen, setReTailorConfirmOpen] = useState(false);
   const [phase4RecalcActive, setPhase4RecalcActive] = useState(false);
   const [atsRecalcRunning, setAtsRecalcRunning] = useState(false);
   const [pendingCreditAction, setPendingCreditAction] = useState<{
@@ -273,6 +299,7 @@ function SessionContent() {
     [sessionId],
   );
   const runInFlightRef = useRef(false);
+  const applyAllInFlightRef = useRef(false);
   const activeStepRef = useRef<Step>(step);
   const phase4RecalcRef = useRef(false);
   const tailoredBackupRef = useRef<TailoredResumeOutput | null>(null);
@@ -464,7 +491,7 @@ function SessionContent() {
 
   const runPhaseByNumber = useCallback(
     async (phase: number, options?: { force?: boolean; scope?: PhaseRunScope }) => {
-      if (runInFlightRef.current) return;
+      if (runInFlightRef.current || applyAllInFlightRef.current) return;
       runInFlightRef.current = true;
 
       setRunError(null);
@@ -476,7 +503,6 @@ function SessionContent() {
         if (phase === 2) setAudit(null);
         if (phase === 3) {
           regenPriorRef.current = tailoredBackupRef.current;
-          setTailored(null);
         }
         if (phase === 4) setQa(null);
       } else if (phase === 3) {
@@ -832,22 +858,26 @@ function SessionContent() {
     }
   }, [sessionId]);
 
-  const recalculateAts = useCallback(async () => {
-    if (runInFlightRef.current) return;
-    setPhase4RecalcActive(true);
-    setAtsRecalcRunning(true);
-    if (tailored) {
-      try {
-        await persistTailoredBeforeExport();
-      } catch {
-        setRunError("Could not save resume changes before recalculating. Please try again.");
-        setAtsRecalcRunning(false);
-        setPhase4RecalcActive(false);
-        return;
+  const recalculateAts = useCallback(
+    async (options?: { resume?: TailoredResumeOutput }) => {
+      if (runInFlightRef.current) return;
+      setPhase4RecalcActive(true);
+      setAtsRecalcRunning(true);
+      const snapshot = options?.resume ?? tailored;
+      if (snapshot) {
+        try {
+          await commitTailoredResume(sessionId, snapshot);
+        } catch {
+          setRunError("Could not save resume changes before recalculating. Please try again.");
+          setAtsRecalcRunning(false);
+          setPhase4RecalcActive(false);
+          return;
+        }
       }
-    }
-    await runPhase("export", { force: true });
-  }, [runPhase, persistTailoredBeforeExport, tailored]);
+      await runPhase("export", { force: true });
+    },
+    [runPhase, sessionId, tailored],
+  );
 
   const recalculateAtsWithConfirm = useCallback(() => {
     if (stale["4"]) {
@@ -858,6 +888,115 @@ function SessionContent() {
       void recalculateAts();
     });
   }, [requestCreditAction, recalculateAts, stale]);
+
+  const applyAllImprovements = useCallback(async () => {
+    if (
+      !tailored ||
+      !qa ||
+      applyAllRunning ||
+      applyAllInFlightRef.current ||
+      runInFlightRef.current
+    ) {
+      return;
+    }
+
+    const { issues } = selectOpenImprovementIssues(qa, addressedAtsKeys, skippedAtsKeys);
+    if (!issues.length) return;
+
+    applyAllInFlightRef.current = true;
+    setApplyAllRunning(true);
+    setSuggestionError(null);
+    setApplyAllStatus(null);
+    setRunError(null);
+    setRunErrorCode(null);
+    const totalIssues = issues.length;
+    const catalog = [...(qa.blocking_issues ?? []), ...(qa.quick_wins ?? [])];
+
+    try {
+      const { mechanical, chat } = partitionMechanicalAndChatIssues(tailored, issues);
+      const mechanicalResult = applyMechanicalQuickWins(tailored, mechanical);
+      let current = mechanicalResult.resume;
+
+      let patchResult: ReturnType<typeof applyPatchesDeterministically> | null = null;
+      if (chat.length > 0) {
+        const res = await chatWithResume(sessionId, {
+          message: buildApplyAllChatMessage(chat, current),
+          history: [],
+          tailored_snapshot: current,
+          target_issues: chat,
+        });
+        patchResult = applyPatchesDeterministically(current, res.patches, chat);
+        current = patchResult.resume;
+      }
+
+      const resumeChanged =
+        mechanicalResult.appliedIssues.length > 0 ||
+        (patchResult?.appliedPatchCount ?? 0) > 0;
+
+      const issuesToMark = [...mechanicalResult.appliedIssues];
+      if (patchResult) {
+        issuesToMark.push(
+          ...issuesForAddressedKeys(current, catalog, patchResult.addressedIssueKeys),
+        );
+      }
+      if (issuesToMark.length > 0) {
+        markAtsIssuesAddressed(issuesToMark);
+        pendingAtsFixRef.current = [];
+      }
+
+      if (patchResult && patchResult.orphanPatches.length > 0) {
+        setPendingSuggestions((prev) =>
+          mergeSuggestionBatch(
+            prev,
+            patchResult.orphanPatches.map((entry) => entry.patch),
+            patchResult.orphanPatches.map((entry) => entry.sourceIssueKey),
+          ),
+        );
+      }
+
+      const addressedFromChat = patchResult
+        ? issuesForAddressedKeys(current, catalog, patchResult.addressedIssueKeys)
+        : [];
+      const appliedIssueCount =
+        mechanicalResult.appliedIssues.length + addressedFromChat.length;
+      const notAttemptedCount = countNotAttemptedIssues(issues, mechanical, chat);
+      const report = buildApplyAllReport(appliedIssueCount, totalIssues, notAttemptedCount);
+      if (report) {
+        if (appliedIssueCount > 0) {
+          setApplyAllStatus(report);
+        } else {
+          setSuggestionError(report);
+        }
+      }
+
+      if (resumeChanged) {
+        await saveTailoredResume(sessionId, current);
+        setTailored(current);
+        setEditorSyncKey((k) => k + 1);
+        setStale((prev) => ({ ...prev, "4": new Date().toISOString() }));
+        applyAllInFlightRef.current = false;
+        setApplyAllRunning(false);
+        await recalculateAts({ resume: current });
+      }
+    } catch (err) {
+      const errorCode = err instanceof ApiError ? err.code : undefined;
+      setRunErrorCode(errorCode ?? null);
+      setRunError(
+        err instanceof Error ? err.message : "Could not apply all improvements. Please try again.",
+      );
+    } finally {
+      applyAllInFlightRef.current = false;
+      setApplyAllRunning(false);
+    }
+  }, [
+    tailored,
+    qa,
+    applyAllRunning,
+    addressedAtsKeys,
+    skippedAtsKeys,
+    sessionId,
+    recalculateAts,
+  ]);
 
   const runCurrentPhase = useCallback(
     async (options?: { force?: boolean; scope?: PhaseRunScope; auditOnly?: boolean }) => {
@@ -876,6 +1015,26 @@ function SessionContent() {
     },
     [step, tailored, persistTailoredBeforeExport, runPhase, runAnalysis],
   );
+
+  const executeReTailorFromScratch = useCallback(async () => {
+    setReTailorConfirmOpen(false);
+    if (!tailored || runInFlightRef.current || applyAllInFlightRef.current) return;
+    try {
+      const snapshot = await saveTailoredVersionSnapshot(
+        sessionId,
+        RE_TAILOR_VERSION_SNAPSHOT_LABEL,
+      );
+      setSavedVersionNumber(snapshot.version);
+    } catch (err) {
+      setRunError(
+        err instanceof Error
+          ? err.message
+          : "Could not save a version snapshot before re-tailoring.",
+      );
+      return;
+    }
+    await runCurrentPhase({ force: true });
+  }, [tailored, sessionId, runCurrentPhase]);
 
   useEffect(() => {
     if (
@@ -925,7 +1084,10 @@ function SessionContent() {
     if (lastEvent.event === "partial" && lastEvent.data && lastEvent.phase !== undefined) {
       // Phase 4 partial can briefly carry pre-override LLM scores; wait for done.
       if (lastEvent.phase !== 4) {
-        applyPhaseOutputByNumber(lastEvent.phase, lastEvent.data);
+        const skipPhase3Partial = lastEvent.phase === 3 && regenPriorRef.current !== null;
+        if (!skipPhase3Partial) {
+          applyPhaseOutputByNumber(lastEvent.phase, lastEvent.data);
+        }
       }
     }
     if (lastEvent.event === "cost_estimate" && lastEvent.cost_formatted) {
@@ -1568,29 +1730,34 @@ function SessionContent() {
                 </div>
                 {tailored && (
                   <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                    {pendingCreditAction?.label === "Regenerate resume" ? (
-                      <CreditChargeConfirm
-                        actionLabel="Regenerate resume"
-                        onConfirm={() => {
-                          const run = pendingCreditAction.run;
-                          setPendingCreditAction(null);
-                          run();
-                        }}
-                        onCancel={() => setPendingCreditAction(null)}
-                        disabled={phaseRunning}
+                    {reTailorConfirmOpen ? (
+                      <ReTailorFromScratchConfirm
+                        costCredits={entitlement.isFreeUser ? 1 : undefined}
+                        pendingSuggestionCount={countPendingSuggestions(pendingSuggestions)}
+                        openAtsIssueCount={countOpenAtsImprovements(
+                          qa,
+                          addressedAtsKeys,
+                          skippedAtsKeys,
+                        )}
+                        onConfirm={() => void executeReTailorFromScratch()}
+                        onCancel={() => setReTailorConfirmOpen(false)}
+                        onApplyImprovementsFirst={() => void applyAllImprovements()}
+                        applyImprovementsRunning={applyAllRunning}
+                        disabled={phaseRunning || applyAllRunning}
                       />
                     ) : (
                       <button
                         type="button"
-                        onClick={() =>
-                          requestCreditAction("Regenerate resume", () =>
-                            runCurrentPhase({ force: true }),
-                          )
+                        onClick={() => setReTailorConfirmOpen(true)}
+                        disabled={
+                          phaseRunning ||
+                          applyAllRunning ||
+                          !!pendingCreditAction ||
+                          reTailorConfirmOpen
                         }
-                        disabled={phaseRunning || !!pendingCreditAction}
                         className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40"
                       >
-                        {phaseRunning ? "Regenerating…" : "Regenerate Resume"}
+                        {phaseRunning ? "Re-tailoring…" : RE_TAILOR_ACTION_LABEL}
                       </button>
                     )}
                     {pendingCreditAction?.label === "Recalculate ATS score" ? (
@@ -1687,6 +1854,11 @@ function SessionContent() {
                 minLeftWidth={340}
                 left={
                   <>
+                    {applyAllStatus && (
+                      <div className="mb-4 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-100">
+                        {applyAllStatus}
+                      </div>
+                    )}
                     {suggestionError && (
                       <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-800 dark:text-red-200">
                         {suggestionError}
@@ -1791,6 +1963,11 @@ function SessionContent() {
                             mechanicalOutcomes={mechanicalOutcomes}
                             onUndoMechanicalFix={undoMechanicalFix}
                             onApplyMechanicalFixAtRole={applyMechanicalFixAtRole}
+                            onApplyAllImprovements={() => void applyAllImprovements()}
+                            applyAllImprovementsDisabled={
+                              atsRecalcRunning || phaseRunning || !!pendingCreditAction
+                            }
+                            applyAllImprovementsRunning={applyAllRunning}
                           />
                         ) : (
                           <p className="text-slate-600 dark:text-slate-400 text-xs py-4 text-center">
@@ -1892,6 +2069,11 @@ function SessionContent() {
                   mechanicalOutcomes={mechanicalOutcomes}
                   onUndoMechanicalFix={undoMechanicalFix}
                   onApplyMechanicalFixAtRole={applyMechanicalFixAtRole}
+                  onApplyAllImprovements={() => void applyAllImprovements()}
+                  applyAllImprovementsDisabled={
+                    atsRecalcRunning || phaseRunning || !!pendingCreditAction
+                  }
+                  applyAllImprovementsRunning={applyAllRunning}
                 />
               </div>
               <QAChecklist output={qa} streaming={isStreaming && !showProgress} />

@@ -133,7 +133,7 @@ Re-running Phase 2 automatically marks Phase 3 and 4 outputs as stale.
 | **ATS Optimization** | Keyword extraction, gap analysis, evidence-based rewrite, 8-point QA |
 | **AI Chat** | Inline chat for freeform edits and section regeneration |
 | **Cover Letter** | Generated from master resume + JD; editable; PDF export |
-| **Job Search** | DB-first corpus search (500 ATS employers, tiered polling) with Hirebase gap-fill |
+| **Job Search** | DB-first **tech** employer corpus (ATS-polled; growing toward 2k+ companies), tiered polling; Hirebase gap-fill when configured. More industries planned after corpus scale-up. |
 | **Application Tracker** | Kanban board (Applied → Interview → Offer → Closed); notes and history |
 | **Job Fit Score** | Pre-tailor semantic similarity score |
 | **Admin Panel** | User management, billing, feature flags, LLM config, audit log, system health |
@@ -158,7 +158,7 @@ source of truth enforced by the quota layer.
 Notes:
 
 - **Fit analysis** is subscription-only. **Expanded job search** (Hirebase) is too, but free users
-  who have confirmed their preferred titles keep a limited corpus search at no quota cost — see
+  who have confirmed their preferred titles keep a limited **tech corpus** search at no quota cost — see
   `_require_job_search_access` in `backend/app/routers/jobs.py`.
 - **Whisper** transcription has no per-period allowance on the free tier; free users pay 2 credits
   per story transcription. Browser-native voice (Chrome/Edge) is free everywhere.
