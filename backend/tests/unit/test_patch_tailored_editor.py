@@ -45,6 +45,51 @@ async def _session_with_tailored() -> str:
     return session.session_id
 
 
+async def test_snapshot_only_appends_version_without_mutating_resume() -> None:
+    session_id = await _session_with_tailored()
+    async with await _client() as client:
+        before = await get_session(session_id)
+        assert before is not None
+        assert before.phase3_output is not None
+        prior_summary = before.phase3_output.summary
+
+        response = await client.patch(
+            f"/api/sessions/{session_id}/resume/tailored",
+            json={
+                "snapshot_only": True,
+                "snapshot_label": "Before re-tailor from scratch",
+            },
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["version"] == 1
+
+        after = await get_session(session_id)
+        assert after is not None
+        assert after.phase3_output is not None
+        assert after.phase3_output.summary == prior_summary
+        assert len(after.phase3_versions) == 1
+        snap = after.phase3_versions[0]
+        assert snap.label == "Before re-tailor from scratch"
+        assert snap.output.summary == prior_summary
+        assert snap.output.experience[0].company == "Acme"
+
+        ignored = await client.patch(
+            f"/api/sessions/{session_id}/resume/tailored",
+            json={
+                "snapshot_only": True,
+                "snapshot_label": "Before re-tailor from scratch",
+                "section_id": "summary",
+                "content": "Mutated summary",
+            },
+        )
+        assert ignored.status_code == 200
+        after_ignored = await get_session(session_id)
+        assert after_ignored is not None
+        assert after_ignored.phase3_output.summary == prior_summary
+        assert snap.output.summary == prior_summary
+
+
 async def test_patch_adds_and_moves_experience() -> None:
     session_id = await _session_with_tailored()
     async with await _client() as client:

@@ -56,6 +56,10 @@ interface Props {
   /** Revert the last mechanical apply for a quick-win issue. */
   onUndoMechanicalFix?: (issue: BlockingIssue) => void;
   onApplyMechanicalFixAtRole?: (issue: BlockingIssue, experienceIndex: number) => void;
+  /** Deterministic batch: mechanical fixes + one chat round, then recalculate ATS. */
+  onApplyAllImprovements?: () => void;
+  applyAllImprovementsDisabled?: boolean;
+  applyAllImprovementsRunning?: boolean;
 }
 
 const IMPACT_ORDER = { high: 0, medium: 1, low: 2 } as const;
@@ -520,6 +524,9 @@ export function ATSGuidancePanel({
   mechanicalOutcomes = {},
   onUndoMechanicalFix,
   onApplyMechanicalFixAtRole,
+  onApplyAllImprovements,
+  applyAllImprovementsDisabled = false,
+  applyAllImprovementsRunning = false,
 }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -608,11 +615,37 @@ export function ATSGuidancePanel({
   const addressedCount = [...quickWins, ...blockingAll].filter((issue) =>
     addressedKeys.has(issueKey(issue)),
   ).length;
+  const openQuickWins = quickWins.filter((issue) => !addressedKeys.has(issueKey(issue)));
+  const openImprovementCount = openBlocking.length + openQuickWins.length;
   const ringSize = variant === "sidebar" ? 72 : 96;
 
   const content = (
     <div className={cn("space-y-5", variant === "sidebar" && "text-sm")}>
       {/* Stale banner — shown after the user accepts a chat patch but hasn't recalculated yet */}
+      {onApplyAllImprovements && openImprovementCount > 0 && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-3 py-3 rounded-lg bg-emerald-500/10 dark:bg-emerald-400/10 border border-emerald-400/30">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+              Apply improvements without re-tailoring
+            </p>
+            <p className="text-[11px] text-emerald-800/90 dark:text-emerald-200/80 mt-0.5 leading-relaxed">
+              Uses one-click fixes and a single AI patch round for{" "}
+              {openImprovementCount} open item{openImprovementCount === 1 ? "" : "s"} — no resume
+              credit. Recalculates ATS for free only when your resume actually changes. Does not
+              replace a full re-tailor from your source resume.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onApplyAllImprovements}
+            disabled={applyAllImprovementsDisabled || applyAllImprovementsRunning || !tailored}
+            className="shrink-0 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition-colors"
+          >
+            {applyAllImprovementsRunning ? "Applying…" : "Apply all improvements"}
+          </button>
+        </div>
+      )}
+
       {staleSince && (
         <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-amber-500/10 dark:bg-amber-400/10 border border-amber-400/30">
           <span className="text-xs text-amber-700 dark:text-amber-300">

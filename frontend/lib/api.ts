@@ -253,6 +253,20 @@ export function phaseEventsUrl(sessionId: string, phase: number): string {
 
 // ── Tailored resume edits ────────────────────────────────────────────────────
 
+export async function saveTailoredVersionSnapshot(
+  sessionId: string,
+  snapshotLabel: string,
+): Promise<{
+  version: number;
+  snapshot_id: string;
+  phase3_versions?: ResumeVersionMeta[];
+}> {
+  return patchTailoredResume(sessionId, {
+    snapshot_only: true,
+    snapshot_label: snapshotLabel,
+  });
+}
+
 export async function patchTailoredResume(
   sessionId: string,
   patch: Record<string, unknown>
