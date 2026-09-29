@@ -184,8 +184,12 @@ test.describe("journey", () => {
 })
 
 test.describe("pricing", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/#pricing")
+    await expect(page.locator("#pricing")).toBeVisible()
+  })
+
   test("shows the free tier and every public paid tier", async ({ page }) => {
-    await page.locator("#pricing").scrollIntoViewIfNeeded()
     await expect(
       page.getByRole("heading", { level: 2, name: /start free, upgrade only/i }),
     ).toBeVisible()
@@ -229,12 +233,10 @@ test.describe("pricing", () => {
   })
 
   test("never renders an unsynced plan as $0.00", async ({ page }) => {
-    await page.locator("#pricing").scrollIntoViewIfNeeded()
     await expect(page.getByText("$0.00")).toHaveCount(0)
   })
 
   test("links paid tiers through auth to billing", async ({ page }) => {
-    await page.locator("#pricing").scrollIntoViewIfNeeded()
     await expect(
       page.getByRole("link", { name: /create account & choose a plan/i }),
     ).toHaveAttribute("href", "/auth?mode=register&callbackUrl=%2Fbilling")

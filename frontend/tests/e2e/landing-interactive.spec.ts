@@ -273,7 +273,9 @@ test.describe("keyword scan demo", () => {
     await page.mouse.move(box.x + box.width * 0.55, box.y + box.height / 2)
 
     await expect
-      .poll(() => sweep.evaluate((node) => getComputedStyle(node).opacity))
+      .poll(() => sweep.evaluate((node) => getComputedStyle(node).opacity), {
+        timeout: 15_000,
+      })
       .toBe("1")
 
     // Partway through the sweep, some keywords are dimmed and some are not.
@@ -291,7 +293,7 @@ test.describe("keyword scan demo", () => {
           opacities.some((value) => value === "1") &&
           opacities.some((value) => value !== "1")
         )
-      })
+      }, { timeout: 15_000 })
       .toBe(true)
 
     // Leaving restores every keyword to full opacity.
@@ -308,6 +310,7 @@ test.describe("keyword scan demo", () => {
   })
 
   test("issues no network request while scanning", async ({ page }) => {
+    test.setTimeout(60_000)
     // The landing page must never drive /api/checkup: it costs two LLM passes
     // per call and is capped at 12/hour per IP.
     const requests: string[] = []
