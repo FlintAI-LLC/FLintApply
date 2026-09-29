@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent.phase3_invariants import is_degraded_master_write, preserve_master_sections
 from app.db.engine import async_session_factory
 from app.models.rewrite import TailoredResumeOutput
 from app.services.contact_authority import apply_authoritative_contact
@@ -59,7 +60,14 @@ async def _sync_master_resume_chunks(
     """Update master resume raw text + experience chunk metadata from polished output."""
     from app.services.master_resume.crud import _upsert_master_resume
 
-    parsed = _tailored_to_parsed_sections(tailored)
+    existing = await get_raw_resume(db, user_id=user_id)
+    stored_sections = existing.parsed_sections if existing is not None else None
+    incoming_sections = _tailored_to_parsed_sections(tailored)
+    parsed = preserve_master_sections(incoming_sections, stored_sections)
+    if existing is not None and is_degraded_master_write(
+        incoming_sections, stored_sections
+    ):
+        raw_text = existing.raw_text
     await _upsert_master_resume(
         db,
         user_id=user_id,

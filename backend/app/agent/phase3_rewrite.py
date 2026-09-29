@@ -14,7 +14,8 @@ from app.llm.base import LLMClient, LLMMessage
 from app.llm.pricing import estimate_cost, format_cost
 from app.llm.structured import LLMParseError, complete_structured
 from app.agent.phase3_experience_fallback import apply_experience_fallback
-from app.agent.phase3_hollow import reject_hollow_phase3
+from app.agent.phase3_hollow import make_hollow_rejector
+from app.models.resume import ParsedResume
 from app.agent.phase3_postprocess import (
     flatten_skill_terms,
     postprocess_tailored_output,
@@ -113,6 +114,8 @@ async def _complete_phase3_llm(
     llm: LLMClient,
     messages: list[LLMMessage],
     event_queue: asyncio.Queue,
+    *,
+    source: ParsedResume | None = None,
 ) -> TailoredResumeOutput:
     """Run the Phase 3 structured LLM call with heartbeats and a hard timeout.
 
@@ -141,7 +144,7 @@ async def _complete_phase3_llm(
                 messages,
                 TailoredResumeOutput,
                 max_tokens=6000,
-                accept_result=reject_hollow_phase3,
+                accept_result=make_hollow_rejector(source),
             ),
             timeout=settings.PHASE3_LLM_TIMEOUT_SECONDS,
         )
@@ -555,7 +558,12 @@ async def run(
         else None
     )
 
-    output = await _complete_phase3_llm(llm, messages, event_queue)
+    output = await _complete_phase3_llm(
+        llm,
+        messages,
+        event_queue,
+        source=None if scoped else session.resume_parsed,
+    )
 
     output = apply_experience_fallback(
         output,

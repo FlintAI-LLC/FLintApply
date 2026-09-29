@@ -12,7 +12,7 @@ from app.agent.phase3_rewrite import _merge_scoped_output, run
 from app.models.audit import AuditOutput, KeywordCoverage
 from app.models.keywords import KeywordExtractionOutput
 from app.models.rewrite import TailoredExperienceEntry, TailoredResumeOutput
-from app.models.session import PhaseRunScope, PhaseStatus, Session
+from app.models.session import PhaseRunScope, PhaseStatus
 from app.services.session_store import create_session, get_session, update_session
 
 pytestmark = pytest.mark.integration
@@ -211,3 +211,71 @@ async def test_subscriber_scoped_regen_does_not_increment_resumes_used(
 
     assert decision.charged_to == "subscription_section_regen"
     assert sub.resumes_used == 5
+
+
+async def _captured_accept_result(monkeypatch, *, scope: PhaseRunScope | None):
+    from app.models.resume import ParsedResume
+
+    session = await create_session()
+    session.phase1_output = KeywordExtractionOutput()
+    session.phase2_output = AuditOutput(
+        keyword_coverage=KeywordCoverage(present=["Python"]),
+        overall_score=70,
+        summary="Audit ok",
+    )
+    session.phase3_output = _sample_tailored()
+    session.resume_parsed = ParsedResume(
+        summary="Source summary.", skills=["Python", "SQL"]
+    )
+    session.phase1_status = PhaseStatus.done
+    session.phase2_status = PhaseStatus.done
+    session.phase3_status = PhaseStatus.done
+    await update_session(session)
+
+    captured: dict[str, object] = {}
+
+    async def fake_complete(*args, **kwargs):
+        captured["accept_result"] = kwargs["accept_result"]
+        return TailoredResumeOutput(
+            experience=[
+                TailoredExperienceEntry(
+                    title="Engineer",
+                    company="Acme",
+                    dates="2020",
+                    bullets=["Scoped rewrite bullet"],
+                )
+            ]
+        )
+
+    monkeypatch.setattr("app.agent.phase3_rewrite.complete_structured", fake_complete)
+
+    class FakeLLM:
+        provider_name = "test"
+        model_name = "test-model"
+
+    refreshed = await get_session(session.session_id)
+    assert refreshed is not None
+    await run(refreshed, FakeLLM(), asyncio.Queue(), scope=scope)
+    return captured["accept_result"]
+
+
+@pytest.mark.asyncio
+async def test_scoped_run_does_not_reject_partials_for_missing_source_sections(
+    monkeypatch,
+) -> None:
+    accept = await _captured_accept_result(
+        monkeypatch, scope=PhaseRunScope(section="experience", company="Acme")
+    )
+    partial_without_skills = TailoredResumeOutput(
+        experience=[TailoredExperienceEntry(company="Acme", bullets=["Rewrote APIs"])]
+    )
+    assert accept(partial_without_skills) is None
+
+
+@pytest.mark.asyncio
+async def test_full_run_rejects_output_that_drops_source_sections(monkeypatch) -> None:
+    accept = await _captured_accept_result(monkeypatch, scope=None)
+    dropped = TailoredResumeOutput(
+        experience=[TailoredExperienceEntry(company="Acme", bullets=["Rewrote APIs"])]
+    )
+    assert accept(dropped) is not None
