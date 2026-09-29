@@ -168,7 +168,9 @@ function OnboardingPageContent() {
 
   const token = liveBackendAccessToken(session)
   const tokenRef = useRef(token)
-  tokenRef.current = token
+  useEffect(() => {
+    tokenRef.current = token
+  }, [token])
 
   function signOutExpired() {
     const dest = `/onboarding${typeof window !== "undefined" ? window.location.search : ""}`
