@@ -367,6 +367,11 @@ async def _issue_session(
         auth_session_id,
         ttl=settings.REFRESH_TOKEN_TTL_SECONDS,
     )
+    await redis_session.issue_cookie_bind_ticket(
+        user.id,
+        auth_session_id,
+        ttl=settings.ACCESS_TOKEN_TTL_SECONDS,
+    )
     access = create_access_token(
         user.id,
         ttl=settings.ACCESS_TOKEN_TTL_SECONDS,
@@ -461,6 +466,38 @@ async def _auth_session_id_for_refresh_token(
         return str(meta["auth_session_id"])
     active = await redis_session.get_active_auth_session_id(row.user_id)
     return str(active) if active else None
+
+
+def _auth_session_id_for_access_token(request: Request) -> str:
+    """The ``sid`` of the bearer ``get_current_user`` has already validated."""
+    header = request.headers.get("Authorization", "")
+    token = header[7:].strip() if header.lower().startswith("bearer ") else ""
+    sid = decode_access_token(token, expected_type="access").get("sid") if token else None
+    if not sid:
+        raise HTTPException(status_code=401, detail={"code": "missing_session"})
+    return str(sid)
+
+
+async def _refresh_cookie_binds_session(
+    db: AsyncSession,
+    *,
+    refresh_token: str | None,
+    user_id: uuid.UUID,
+    auth_session_id: str,
+) -> bool:
+    """True when the browser already holds a live refresh token for this session."""
+    if not refresh_token:
+        return False
+    row = await find_refresh_token(db, token=refresh_token)
+    # The user check is defense in depth: session ids are globally unique.
+    if row is None or row.user_id != user_id or row.revoked_at is not None:
+        return False
+    if row.expires_at <= datetime.now(timezone.utc):
+        return False
+    meta = await redis_session.get_refresh_token_metadata(row.id)
+    if meta is None:
+        return False
+    return str(meta.get("auth_session_id")) == auth_session_id
 
 
 # ===========================================================================
@@ -1093,6 +1130,77 @@ async def refresh(
         expires_in=settings.ACCESS_TOKEN_TTL_SECONDS,
         user=await _me_from_ledger(db, user),
     )
+
+
+# 6b. POST /refresh-cookie -------------------------------------------------
+@router.post("/refresh-cookie")
+@limiter.limit("10/minute", key_func=authenticated_user_rate_limit_key)
+async def bind_refresh_cookie(
+    request: Request,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    refresh_token: Annotated[str | None, Cookie(alias=REFRESH_COOKIE_NAME)] = None,
+) -> dict[str, Any]:
+    """Give the browser an ``sr_refresh`` cookie for the CURRENT auth session.
+
+    OAuth sign-in runs ``/callback`` from the Next.js server, so the cookie it
+    sets never reaches the browser and rotation 401s once the access token
+    expires. The signed-in browser calls this once, directly, to bind one.
+
+    Deliberately does not revoke other tokens, mint an access token, or start a
+    new auth session; the caller stays on the session it already has.
+
+    A bearer alone must not be enough to create a 7-day credential, so minting
+    spends a single-use ticket that sign-in issued for this exact session.
+    Accepted residuals: sessions signed in before this shipped have no ticket
+    and stay on the 15-minute behaviour until they sign in again, and someone
+    who steals the access token before the real browser binds can win the race
+    (the victim then gets 409 and signs in again).
+    """
+    auth_session_id = _auth_session_id_for_access_token(request)
+    if await _refresh_cookie_binds_session(
+        db,
+        refresh_token=refresh_token,
+        user_id=user.id,
+        auth_session_id=auth_session_id,
+    ):
+        return {"ok": True, "issued": False}
+
+    if not await redis_session.consume_cookie_bind_ticket(user.id, auth_session_id):
+        raise HTTPException(status_code=409, detail={"code": "bind_unavailable"})
+
+    try:
+        device_fp = _fingerprint(request)
+        issued = await create_refresh_token(
+            db,
+            user_id=user.id,
+            device_fingerprint=device_fp,
+            ttl_seconds=settings.REFRESH_TOKEN_TTL_SECONDS,
+        )
+        await redis_session.bind_refresh_token_to_redis(
+            issued.token_id,
+            user.id,
+            device_fp,
+            ttl=settings.REFRESH_TOKEN_TTL_SECONDS,
+            auth_session_id=auth_session_id,
+        )
+    except Exception:
+        # A transient failure must not cost the user their only bind.
+        await redis_session.issue_cookie_bind_ticket(
+            user.id, auth_session_id, ttl=settings.ACCESS_TOKEN_TTL_SECONDS
+        )
+        raise
+
+    await _set_refresh_cookie(response, issued.token, settings.REFRESH_TOKEN_TTL_SECONDS)
+    log.info(
+        "refresh_cookie_bound",
+        user_id=str(user.id),
+        auth_session_id=auth_session_id,
+        ip=_client_ip(request),
+        user_agent=_user_agent(request),
+    )
+    return {"ok": True, "issued": True}
 
 
 # 7. GET /me ---------------------------------------------------------------

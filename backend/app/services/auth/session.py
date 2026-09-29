@@ -29,11 +29,13 @@ from app.services import session_store
 _TOKEN_KEY_FMT = "refresh:{token_id}"
 _USER_INDEX_KEY_FMT = "refresh_user:{user_id}"
 _ACTIVE_SESSION_KEY_FMT = "active_session:{user_id}"
+_COOKIE_BIND_KEY_FMT = "cookie_bind:{user_id}:{session_id}"
 
 # In-memory fallback for local dev / unit tests --------------------------------
 _memory_tokens: dict[str, dict[str, Any]] = {}
 _memory_user_index: dict[str, set[str]] = {}
 _memory_active_sessions: dict[str, dict[str, Any]] = {}
+_memory_cookie_bind_tickets: dict[str, float] = {}
 
 
 def _redis() -> aioredis.Redis | None:
@@ -51,6 +53,10 @@ def _user_key(user_id: uuid.UUID | str) -> str:
 
 def _active_session_key(user_id: uuid.UUID | str) -> str:
     return _ACTIVE_SESSION_KEY_FMT.format(user_id=str(user_id))
+
+
+def _cookie_bind_key(user_id: uuid.UUID | str, session_id: uuid.UUID | str) -> str:
+    return _COOKIE_BIND_KEY_FMT.format(user_id=str(user_id), session_id=str(session_id))
 
 
 # ---------------------------------------------------------------------------
@@ -213,18 +219,53 @@ async def clear_active_auth_session(user_id: uuid.UUID | str) -> None:
     _memory_active_sessions.pop(key, None)
 
 
+async def issue_cookie_bind_ticket(
+    user_id: uuid.UUID | str,
+    session_id: uuid.UUID | str,
+    *,
+    ttl: int,
+) -> None:
+    """Allow ONE browser refresh-cookie bind for this auth session.
+
+    Sign-in issues the ticket; ``POST /api/auth/refresh-cookie`` spends it. This
+    keeps a bare access token from minting a long-lived refresh credential.
+    """
+    key = _cookie_bind_key(user_id, session_id)
+    r = _redis()
+    if r is not None:
+        await r.setex(key, ttl, "1")
+        return
+    _memory_cookie_bind_tickets[key] = datetime.now(timezone.utc).timestamp() + ttl
+
+
+async def consume_cookie_bind_ticket(
+    user_id: uuid.UUID | str,
+    session_id: uuid.UUID | str,
+) -> bool:
+    """Atomically spend the bind ticket. ``False`` when absent, spent or expired."""
+    key = _cookie_bind_key(user_id, session_id)
+    r = _redis()
+    if r is not None:
+        return await r.getdel(key) is not None
+    expires_at = _memory_cookie_bind_tickets.pop(key, None)
+    return expires_at is not None and expires_at > datetime.now(timezone.utc).timestamp()
+
+
 def _reset_for_tests() -> None:
     """Clear the in-memory store between unit tests."""
     _memory_tokens.clear()
     _memory_user_index.clear()
     _memory_active_sessions.clear()
+    _memory_cookie_bind_tickets.clear()
 
 
 __all__ = [
     "bind_refresh_token_to_redis",
     "clear_active_auth_session",
+    "consume_cookie_bind_ticket",
     "get_active_auth_session_id",
     "get_refresh_token_metadata",
+    "issue_cookie_bind_ticket",
     "list_user_token_ids",
     "revoke_all_user_tokens",
     "revoke_redis_token",
