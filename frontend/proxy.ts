@@ -17,6 +17,12 @@ import {
   mustCompleteOnboarding,
   postAuthLandingPath,
 } from "@/lib/auth/onboarding"
+import {
+  AUTH_RETURN_COOKIE,
+  clearAuthReturnCookie,
+  readAuthReturnCookie,
+  setAuthReturnCookie,
+} from "@/lib/auth/returnUrl"
 import { hasLaunchPreviewAccess, launchGateActive } from "@/lib/launchGate"
 import { isLaunchPublicPath } from "@/lib/launchPreview"
 
@@ -87,13 +93,26 @@ export default auth(async function proxy(req) {
   if (isProtected && session && !session.backendAccessToken) {
     const url = new URL("/auth", req.url)
     if (session.error) url.searchParams.set("error", String(session.error))
-    return redirectWithContentSecurityPolicy(url, nonce)
+    const returnPath = `${pathname}${req.nextUrl.search}`
+    url.searchParams.set("callbackUrl", returnPath)
+    const jdId = req.nextUrl.searchParams.get("jd_id")
+    if (jdId) {
+      url.searchParams.set("jd_id", jdId)
+      const source = req.nextUrl.searchParams.get("source")
+      if (source) url.searchParams.set("source", source)
+      const jdReview = req.nextUrl.searchParams.get("jd_review")
+      if (jdReview) url.searchParams.set("jd_review", jdReview)
+    }
+    const response = redirectWithContentSecurityPolicy(url, nonce)
+    setAuthReturnCookie(response, returnPath)
+    return response
   }
 
   if (isProtected && !session) {
     const url = new URL("/auth", req.url)
     // Preserve query string (e.g. extension handoff ?jd_id=…&source=extension).
-    url.searchParams.set("callbackUrl", `${pathname}${req.nextUrl.search}`)
+    const returnPath = `${pathname}${req.nextUrl.search}`
+    url.searchParams.set("callbackUrl", returnPath)
     // Duplicate jd_id at top level — OAuth providers sometimes strip nested
     // query params from callbackUrl during the redirect round-trip.
     const jdId = req.nextUrl.searchParams.get("jd_id")
@@ -104,7 +123,9 @@ export default auth(async function proxy(req) {
       const jdReview = req.nextUrl.searchParams.get("jd_review")
       if (jdReview) url.searchParams.set("jd_review", jdReview)
     }
-    return redirectWithContentSecurityPolicy(url, nonce)
+    const response = redirectWithContentSecurityPolicy(url, nonce)
+    setAuthReturnCookie(response, returnPath)
+    return response
   }
 
   if (
@@ -139,10 +160,19 @@ export default auth(async function proxy(req) {
     AUTH_ONLY_PATHS.some((p) => pathname === p) &&
     session?.backendAccessToken
   ) {
-    return redirectWithContentSecurityPolicy(
-      new URL(postAuthLandingPath(session), req.url),
+    const cookieReturn = readAuthReturnCookie(
+      req.cookies.get(AUTH_RETURN_COOKIE)?.value,
+    )
+    const landing =
+      cookieReturn && cookieReturn !== "/auth"
+        ? cookieReturn
+        : postAuthLandingPath(session)
+    const response = redirectWithContentSecurityPolicy(
+      new URL(landing, req.url),
       nonce,
     )
+    clearAuthReturnCookie(response)
+    return response
   }
 
   return nextWithContentSecurityPolicy(req, nonce)

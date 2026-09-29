@@ -3,6 +3,7 @@ import {
   buildSessionNewUrl,
   getExtensionHandoff,
 } from "@/lib/extensionHandoff"
+import { resolveAuthReturnUrl } from "@/lib/auth/returnUrl"
 
 /**
  * Paths reachable while the onboarding wizard is incomplete.
@@ -77,18 +78,31 @@ export function postAuthLandingPath(
 }
 
 export function postOnboardingDestination(_user?: BackendUser | null): string {
-  if (typeof window !== "undefined") {
-    const stored = sessionStorage.getItem("sr_auth_return_url")
-    if (stored && !stored.startsWith("/auth") && stored !== "/onboarding") {
-      sessionStorage.removeItem("sr_auth_return_url")
-      // Marketing home is not a post-onboarding destination for signed-in users.
-      if (stored !== "/") {
-        return stored
-      }
-    }
-    const handoff = getExtensionHandoff()
-    if (handoff) return buildSessionNewUrl(handoff)
+  return resolvePostAuthClientDestination(null)
+}
+
+/**
+ * After sign-in when onboarding is already complete: honor callbackUrl / stored
+ * return path, then an extension JD handoff, then dashboard.
+ */
+export function resolvePostAuthClientDestination(
+  callbackUrlFromQuery: string | null | undefined,
+): string {
+  if (typeof window === "undefined") return "/dashboard"
+
+  const resolved = resolveAuthReturnUrl(callbackUrlFromQuery ?? "")
+  if (
+    resolved !== "/dashboard" &&
+    resolved !== "/auth" &&
+    resolved !== "/onboarding" &&
+    resolved !== "/"
+  ) {
+    return resolved
   }
+
+  const handoff = getExtensionHandoff()
+  if (handoff) return buildSessionNewUrl(handoff)
+
   return "/dashboard"
 }
 

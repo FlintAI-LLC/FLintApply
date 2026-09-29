@@ -46,6 +46,7 @@ import { getProfileResume, type ProfileResume } from "@/lib/profile"
 import { getJobPreferences } from "@/lib/jobs"
 import { getApplicationFunnel } from "@/lib/tracker"
 import { DashboardStepStack } from "@/components/dashboard/DashboardStepStack"
+import { ExtensionHandoffBanner } from "@/components/dashboard/ExtensionHandoffBanner"
 import { summarizeMasterResume } from "@/lib/masterResumeSummary"
 import { dashboardSessionStep, sessionHref } from "@/lib/sessionStep"
 
@@ -495,6 +496,8 @@ export function DashboardView({ token }: { token: string }) {
           </div>
         </div>
       </header>
+
+      <ExtensionHandoffBanner />
 
       <DashboardStepStack
         hasMasterResume={hasMasterResume}

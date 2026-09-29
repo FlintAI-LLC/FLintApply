@@ -1,15 +1,22 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
+import { AlertCircle } from "lucide-react";
 import { getExtensionJobDescription } from "@/lib/extensionJobDescription";
 import {
   captureExtensionHandoffFromParams,
+  clearExtensionHandoff,
   getExtensionHandoff,
+  markExtensionHandoffConsumed,
   saveExtensionHandoff,
   replaceSessionNewUrlIfNeeded,
 } from "@/lib/extensionHandoff";
+import { classifyJdLoadError, EMPTY_JD_TEXT_ERROR, type JdLoadError } from "@/lib/jdLoadError";
+import { expiredSessionAuthUrl } from "@/lib/auth/accessToken";
+import { saveAuthReturnUrl } from "@/lib/auth/returnUrl";
 import { clearCheckupHandoff, getCheckupHandoff } from "@/lib/checkupHandoff";
 import { formatApplicationLabel } from "@/lib/applicationLabel";
 import { shouldReviewExtensionJd } from "@/lib/jdCompleteness";
@@ -61,6 +68,16 @@ function NewSessionContent() {
   const [infoHydrating, setInfoHydrating] = useState(false);
   const [applicationName, setApplicationName] = useState("");
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  // Specific, actionable failure for the extension/jobs JD fetch (I6) — never
+  // a silent blank textarea. `jdRetryNonce` re-triggers the load effect for
+  // the error banner's "Try again" action without waiting on token/param changes.
+  const [jdLoadError, setJdLoadError] = useState<JdLoadError | null>(null);
+  const [jdRetryNonce, setJdRetryNonce] = useState(0);
+  // True while the JD fetch effect is in flight (initial load or retry) —
+  // drives a pending state so clearing jdLoadError on retry doesn't leave
+  // the user with neither the stale banner nor any indication anything is
+  // happening.
+  const [jdLoadPending, setJdLoadPending] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const jdLoadedRef = useRef(false);
@@ -74,6 +91,9 @@ function NewSessionContent() {
   useEffect(() => {
     const urlHandoff = captureExtensionHandoffFromParams(searchParams);
     if (urlHandoff) return;
+    // ?fresh=1 ("Tailor for a new job" from the dashboard) must never
+    // resurrect a stale handoff from a previous tailoring run (defect #7).
+    if (searchParams.get("fresh") === "1") return;
 
     const stored = getExtensionHandoff();
     if (stored && !searchParams.get("jd_id")) {
@@ -213,9 +233,13 @@ function NewSessionContent() {
   const backendToken = session?.backendAccessToken;
   useEffect(() => {
     if (!backendToken) return;
+    let cancelled = false;
 
     const urlJdId = searchParams.get("jd_id");
-    const storedHandoff = getExtensionHandoff();
+    // ?fresh=1 ("Tailor for a new job" from the dashboard) must never
+    // resurrect a stale extension handoff from a previous run (defect #7).
+    const isFreshStart = searchParams.get("fresh") === "1";
+    const storedHandoff = isFreshStart ? null : getExtensionHandoff();
     const jdId = urlJdId ?? storedHandoff?.jd_id ?? null;
     const jdSource = searchParams.get("source") ?? storedHandoff?.source ?? "extension";
     const jdReviewFlag =
@@ -227,6 +251,10 @@ function NewSessionContent() {
         source: jdSource,
         step: storedHandoff?.step ?? "jd",
         jd_review: jdReviewFlag,
+        // Carry the original capture time forward — rebuilding this object
+        // without it made saveExtensionHandoff stamp a fresh Date.now() on
+        // every re-save, renewing the 30-minute TTL indefinitely (S1).
+        captured_at: storedHandoff?.captured_at,
       };
       saveExtensionHandoff(handoff);
       replaceSessionNewUrlIfNeeded(router, handoff);
@@ -238,6 +266,7 @@ function NewSessionContent() {
         const res = await fetch(`${BASE}/api/profile/resume`, {
           headers: { Authorization: `Bearer ${backendToken}` },
         });
+        if (cancelled) return;
         if (res.ok) {
           const profile = await res.json() as { chunk_count?: number };
           setHasMasterResume((profile.chunk_count ?? 0) > 0);
@@ -245,41 +274,57 @@ function NewSessionContent() {
           setHasMasterResume(false);
         }
       } catch {
-        setHasMasterResume(false);
+        if (!cancelled) setHasMasterResume(false);
       }
     })();
 
-    if (!jdId) return;
-
     // Only load the JD once. Subsequent searchParams changes (e.g. goTo("info")
-    // changing the URL) must not reset the wizard back to the JD step.
-    if (jdLoadedRef.current) return;
-
-    void (async () => {
-      try {
-        if (jdSource === "extension") {
-          const saved = await getExtensionJobDescription(backendToken, jdId);
-          if (saved.text?.trim()) {
-            jdLoadedRef.current = true;
+    // changing the URL) must not reset the wizard back to the JD step. Note
+    // jdLoadedRef only ever latches inside the success branches below, so a
+    // failed attempt (any jdLoadError kind) always leaves it retryable — and
+    // the `cancelled` cleanup below still runs even when this guard skips the
+    // fetch, so the hasMasterResume request above cannot set stale state.
+    if (jdId && !jdLoadedRef.current) {
+      setJdLoadPending(true);
+      void (async () => {
+        try {
+          if (jdSource === "extension") {
+            const saved = await getExtensionJobDescription(backendToken, jdId);
+            if (cancelled) return;
             setJdSourceUrl(saved.url);
-            setJdReviewRecommended(
-              shouldReviewExtensionJd(jdSource, saved.url, jdReviewFlag),
-            );
+
+            if (!saved.text?.trim()) {
+              // Captured, but with no text — a distinct, actionable message,
+              // never a bare blank textarea (defect #2 / I6).
+              setJdLoadError(EMPTY_JD_TEXT_ERROR);
+              return;
+            }
 
             // Resume only when the linked session finished the wizard (info saved
             // or keywords already run). A JD-only link would hijack refresh mid-flow.
             if (saved.session_id) {
               try {
                 const snap = await checkSession(saved.session_id);
+                if (cancelled) return;
                 if (snap.has_user_info || snap.phase1_complete) {
+                  jdLoadedRef.current = true;
+                  setJdLoadError(null);
+                  clearExtensionHandoff();
+                  markExtensionHandoffConsumed(jdId);
                   router.replace(`/session/${saved.session_id}?step=analysis`);
                   return;
                 }
               } catch {
+                if (cancelled) return;
                 // Session expired — continue wizard with this JD text.
               }
             }
 
+            jdLoadedRef.current = true;
+            setJdLoadError(null);
+            setJdReviewRecommended(
+              shouldReviewExtensionJd(jdSource, saved.url, jdReviewFlag),
+            );
             setJdText(plainTextFromMaybeHtml(saved.text));
             if (saved.title?.trim()) {
               setJdTitle(saved.title.trim());
@@ -310,12 +355,25 @@ function NewSessionContent() {
                 jd_review: reviewRecommended,
               });
             }
+            // JD is now loaded into wizard state — consume the handoff so it
+            // cannot hijack a later "Tailor for a new job" run and so the
+            // dashboard banner disappears (defect #6/#9). Marking it consumed
+            // (keyed by jd_id) also stops captureExtensionHandoffFromParams —
+            // which re-runs on every step transition since jd_id stays in the
+            // URL — from writing the same handoff straight back to storage on
+            // the very next render (AC9).
+            clearExtensionHandoff();
+            markExtensionHandoffConsumed(jdId);
+            return;
           }
-          return;
-        }
-        const job = await getJob(backendToken, jdId);
-        if (job.description?.trim()) {
+          const job = await getJob(backendToken, jdId);
+          if (cancelled) return;
+          if (!job.description?.trim()) {
+            setJdLoadError(EMPTY_JD_TEXT_ERROR);
+            return;
+          }
           jdLoadedRef.current = true;
+          setJdLoadError(null);
           setJdText(job.description);
           if (job.title?.trim()) {
             setJdTitle(job.title.trim());
@@ -326,12 +384,30 @@ function NewSessionContent() {
             source: "jobs",
             step: "jd",
           });
+        } catch (err) {
+          if (cancelled) return;
+          // Every failure path (401 / 404 / network / server error) gets a
+          // distinct, actionable message — never the bare silent catch this
+          // replaced (defect #1 / I6).
+          const classified = classifyJdLoadError(err);
+          setJdLoadError(classified);
+          if (classified.kind === "not_found") {
+            // This jd_id will keep 404ing for up to EXTENSION_HANDOFF_TTL_MS —
+            // don't leave the dashboard banner offering "Continue tailoring"
+            // into the same wall (S2).
+            clearExtensionHandoff();
+            markExtensionHandoffConsumed(jdId);
+          }
+        } finally {
+          if (!cancelled) setJdLoadPending(false);
         }
-      } catch {
-        // User can paste JD manually if fetch fails
-      }
-    })();
-  }, [backendToken, searchParams, router]);
+      })();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [backendToken, searchParams, router, jdRetryNonce]);
 
   const goTo = (s: Step) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -557,6 +633,16 @@ function NewSessionContent() {
     }
   };
 
+  // JD 401 → re-auth and land back on this exact JD (AC7). A plain
+  // router.push("/auth") would bounce right back here because proxy.ts's
+  // AUTH_ONLY_PATHS branch treats any live NextAuth session as "signed in" —
+  // sign out first so /auth actually renders the login form.
+  function signInAgainForJd() {
+    const dest = `/session/new${typeof window !== "undefined" ? window.location.search : ""}`;
+    saveAuthReturnUrl(dest);
+    void signOut({ callbackUrl: expiredSessionAuthUrl(dest) });
+  }
+
   const stepIndex = STEPS.indexOf(step);
 
   function handleWizardBack() {
@@ -620,6 +706,72 @@ function NewSessionContent() {
 
         {/* Step content */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8">
+
+          {/*
+           * Rendered outside every per-step / sessionId conditional below —
+           * a failed JD fetch (e.g. the in-app jobs link at JobCard.tsx,
+           * which carries no ?step= param) must be visible no matter which
+           * step the URL's absence of ?step= happens to land on. Burying
+           * this inside `step === "jd" && sessionId` was the reported bug:
+           * a 404/network failure left the user on the resume step with no
+           * message at all (defect #1 / I6).
+           */}
+          {jdLoadError && (
+            <div
+              className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 dark:bg-red-400/10 p-4 space-y-3"
+              role="alert"
+              data-testid="jd-load-error"
+            >
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-700 dark:text-red-400 shrink-0 mt-0.5" />
+                <p className="text-red-900 dark:text-red-100 text-sm leading-relaxed">
+                  {jdLoadError.message}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-4 text-sm font-semibold">
+                {jdLoadError.kind === "unauthorized" && (
+                  <button
+                    type="button"
+                    onClick={signInAgainForJd}
+                    className="text-red-800 dark:text-red-300 underline underline-offset-2"
+                  >
+                    Sign in again
+                  </button>
+                )}
+                {(jdLoadError.kind === "network" || jdLoadError.kind === "server_error") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Clear the stale message immediately so the retry
+                      // shows a pending state instead of leaving the old
+                      // error up with no indication anything is happening
+                      // (S9).
+                      setJdLoadError(null);
+                      setJdRetryNonce((n) => n + 1);
+                    }}
+                    className="text-red-800 dark:text-red-300 underline underline-offset-2"
+                  >
+                    Try again
+                  </button>
+                )}
+                <Link
+                  href="/dashboard"
+                  className="text-red-800 dark:text-red-300 underline underline-offset-2"
+                >
+                  Back to dashboard
+                </Link>
+              </div>
+            </div>
+          )}
+          {!jdLoadError && jdLoadPending && (
+            <div
+              className="mb-4 flex items-center gap-2 text-slate-600 dark:text-slate-400 text-sm"
+              data-testid="jd-load-pending"
+            >
+              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+              Loading your job description…
+            </div>
+          )}
 
           {/* ── Step 1: Upload Resume ───────────────────────────────────── */}
           {step === "resume" && !sessionId && (

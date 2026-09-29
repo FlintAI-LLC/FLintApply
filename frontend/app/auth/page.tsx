@@ -20,6 +20,7 @@ import {
 import { TurnstileField } from "@/components/auth/TurnstileField"
 import { isStaleAuthError } from "@/lib/auth/staleSession"
 import { resolveAuthReturnUrl, saveAuthReturnUrl } from "@/lib/auth/returnUrl"
+import { resolvePostAuthClientDestination } from "@/lib/auth/onboarding"
 import { friendlyAuthError } from "@/lib/auth/errors"
 import { getSignupDeviceFingerprint, persistSignupDeviceFingerprintForOAuth } from "@/lib/auth/deviceFingerprint"
 import {
@@ -143,16 +144,13 @@ function AuthPageContent() {
     callbackUrl: string,
     onboardingCompletedAt: string | null | undefined,
   ) {
-    const dest = resolveAuthReturnUrl(callbackUrl)
-    if (dest && dest !== "/auth" && onboardingCompletedAt) {
-      router.replace(dest)
-    } else if (!onboardingCompletedAt) {
-      // Keep extension / deep-link return paths across onboarding.
+    if (!onboardingCompletedAt) {
+      const dest = resolveAuthReturnUrl(callbackUrl)
       saveAuthReturnUrl(dest !== "/dashboard" ? dest : undefined)
       router.replace("/onboarding")
-    } else {
-      router.replace("/dashboard")
+      return
     }
+    router.replace(resolvePostAuthClientDestination(callbackUrl || null))
   }
 
   // Redirect only when the backend token still resolves to a live user row.
