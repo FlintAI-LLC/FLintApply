@@ -87,7 +87,10 @@ test.describe("hero", () => {
 
   test("advertises the real signup credit grant", async ({ page }) => {
     await scrollPostHeroProgress(page, 0.08)
-    await expect(page.getByText(/6 credits on signup/i).first()).toBeVisible()
+    await expect(page.locator(".marketing-hero-cta")).toBeVisible()
+    await expect(
+      page.locator(".marketing-hero-cta").getByText(/6 credits on signup/i),
+    ).toBeVisible()
   })
 })
 
@@ -103,7 +106,8 @@ test.describe("career discovery", () => {
   })
 
   test("labels its example data as illustrative", async ({ page }) => {
-    await scrollPostHeroProgress(page, 0.35)
+    await scrollPostHeroProgress(page, 0.42)
+    await expect(page.locator(".post-hero-sequence-layer").last()).toBeVisible()
     // Required by the no-fabrication rule: sample fit scores must never read
     // as a claim about a real result.
     await expect(page.getByText(/illustrative example/i)).toBeVisible()
