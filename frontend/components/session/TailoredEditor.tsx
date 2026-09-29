@@ -69,6 +69,7 @@ import {
 import { EntryIssueBadgePill } from "./EntryIssueBadge";
 import { PRODUCT_NAME } from "@/lib/brand";
 import { filterStaleRewriteNotes } from "@/lib/filterRewriteNotes";
+import { findKeptPriorNote } from "@/lib/phase3Delivery";
 import {
   bulletAnchorKey,
   entryAnchorKey,
@@ -644,6 +645,7 @@ export function TailoredEditor({ initial, sessionId, editorSyncKey = 0, onSaved,
     () => filterStaleRewriteNotes(data.rewrite_notes, data.experience),
     [data.rewrite_notes, data.experience],
   );
+  const keptPriorNote = useMemo(() => findKeptPriorNote(rewriteNotes), [rewriteNotes]);
   const [draftText, setDraftText] = useState(suggestionDraft ?? "");
 
   useEffect(() => {
@@ -676,7 +678,9 @@ export function TailoredEditor({ initial, sessionId, editorSyncKey = 0, onSaved,
   const [editingEduField, setEditingEduField] = useState<string | null>(null);
   const [editingEduValue, setEditingEduValue] = useState("");
   const [expandedEdu, setExpandedEdu] = useState<string | null>(null);
-  const [showNotes, setShowNotes] = useState(() => hasGuardRewriteNotes(initial.rewrite_notes));
+  const [showNotes, setShowNotes] = useState(
+    () => hasGuardRewriteNotes(initial.rewrite_notes) || findKeptPriorNote(initial.rewrite_notes) !== null,
+  );
   const [addMode, setAddMode] = useState<"master" | "manual" | null>(null);
   const [manualSectionText, setManualSectionText] = useState("");
   const [manualTitle, setManualTitle] = useState("Experience");
@@ -2933,6 +2937,15 @@ export function TailoredEditor({ initial, sessionId, editorSyncKey = 0, onSaved,
       )}
 
       {/* ── Rewrite notes ────────────────────────────────────────────────── */}
+      {keptPriorNote !== null && (
+        <div
+          role="status"
+          data-testid="kept-prior-banner"
+          className="rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs text-sky-800 dark:text-sky-200"
+        >
+          {keptPriorNote}
+        </div>
+      )}
       {rewriteNotes.length > 0 && hasGuardRewriteNotes(rewriteNotes) && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
           {PRODUCT_NAME} auto-corrected parts of the AI draft for accuracy (metrics, titles, or

@@ -27,7 +27,7 @@ from app.models.rewrite import (
     TailoredExperienceEntry,
     TailoredResumeOutput,
 )
-from app.models.session import PhaseRunScope, PhaseStatus
+from app.models.session import Phase3Charge, PhaseRunScope, PhaseStatus
 from app.models.user import User
 from app.services.auth.dependencies import assert_user_email_verified
 from app.services.llm.plan_code_for_llm import resolve_plan_code_for_llm
@@ -121,6 +121,21 @@ class RunPhaseRequest(BaseModel):
     # other phases.  The orchestrator falls back to "standard" when
     # the user is not entitled to the requested tier.
     llm_tier: Literal["standard", "better", "best"] | None = None
+
+
+def _charge_from_decision(decision: object) -> Phase3Charge | None:
+    """Record how a resume_build run was paid so a hollow run can be reversed once."""
+    charged_to = getattr(decision, "charged_to", None)
+    if not isinstance(charged_to, str):
+        return None
+    transaction_id = getattr(decision, "credit_transaction_id", None)
+    subscription_id = getattr(decision, "subscription_id", None)
+    return Phase3Charge(
+        charge_id=uuid.uuid4().hex,
+        charged_to=charged_to,
+        credit_transaction_id=str(transaction_id) if transaction_id else None,
+        subscription_id=str(subscription_id) if subscription_id else None,
+    )
 
 
 @router.post("/{session_id}/phases/{phase}/run", status_code=202)
@@ -221,6 +236,8 @@ async def trigger_phase(
                         },
                     )
 
+    phase3_charge: Phase3Charge | None = None
+
     # Phase 3 full rewrite debits resume_build quota (scoped regen uses section_regen above).
     if phase == 3 and body.scope is None and user_id and not should_skip_billing_quota():
         try:
@@ -231,12 +248,13 @@ async def trigger_phase(
             user = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
             if user is not None:
                 try:
-                    await check_and_increment_quota(
+                    decision = await check_and_increment_quota(
                         db,
                         user=user,
                         action=QuotaAction.resume_build,
                         session_id=session_id,
                     )
+                    phase3_charge = _charge_from_decision(decision)
                     await db.commit()
                 except AccountSuspendedError:
                     raise HTTPException(status_code=403, detail={"code": "account_suspended"})
@@ -325,6 +343,9 @@ async def trigger_phase(
 
     # Force runs clear cached output — only after billing passes so a 402 does
     # not wipe a completed Phase 4 score the user can still see in the UI.
+    prior_tailored = (
+        session.phase3_output if phase == 3 and body.scope is None else None
+    )
     if body.force:
         await reset_phase(session_id, phase)
         session = await get_session(session_id)
@@ -333,6 +354,9 @@ async def trigger_phase(
 
     session.phase_run_requested = phase
     session.phase_run_scope = body.scope
+    if phase == 3 and body.scope is None:
+        session.phase3_prior_output = prior_tailored
+        session.phase3_charge = phase3_charge
     if phase == 3 and body.llm_tier is not None:
         session.phase3_llm_tier = body.llm_tier
 

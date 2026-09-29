@@ -14,7 +14,7 @@ from app.llm.base import LLMClient, LLMMessage
 from app.llm.pricing import estimate_cost, format_cost
 from app.llm.structured import LLMParseError, complete_structured
 from app.agent.phase3_experience_fallback import apply_experience_fallback
-from app.agent.phase3_hollow import make_hollow_rejector
+from app.agent.phase3_hollow import make_hollow_rejector, phase3_is_hollow
 from app.models.resume import ParsedResume
 from app.agent.phase3_postprocess import (
     flatten_skill_terms,
@@ -565,6 +565,10 @@ async def run(
         source=None if scoped else session.resume_parsed,
     )
 
+    llm_delivery_failed = not scoped and phase3_is_hollow(
+        output, source=session.resume_parsed
+    )
+
     output = apply_experience_fallback(
         output,
         resume_parsed=session.resume_parsed,
@@ -614,6 +618,14 @@ async def run(
         output,
         user_info=session.user_info,
         account_email=account_email,
+    )
+
+    output = output.model_copy(
+        update={
+            "phase3_delivery": (
+                "deterministic_fallback" if llm_delivery_failed else "llm"
+            )
+        }
     )
 
     await event_queue.put({"event": "partial", "phase": 3, "data": json.loads(output.model_dump_json())})

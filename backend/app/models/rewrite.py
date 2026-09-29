@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -48,6 +48,10 @@ class TailoredResumeOutput(BaseModel):
     certifications: list[str] = []
     rewrite_notes: list[str] = []
     metrics_needed: list[MetricNeeded] = []
+
+    # "deterministic_fallback" means the model returned an unusable tree and the
+    # sections were rebuilt from source text; drives credit-reversal policy.
+    phase3_delivery: Literal["llm", "deterministic_fallback"] = "llm"
 
     # Step 10 — master-resume retrieval trace.  ``selected_chunks`` is a
     # list of ``{chunk_id, section, score, tokens}`` dicts.

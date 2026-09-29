@@ -46,6 +46,7 @@ import {
   tryApplyMechanicalReinforceAt,
 } from "@/lib/mechanicalFix";
 import type { IssueAnchor } from "@/lib/api";
+import { resolvePhase3Delivery } from "@/lib/phase3Delivery";
 import { ExportButtons } from "@/components/session/ExportButtons";
 import { HumanProofreadNotice } from "@/components/session/HumanProofreadNotice";
 import { OpenInFlintButton } from "@/components/session/OpenInFlintButton";
@@ -275,6 +276,8 @@ function SessionContent() {
   const activeStepRef = useRef<Step>(step);
   const phase4RecalcRef = useRef(false);
   const tailoredBackupRef = useRef<TailoredResumeOutput | null>(null);
+  // Resume on screen when a forced regenerate began; partial events overwrite tailoredBackupRef.
+  const regenPriorRef = useRef<TailoredResumeOutput | null>(null);
   const aiControlsRef = useRef<HTMLDivElement>(null);
   // Guard: track the last Phase 3 done event that already bumped editorSyncKey.
   // Prevents the main lastEvent effect from double-firing when unstable deps
@@ -472,10 +475,12 @@ function SessionContent() {
         if (phase === 1) setKeywords(null);
         if (phase === 2) setAudit(null);
         if (phase === 3) {
-          tailoredBackupRef.current = tailoredBackupRef.current;
+          regenPriorRef.current = tailoredBackupRef.current;
           setTailored(null);
         }
         if (phase === 4) setQa(null);
+      } else if (phase === 3) {
+        regenPriorRef.current = null;
       }
       setProgressLog([]);
       processedEventCountRef.current = 0;
@@ -503,8 +508,10 @@ function SessionContent() {
           dispatchCreditsExhausted();
           requestBackendSessionRefresh();
         }
-        if (phase === 3 && tailoredBackupRef.current) {
-          setTailored(tailoredBackupRef.current);
+        const restorable = regenPriorRef.current ?? tailoredBackupRef.current;
+        regenPriorRef.current = null;
+        if (phase === 3 && restorable) {
+          setTailored(restorable);
         }
       }
     },
@@ -930,7 +937,23 @@ function SessionContent() {
     }
     if (lastEvent.event === "done" && lastEvent.phase !== undefined) {
       sessionCheckFloor.invalidate(`${userKeyRef.current}:${sessionId}`);
-      applyPhaseOutputByNumber(lastEvent.phase, lastEvent.output);
+      if (lastEvent.phase === 3) {
+        const resolved = resolvePhase3Delivery({
+          output: lastEvent.output as TailoredResumeOutput,
+          priorKept: lastEvent.prior_kept,
+          creditRefunded: lastEvent.credit_refunded,
+          priorSnapshot: regenPriorRef.current,
+        });
+        regenPriorRef.current = null;
+        setTailored(resolved.tailored);
+        if (resolved.restoredFromSnapshot) {
+          void saveTailoredResume(sessionId, resolved.tailored).catch(() => {});
+        }
+        // Reconcile the credit display with what the server actually kept charged.
+        requestBackendSessionRefresh();
+      } else {
+        applyPhaseOutputByNumber(lastEvent.phase, lastEvent.output);
+      }
 
       const chainAudit =
         pipeline?.mode === "full" && lastEvent.phase === 1 && activeStep === "analysis";
@@ -1024,8 +1047,10 @@ function SessionContent() {
     setAtsRecalcRunning(false);
     setRunError(sseError);
     setRunErrorType("connection_lost");
-    if (activeStepRef.current === "rewrite" && tailoredBackupRef.current) {
-      setTailored(tailoredBackupRef.current);
+    const restorable = regenPriorRef.current ?? tailoredBackupRef.current;
+    regenPriorRef.current = null;
+    if (activeStepRef.current === "rewrite" && restorable) {
+      setTailored(restorable);
     }
   }, [sseError]);
 
