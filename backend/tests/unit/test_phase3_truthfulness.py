@@ -12,7 +12,7 @@ from app.agent.phase3_truthfulness import (
     validate_bullet_metrics,
 )
 from app.models.resume import EducationEntry, ExperienceEntry, ParsedResume, ProjectEntry
-from app.models.rewrite import TailoredEducationEntry, TailoredExperienceEntry, TailoredResumeOutput
+from app.models.rewrite import TailoredExperienceEntry, TailoredResumeOutput
 from app.models.session import ApprovedMetric
 
 
@@ -195,18 +195,16 @@ def test_backfill_empty_experience_bullets_from_parsed() -> None:
     assert any("restored bullets" in n.lower() for n in result.rewrite_notes)
 
 
-def test_restore_missing_sections_re_injects_education_and_projects() -> None:
+def test_restore_missing_sections_only_handles_certifications() -> None:
     parsed = ParsedResume(
         education=[EducationEntry(degree="BS CS", institution="MIT", year="2010")],
         projects=[ProjectEntry(name="Side Project", bullets=["Built API."])],
+        certifications=["AWS SAA"],
     )
-    output = TailoredResumeOutput(experience=[], education=[], projects=[])
-    result = restore_missing_sections(output, parsed)
-    assert len(result.education) == 1
-    assert result.education[0].institution == "MIT"
-    assert len(result.projects) == 1
-    assert result.projects[0]["name"] == "Side Project"
-    assert any("restored" in n.lower() for n in result.rewrite_notes)
+    result = restore_missing_sections(TailoredResumeOutput(), parsed)
+    assert result.certifications == ["AWS SAA"]
+    assert result.education == []
+    assert result.projects == []
 
 
 def test_apply_truthfulness_strips_jd_title_from_summary() -> None:

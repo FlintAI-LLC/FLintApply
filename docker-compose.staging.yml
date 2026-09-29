@@ -16,6 +16,8 @@ services:
       - DATABASE_URL=postgresql+asyncpg://smart_resume:${POSTGRES_PASSWORD:-password}@postgres:5432/smart_resume
       - ALLOWED_ORIGINS=["http://localhost:${STAGING_FRONTEND_PORT:-3001}","http://frontend:3000"]
       - FRONTEND_BASE_URL=http://localhost:${STAGING_FRONTEND_PORT:-3001}
+      - AZURE_AD_CLIENT_ID=${AZURE_AD_CLIENT_ID:-}
+      - AZURE_AD_CLIENT_SECRET=${AZURE_AD_CLIENT_SECRET:-}
     env_file:
       - path: ./backend/.env.staging
         required: true

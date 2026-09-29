@@ -39,13 +39,11 @@ function TierPriceBlock({
     <div className="mt-2 min-h-[4.75rem]">
       {price ? (
         <>
-          <p className="flex items-baseline gap-1.5">
-            <span className="text-3xl font-bold text-slate-900 dark:text-white">
-              {price}
-            </span>
-            <span className="text-xs text-slate-600 dark:text-slate-400">
-              {planCycleSuffix(plan.cycle)}
-            </span>
+          <p className="text-3xl font-bold leading-tight text-slate-900 dark:text-white">
+            {price}
+          </p>
+          <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+            {planCycleSuffix(plan.cycle)}
           </p>
           <p className={`${FINE_PRINT} mt-1`}>
             {plan.trial_days
@@ -101,9 +99,9 @@ export function PricingTierGrid({
   }, [initialPricing]);
 
   return (
-    <div className="-mx-6 overflow-x-auto px-6 pb-2 lg:mx-0 lg:overflow-visible lg:px-0">
-      <div className="grid w-max min-w-full auto-cols-[min(15.5rem,calc(100vw-3rem))] grid-flow-col items-stretch gap-4 lg:w-auto lg:auto-cols-auto lg:grid-flow-row lg:grid-cols-6">
-        <div className="flex h-full flex-col rounded-xl border border-emerald-200 bg-emerald-50/50 p-5 dark:border-emerald-700/50 dark:bg-emerald-900/20">
+    <div className="-mx-6 overflow-x-auto px-6 pb-2 sm:mx-0 sm:overflow-visible sm:px-0">
+      <div className="grid w-max min-w-full auto-cols-[min(16rem,calc(100vw-3rem))] grid-flow-col items-stretch gap-4 sm:mx-auto sm:w-full sm:max-w-6xl sm:auto-cols-auto sm:grid-flow-row sm:grid-cols-2 lg:grid-cols-3">
+        <div className="flex h-full min-w-0 flex-col rounded-xl border border-emerald-200 bg-emerald-50/50 p-5 dark:border-emerald-700/50 dark:bg-emerald-900/20">
           <h3 className="font-semibold text-slate-900 dark:text-slate-100">Free</h3>
           <div className="mt-2 min-h-[4.75rem]">
             <p className="text-3xl font-bold text-slate-900 dark:text-white">$0</p>
@@ -139,7 +137,7 @@ export function PricingTierGrid({
           return (
             <div
               key={plan.code}
-              className={`relative flex h-full flex-col rounded-xl border p-5 ${
+              className={`relative flex h-full min-w-0 flex-col rounded-xl border p-5 ${
                 highlighted
                   ? "border-amber-400/60 bg-amber-50/40 ring-1 ring-amber-400/30 dark:border-amber-500/40 dark:bg-amber-950/20"
                   : "border-slate-300 bg-slate-100/40 dark:border-slate-700 dark:bg-slate-800/40"
@@ -177,7 +175,7 @@ export function PricingTierGrid({
           );
         })}
 
-        <div className="flex h-full flex-col rounded-xl border border-violet-300/60 bg-violet-50/30 p-5 dark:border-violet-700/50 dark:bg-violet-950/20">
+        <div className="flex h-full min-w-0 flex-col rounded-xl border border-violet-300/60 bg-violet-50/30 p-5 dark:border-violet-700/50 dark:bg-violet-950/20">
           <h3 className="font-semibold text-slate-900 dark:text-slate-100">
             {CUSTOMIZED_TIER_DISPLAY_NAME}
           </h3>

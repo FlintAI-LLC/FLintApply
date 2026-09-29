@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { HeroMessageRotator } from "@/components/marketing/HeroMessageRotator";
 import { HeroProductBackground } from "@/components/marketing/HeroProductBackground";
+import { LaunchCountdownRibbon } from "@/components/marketing/LaunchCountdownRibbon";
 import { HERO_MESSAGES } from "@/lib/marketing/heroStrengths";
 import {
   activeStageFromProgress,
@@ -25,7 +26,6 @@ const MESSAGE_COUNT = HERO_MESSAGES.length;
  */
 export function HeroScrollExperience() {
   const trackRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<number | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -41,39 +41,34 @@ export function HeroScrollExperience() {
   useEffect(() => {
     if (reducedMotion) return;
 
-    const sync = () => {
-      if (frameRef.current !== null) return;
-      frameRef.current = requestAnimationFrame(() => {
-        frameRef.current = null;
-        const track = trackRef.current;
-        if (!track) return;
+    const measure = () => {
+      const track = trackRef.current;
+      if (!track) return;
 
-        const rect = track.getBoundingClientRect();
-        const progress = pinnedProgressForSticky(
-          { top: rect.top, height: rect.height },
-          window.innerHeight,
-          PINNED_STICKY_TOP_PX,
-        );
-        setScrollProgress(progress);
+      const rect = track.getBoundingClientRect();
+      const progress = pinnedProgressForSticky(
+        { top: rect.top, height: rect.height },
+        window.innerHeight,
+        PINNED_STICKY_TOP_PX,
+      );
+      setScrollProgress(progress);
 
-        const messageProgress = heroMessageProgressFromTrack(
-          progress,
-          MESSAGE_COUNT,
-        );
-        const next = activeStageFromProgress(messageProgress, MESSAGE_COUNT);
-        if (next !== null) {
-          setActiveIndex((current) => (current === next ? current : next));
-        }
-      });
+      const messageProgress = heroMessageProgressFromTrack(
+        progress,
+        MESSAGE_COUNT,
+      );
+      const next = activeStageFromProgress(messageProgress, MESSAGE_COUNT);
+      if (next !== null) {
+        setActiveIndex((current) => (current === next ? current : next));
+      }
     };
 
-    sync();
-    window.addEventListener("scroll", sync, { passive: true });
-    window.addEventListener("resize", sync, { passive: true });
+    measure();
+    window.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure, { passive: true });
     return () => {
-      window.removeEventListener("scroll", sync);
-      window.removeEventListener("resize", sync);
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      window.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
     };
   }, [reducedMotion]);
 
@@ -83,11 +78,11 @@ export function HeroScrollExperience() {
   const pinnedPanel = (
     <>
       <HeroProductBackground fade={backgroundFade} />
-      <div className="relative z-[1] flex min-h-0 flex-1 flex-col px-4 sm:px-6">
+      <div className="relative z-[3] flex min-h-0 flex-1 flex-col px-4 sm:px-6">
         <HeroMessageRotator activeIndex={activeIndex} layout="viewport" />
       </div>
       <div
-        className="relative z-[1] shrink-0 flex flex-col items-center gap-1.5 px-4 pb-2 pt-2 text-slate-600 dark:text-slate-300"
+        className="relative z-[3] shrink-0 flex flex-col items-center gap-1.5 px-4 pb-2 pt-2 text-slate-600 dark:text-slate-300"
         aria-hidden
       >
         <div className="flex items-center gap-1.5" aria-hidden>
@@ -122,6 +117,7 @@ export function HeroScrollExperience() {
       <div
         className={`relative ${PINNED_PANEL_HEIGHT_CLASS} flex min-h-0 flex-col overflow-hidden rounded-none`}
       >
+        <LaunchCountdownRibbon />
         {pinnedPanel}
       </div>
     );
@@ -139,6 +135,7 @@ export function HeroScrollExperience() {
       <div
         className={`sticky ${PINNED_STICKY_TOP_CLASS} ${PINNED_PANEL_HEIGHT_CLASS} flex min-h-0 flex-col overflow-hidden`}
       >
+        <LaunchCountdownRibbon washed={activeIndex > 0} />
         {pinnedPanel}
       </div>
     </div>

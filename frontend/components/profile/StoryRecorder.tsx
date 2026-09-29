@@ -22,6 +22,11 @@ import { StoryInterview } from "./StoryInterview";
 import { type StoryMode, StoryModeSelector } from "./StoryModeSelector";
 import { StorySegment } from "./StorySegment";
 import { StorySaveConfirmDialog } from "./StorySaveConfirmDialog";
+import {
+  StoryGenerateConfirmDialog,
+  type StoryGenerateConfirmVariant,
+} from "./StoryGenerateConfirmDialog";
+import { StoryInlineError, storyErrorFromUnknown } from "./StoryInlineError";
 import { StoryVerifyPanel } from "./StoryVerifyPanel";
 import {
   generateStoryPreview,
@@ -85,6 +90,11 @@ export function StoryRecorder({ token, onSaved }: Props) {
   const [totalMs, setTotalMs] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const clearErrors = () => {
+    setError(null);
+    setErrorCode(null);
+  };
   // Index of the segment whose coach panel is open (null = none)
   const [openCoachIndex, setOpenCoachIndex] = useState<number | null>(null);
   const [storyBuildSessionId, setStoryBuildSessionId] = useState("");
@@ -94,6 +104,9 @@ export function StoryRecorder({ token, onSaved }: Props) {
   const [verifyReviewCount, setVerifyReviewCount] = useState(0);
   const [attestationChecked, setAttestationChecked] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [generateConfirmOpen, setGenerateConfirmOpen] = useState(false);
+  const [generateConfirmVariant, setGenerateConfirmVariant] =
+    useState<StoryGenerateConfirmVariant>("first_generate");
   const [saving, setSaving] = useState(false);
   const [lastGenerateBilling, setLastGenerateBilling] = useState<string | undefined>();
   const [lastSaveBilling, setLastSaveBilling] = useState<string | undefined>();
@@ -148,7 +161,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
     setHasGeneratedOnce(false);
     setPrevText(null);
     setOpenCoachIndex(null);
-    setError(null);
+    clearErrors();
     const nextId = resetStoryBuildSessionId();
     setStoryBuildSessionId(nextId);
     setCoachSessionUnlocked(false);
@@ -170,7 +183,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
   const segmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { voiceState, finalText, interimText, durationLabel, supportsWebSpeech,
-          start, stop, reset: resetVoice, setFinalText } = useVoiceRecorder({
+          start, stop, reset: resetVoice, setFinalText, error: voiceError } = useVoiceRecorder({
     onBlob: async (blob) => {
       const ext = blob.type.includes("ogg") ? "ogg" : blob.type.includes("mp4") ? "mp4" : "webm";
       const form = new FormData();
@@ -211,7 +224,8 @@ export function StoryRecorder({ token, onSaved }: Props) {
 
   // ── Total time tracker ─────────────────────────────────────────────────────
   const startTotalTimer = useCallback(() => {
-    totalStartRef.current = Date.now() - totalMs;
+    totalStartRef.current = Date.now() - totalMsRef.current;
+    if (totalTimerRef.current) clearInterval(totalTimerRef.current);
     totalTimerRef.current = setInterval(() => {
       const elapsed = Date.now() - totalStartRef.current;
       setTotalMs(elapsed);
@@ -219,8 +233,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
         void stop();
       }
     }, 500);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalMs]);
+  }, [stop]);
 
   const stopTotalTimer = useCallback(() => {
     if (totalTimerRef.current) { clearInterval(totalTimerRef.current); totalTimerRef.current = null; }
@@ -240,22 +253,38 @@ export function StoryRecorder({ token, onSaved }: Props) {
     await stop();
   }, [stop, clearSegmentTimer, stopTotalTimer]);
 
+  useEffect(() => {
+    if (!voiceError) return;
+    setError(voiceError);
+    if (recordingState === "idle") return;
+    setRecordingState("idle");
+    setReRecordingIndex(null);
+    clearSegmentTimer();
+    stopTotalTimer();
+  }, [voiceError, recordingState, clearSegmentTimer, stopTotalTimer]);
+
   // ── Start recording a new segment ─────────────────────────────────────────
   const startNewSegment = useCallback(async () => {
     if (segments.length >= MAX_SEGMENTS) return;
-    setError(null);
+    clearErrors();
     resetVoice();
+    const started = await start();
+    if (!started) return;
     setRecordingState("recording");
     startTotalTimer();
-    await start();
     segmentTimerRef.current = setTimeout(() => { void stopCurrentSegment(); }, SEGMENT_DURATION_MS);
   }, [segments.length, start, resetVoice, startTotalTimer, stopCurrentSegment]);
 
   // When voiceState reaches "preview", commit the segment
   useEffect(() => {
     if (voiceState !== "preview") return;
-    const text = finalText.trim();
-    if (!text) return;
+    const text = (finalText || interimText).trim();
+    if (!text) {
+      setRecordingState("idle");
+      setError("We didn't catch any speech. Allow the microphone and try again.");
+      resetVoice();
+      return;
+    }
 
     if (recordingState === "re-recording" && reRecordingIndex !== null) {
       setSegments((prev) => persistSegments(prev.map((s, i) => i === reRecordingIndex ? text : s), storyMode ?? "free"));
@@ -271,10 +300,11 @@ export function StoryRecorder({ token, onSaved }: Props) {
   // ── Re-record a specific segment ──────────────────────────────────────────
   const startReRecord = useCallback(async (index: number) => {
     resetVoice();
+    clearErrors();
+    const started = await start();
+    if (!started) return;
     setReRecordingIndex(index);
     setRecordingState("re-recording");
-    setError(null);
-    await start();
     segmentTimerRef.current = setTimeout(() => { void stopCurrentSegment(); }, SEGMENT_DURATION_MS);
   }, [resetVoice, start, stopCurrentSegment]);
 
@@ -283,11 +313,49 @@ export function StoryRecorder({ token, onSaved }: Props) {
     setSegments((prev) => persistSegments(prev.filter((_, i) => i !== index), storyMode ?? "free"));
   };
 
+  const openGenerateConfirm = (variant: StoryGenerateConfirmVariant) => {
+    if (openCoachIndex !== null) {
+      setError(
+        `Close Coach me on segment ${openCoachIndex + 1} (or add the coach answer as a segment) before generating your resume.`,
+      );
+      setErrorCode(null);
+      return;
+    }
+    clearErrors();
+    setGenerateConfirmVariant(variant);
+    setGenerateConfirmOpen(true);
+  };
+
+  const openBackToSegmentsConfirm = () => {
+    if (hasGeneratedOnce && isFreeUser) {
+      setGenerateConfirmVariant("back_to_segments");
+      setGenerateConfirmOpen(true);
+      return;
+    }
+    setReviewText(null);
+    setVerifyItems([]);
+    setVerifyReviewCount(0);
+    setAttestationChecked(false);
+    setPrevText(null);
+    patchStoryDraft({ reviewText: null });
+  };
+
+  const confirmBackToSegments = () => {
+    setGenerateConfirmOpen(false);
+    setReviewText(null);
+    setVerifyItems([]);
+    setVerifyReviewCount(0);
+    setAttestationChecked(false);
+    setPrevText(null);
+    patchStoryDraft({ reviewText: null });
+  };
+
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (segments.length === 0) return;
     setSubmitting(true);
-    setError(null);
+    setGenerateConfirmOpen(false);
+    clearErrors();
     try {
       const result = await generateStoryPreview(segments, token, {
         whisperPath: !supportsWebSpeech,
@@ -302,7 +370,9 @@ export function StoryRecorder({ token, onSaved }: Props) {
       setAttestationChecked(false);
       patchStoryDraft({ reviewText: text, storyMode: storyMode ?? "free", segments });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to generate resume from story.");
+      const parsed = storyErrorFromUnknown(e);
+      setErrorCode(parsed.code);
+      setError(parsed.message);
     } finally {
       setSubmitting(false);
     }
@@ -325,7 +395,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
   const handleConfirmSave = async () => {
     if (!reviewText || !attestationChecked) return;
     setSaving(true);
-    setError(null);
+    clearErrors();
     try {
       const result = await saveStoryResume(reviewText, token, {
         segments,
@@ -337,7 +407,9 @@ export function StoryRecorder({ token, onSaved }: Props) {
       setSaveDialogOpen(false);
       finishAndSave();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save resume to profile.");
+      const parsed = storyErrorFromUnknown(e);
+      setErrorCode(parsed.code);
+      setError(parsed.message);
     } finally {
       setSaving(false);
     }
@@ -527,7 +599,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
           </button>
           <button
             type="button"
-            onClick={() => void handleSubmit()}
+            onClick={() => openGenerateConfirm("regenerate")}
             className="px-5 py-3 border border-slate-300 dark:border-slate-700 hover:border-amber-400/50 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium rounded-xl transition-colors text-sm"
           >
             Regenerate
@@ -537,27 +609,39 @@ export function StoryRecorder({ token, onSaved }: Props) {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setReviewText(null);
-              setVerifyItems([]);
-              setVerifyReviewCount(0);
-              setAttestationChecked(false);
-              setPrevText(null);
-              patchStoryDraft({ reviewText: null });
-            }}
+            onClick={openBackToSegmentsConfirm}
             className="px-5 py-3 border border-slate-300 dark:border-slate-700 hover:border-slate-500 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium rounded-xl transition-colors text-sm"
           >
             Back
           </button>
         </div>
-        {error && (
-          <p className="text-red-700 dark:text-red-400 text-xs bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
-            {error}
-          </p>
+        {(error || errorCode) && (
+          <StoryInlineError error={error} errorCode={errorCode} />
         )}
         <p className="text-slate-600 dark:text-slate-400 text-xs">
           Nothing is saved to your profile until you confirm. First complete journey: generate + save are free.
         </p>
+
+        <StoryGenerateConfirmDialog
+          open={generateConfirmOpen}
+          variant={generateConfirmVariant}
+          segmentCount={segments.length}
+          creditLabel={storyGenerateCreditLabel(
+            generateConfirmVariant === "first_generate"
+              ? "first_story_generate"
+              : "free_credit",
+            isFreeUser,
+          )}
+          submitting={submitting}
+          onClose={() => setGenerateConfirmOpen(false)}
+          onConfirm={() => {
+            if (generateConfirmVariant === "back_to_segments") {
+              confirmBackToSegments();
+              return;
+            }
+            void handleSubmit();
+          }}
+        />
 
         <StorySaveConfirmDialog
           open={saveDialogOpen}
@@ -637,10 +721,15 @@ export function StoryRecorder({ token, onSaved }: Props) {
             </span>
           </div>
           {supportsWebSpeech ? (
-            <p className="text-slate-600 dark:text-slate-400 text-sm">
-              Your browser supports live transcription. Words appear as you speak. First resume generate from story is{" "}
-              <strong className="text-slate-900 dark:text-white">free</strong>; regenerates cost 1 credit. Saving to profile: first save free, later saves 1 credit.
-            </p>
+            <div className="space-y-2">
+              <p className="text-slate-600 dark:text-slate-400 text-sm">
+                Your browser supports live transcription. Words appear as you speak. First resume generate from story is{" "}
+                <strong className="text-slate-900 dark:text-white">free</strong>; regenerates cost 1 credit. Saving to profile: first save free, later saves 1 credit.
+              </p>
+              <p className="text-slate-600 dark:text-slate-400 text-xs">
+                The first time, your browser will ask to use the microphone. Click Allow — it remembers that for this site on this device.
+              </p>
+            </div>
           ) : (
             <div className="space-y-2">
               <p className="text-slate-600 dark:text-slate-400 text-sm">
@@ -682,6 +771,9 @@ export function StoryRecorder({ token, onSaved }: Props) {
           <Mic className="w-5 h-5" />
           {supportsWebSpeech ? "Start your story — free" : "Start your story — needs a paid plan"}
         </button>
+        {(error || errorCode) && (
+          <StoryInlineError error={error} errorCode={errorCode} />
+        )}
       </div>
     );
   }
@@ -806,6 +898,14 @@ export function StoryRecorder({ token, onSaved }: Props) {
       )}
 
       {/* Action buttons */}
+      {segments.length > 0 && !isRecordingAnything && (
+        <div className="rounded-xl border border-amber-400/35 bg-amber-50/80 dark:bg-amber-950/25 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
+          Record every segment you want before you generate. Your first generate is free; if you go
+          back to add more and generate again, that costs{" "}
+          <strong>{isFreeUser ? "1 credit" : "another generate on your plan"}</strong>.
+        </div>
+      )}
+
       <div className="flex items-center gap-3 pt-2">
         {canAddSegment && (
           <button
@@ -821,7 +921,9 @@ export function StoryRecorder({ token, onSaved }: Props) {
         {segments.length > 0 && !isRecordingAnything && (
           <button
             type="button"
-            onClick={() => void handleSubmit()}
+            onClick={() =>
+              openGenerateConfirm(hasGeneratedOnce ? "regenerate" : "first_generate")
+            }
             disabled={submitting}
             className="flex-1 py-3 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
           >
@@ -843,11 +945,30 @@ export function StoryRecorder({ token, onSaved }: Props) {
         )}
       </div>
 
-      {error && (
-        <div className="text-red-700 dark:text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-lg p-3">
-          {error}
-        </div>
+      {(error || errorCode) && (
+        <StoryInlineError error={error} errorCode={errorCode} />
       )}
+
+      <StoryGenerateConfirmDialog
+        open={generateConfirmOpen}
+        variant={generateConfirmVariant}
+        segmentCount={segments.length}
+        creditLabel={storyGenerateCreditLabel(
+          generateConfirmVariant === "first_generate"
+            ? "first_story_generate"
+            : "free_credit",
+          isFreeUser,
+        )}
+        submitting={submitting}
+        onClose={() => setGenerateConfirmOpen(false)}
+        onConfirm={() => {
+          if (generateConfirmVariant === "back_to_segments") {
+            confirmBackToSegments();
+            return;
+          }
+          void handleSubmit();
+        }}
+      />
     </div>
   );
 }

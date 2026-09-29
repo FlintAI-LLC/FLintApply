@@ -107,7 +107,7 @@ Upgraded in the 2026-08-22 ratchet: `aiohttp`, `cryptography`, `httplib2`,
 | `X-Content-Type-Options: nosniff` | Next.js + Caddy | — |
 | `Referrer-Policy: strict-origin-when-cross-origin` | Next.js + Caddy | — |
 | `X-Frame-Options: DENY` + `frame-ancestors 'none'` | Next.js CSP + Caddy | Clickjacking defense |
-| `Permissions-Policy` | Next.js + Caddy | Disables unused device APIs; `payment=(self)` for Stripe checkout |
+| `Permissions-Policy` | Next.js + Caddy | Disables unused device APIs; `microphone=(self)` for story-mode voice; `payment=(self)` for Stripe checkout |
 
 Regression coverage: `frontend/tests/lib/securityHeaders.test.ts`,
 `frontend/tests/lib/csp.test.ts` (policy), and `tests/e2e/landing.spec.ts`

@@ -30,8 +30,8 @@ def test_credit_pack_codes_and_grants() -> None:
     assert not is_credit_pack_code("better_pack")
     assert is_one_time_purchase_code("credits_5")
     assert is_one_time_purchase_code("better_pack")
-    assert grant_for_one_time_code("credits_5") == (CreditKind.free, 5)
-    assert grant_for_one_time_code("credits_15") == (CreditKind.free, 15)
+    assert grant_for_one_time_code("credits_5") == (CreditKind.free, 10)
+    assert grant_for_one_time_code("credits_15") == (CreditKind.free, 25)
     assert grant_for_one_time_code("better_pack") == (CreditKind.better, 5)
 
 
@@ -73,8 +73,13 @@ async def test_build_public_billing_prices_includes_credit_pack_addons(
     assert addon_codes == list(CREDIT_PACK_CODES)
     pack5 = next(item for item in payload["addons"] if item["code"] == "credits_5")
     assert pack5["kind"] == "credit_pack"
-    assert pack5["credits_granted"] == 5
+    assert pack5["display_name"] == "10 credits"
+    assert pack5["credits_granted"] == 10
     assert pack5["unit_amount_cents"] == 500
+    pack15 = next(item for item in payload["addons"] if item["code"] == "credits_15")
+    assert pack15["display_name"] == "25 credits"
+    assert pack15["credits_granted"] == 25
+    assert pack15["unit_amount_cents"] == 1200
 
 
 @pytest.mark.asyncio

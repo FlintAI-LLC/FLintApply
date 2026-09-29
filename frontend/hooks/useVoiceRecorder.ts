@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  MIC_PERMISSION_DENIED,
+  releaseMediaStream,
+  requestMicrophoneStream,
+} from "@/lib/voice/microphonePermission";
 
 export type VoiceState = "idle" | "speaking" | "recording" | "transcribing" | "preview";
 
@@ -40,6 +45,9 @@ export function useVoiceRecorder({ onBlob }: UseVoiceRecorderOptions = {}) {
   const chunksRef       = useRef<Blob[]>([]);
   const timerRef        = useRef<ReturnType<typeof setInterval> | null>(null);
   const startMsRef      = useRef(0);
+  const accumulatedRef  = useRef("");
+  const interimRef      = useRef("");
+  const wantListeningRef = useRef(false);
 
   const supportsWebSpeech =
     typeof window !== "undefined" &&
@@ -65,6 +73,20 @@ export function useVoiceRecorder({ onBlob }: UseVoiceRecorderOptions = {}) {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   };
 
+  const flushTranscript = () => {
+    const flushed = [accumulatedRef.current, interimRef.current]
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(" ");
+    if (flushed) {
+      accumulatedRef.current = flushed;
+      interimRef.current = "";
+      setFinalText(flushed);
+      setInterimText("");
+    }
+    return flushed;
+  };
+
   // ── Web Speech API path ────────────────────────────────────────────────────
   const startWebSpeech = useCallback(() => {
     const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -75,37 +97,68 @@ export function useVoiceRecorder({ onBlob }: UseVoiceRecorderOptions = {}) {
     rec.interimResults  = true;
     rec.lang            = "en-US";
     recognitionRef.current = rec;
-
-    let accumulated = "";
+    accumulatedRef.current = "";
+    interimRef.current = "";
+    wantListeningRef.current = true;
 
     rec.onresult = (e: SpeechRecognitionEvent) => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const text = e.results[i][0].transcript;
         if (e.results[i].isFinal) {
-          accumulated += (accumulated ? " " : "") + text.trim();
+          accumulatedRef.current += (accumulatedRef.current ? " " : "") + text.trim();
         } else {
           interim = text;
         }
       }
-      setFinalText(accumulated);
+      interimRef.current = interim;
+      setFinalText(accumulatedRef.current);
       setInterimText(interim);
     };
 
     rec.onerror = (e: SpeechRecognitionErrorEvent) => {
-      if (e.error === "aborted") return; // intentional stop
-      setError(`Speech recognition error: ${e.error}`);
+      if (e.error === "aborted" || e.error === "no-speech") return;
+      wantListeningRef.current = false;
+      setError(
+        e.error === "not-allowed" || e.error === "service-not-allowed"
+          ? MIC_PERMISSION_DENIED
+          : `Speech recognition error: ${e.error}`,
+      );
       setVoiceState("idle");
       stopTimer();
     };
 
     rec.onend = () => {
+      // Chrome ends a recognition session after ~60s even with continuous=true.
+      if (wantListeningRef.current) {
+        window.setTimeout(() => {
+          if (!wantListeningRef.current || recognitionRef.current !== rec) return;
+          try {
+            rec.start();
+          } catch {
+            wantListeningRef.current = false;
+            stopTimer();
+            flushTranscript();
+            recognitionRef.current = null;
+            setVoiceState((s) => (s === "speaking" ? "preview" : s));
+          }
+        }, 0);
+        return;
+      }
       stopTimer();
-      setInterimText("");
+      flushTranscript();
+      recognitionRef.current = null;
       setVoiceState((s) => (s === "speaking" ? "preview" : s));
     };
 
-    rec.start();
+    try {
+      rec.start();
+    } catch (err) {
+      wantListeningRef.current = false;
+      recognitionRef.current = null;
+      setError(err instanceof Error ? err.message : "Could not start the microphone.");
+      return false;
+    }
     startTimer();
     setVoiceState("speaking");
     setFinalText("");
@@ -115,14 +168,7 @@ export function useVoiceRecorder({ onBlob }: UseVoiceRecorderOptions = {}) {
   }, []);
 
   // ── MediaRecorder fallback ─────────────────────────────────────────────────
-  const startMediaRecorder = useCallback(async () => {
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      setError("Microphone access denied. Allow microphone permission and try again.");
-      return;
-    }
+  const startMediaRecorder = useCallback(async (stream: MediaStream): Promise<boolean> => {
     const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
       ? "audio/webm;codecs=opus"
       : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
@@ -137,15 +183,29 @@ export function useVoiceRecorder({ onBlob }: UseVoiceRecorderOptions = {}) {
     setVoiceState("recording");
     setFinalText("");
     setError(null);
+    return true;
   }, []);
 
   // ── Start (picks the best path) ────────────────────────────────────────────
-  const start = useCallback(async () => {
-    if (supportsWebSpeech) {
-      startWebSpeech();
-    } else {
-      await startMediaRecorder();
+  const start = useCallback(async (): Promise<boolean> => {
+    // getUserMedia is what shows Chrome's persistent permission prompt.
+    // After Allow, the browser remembers it for this HTTPS origin.
+    const primed = await requestMicrophoneStream();
+    if (!primed.ok) {
+      setError(primed.message);
+      setVoiceState("idle");
+      return false;
     }
+    if (supportsWebSpeech) {
+      releaseMediaStream(primed.stream);
+      const ok = startWebSpeech();
+      if (!ok) {
+        setError("Could not start the microphone.");
+        return false;
+      }
+      return true;
+    }
+    return startMediaRecorder(primed.stream);
   }, [supportsWebSpeech, startWebSpeech, startMediaRecorder]);
 
   // ── Stop ───────────────────────────────────────────────────────────────────
@@ -154,15 +214,26 @@ export function useVoiceRecorder({ onBlob }: UseVoiceRecorderOptions = {}) {
 
     // Web Speech path
     if (recognitionRef.current) {
+      wantListeningRef.current = false;
+      flushTranscript();
       recognitionRef.current.stop();
-      recognitionRef.current = null;
       // onend will set voiceState → "preview"
+      return;
+    }
+    if (wantListeningRef.current || accumulatedRef.current || interimRef.current) {
+      wantListeningRef.current = false;
+      flushTranscript();
+      setVoiceState("preview");
       return;
     }
 
     // MediaRecorder fallback path
     const mr = mediaRecRef.current;
-    if (!mr) return;
+    if (!mr) {
+      const flushed = flushTranscript();
+      setVoiceState(flushed ? "preview" : "idle");
+      return;
+    }
     await new Promise<void>((resolve) => {
       mr.addEventListener("stop", () => resolve(), { once: true });
       mr.stop();
@@ -185,8 +256,11 @@ export function useVoiceRecorder({ onBlob }: UseVoiceRecorderOptions = {}) {
   }, [onBlob]);
 
   const reset = useCallback(() => {
+    wantListeningRef.current = false;
     recognitionRef.current?.stop();
     recognitionRef.current = null;
+    accumulatedRef.current = "";
+    interimRef.current = "";
     mediaRecRef.current?.stream?.getTracks().forEach((t) => t.stop());
     mediaRecRef.current = null;
     stopTimer();

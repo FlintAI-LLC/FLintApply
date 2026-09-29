@@ -60,6 +60,16 @@ class PhaseRunScope(BaseModel):
     mode: Literal["regen", "add"] = "regen"
 
 
+class Phase3Charge(BaseModel):
+    """How the current Phase 3 run was paid for; lets a hollow run be reversed once."""
+
+    charge_id: str
+    charged_to: str
+    credit_transaction_id: str | None = None
+    subscription_id: str | None = None
+    refunded: bool = False
+
+
 class Session(BaseModel):
     session_id: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -103,6 +113,10 @@ class Session(BaseModel):
     phase3_status: PhaseStatus = PhaseStatus.pending
     phase3_output: TailoredResumeOutput | None = None
     phase3_versions: list[ResumeVersion] = []
+    # Tailored resume that existed when a forced regenerate started; kept so a
+    # degraded rerun can be discarded instead of replacing it.
+    phase3_prior_output: TailoredResumeOutput | None = None
+    phase3_charge: Phase3Charge | None = None
 
     phase4_status: PhaseStatus = PhaseStatus.pending
     phase4_output: QAOutput | None = None

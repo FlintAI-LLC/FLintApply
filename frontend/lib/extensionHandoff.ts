@@ -1,17 +1,75 @@
 /** Persist extension JD handoff across auth / onboarding redirects. */
 
 const HANDOFF_KEY = "sr_extension_jd_handoff"
+const CONSUMED_KEY = "sr_extension_jd_handoff_consumed"
+
+/** A handoff older than this never hijacks a later run — capture, not carry-over (defect #6/#10). */
+export const EXTENSION_HANDOFF_TTL_MS = 30 * 60 * 1000
+
+interface ConsumedMarker {
+  jd_id: string
+  consumed_at: number
+}
+
+function readConsumedMarker(): ConsumedMarker | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = sessionStorage.getItem(CONSUMED_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as ConsumedMarker
+    if (!parsed?.jd_id || typeof parsed.consumed_at !== "number") return null
+    if (Date.now() - parsed.consumed_at > EXTENSION_HANDOFF_TTL_MS) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+/** True once `markExtensionHandoffConsumed` has recorded this exact jd_id. */
+export function isExtensionHandoffConsumed(jdId: string): boolean {
+  return readConsumedMarker()?.jd_id === jdId
+}
+
+/**
+ * Record that this jd_id has been fully consumed (JD loaded into the wizard,
+ * or a permanent 404). The URL — not sessionStorage — is the durable carrier
+ * of jd_id: every step transition and JD-load re-render re-derives a handoff
+ * from it, so `saveExtensionHandoff` must refuse to re-persist the SAME
+ * jd_id once it is marked consumed, or the handoff resurrects itself the
+ * instant the URL is touched again (AC9).
+ */
+export function markExtensionHandoffConsumed(jdId: string): void {
+  if (typeof window === "undefined") return
+  sessionStorage.setItem(
+    CONSUMED_KEY,
+    JSON.stringify({ jd_id: jdId, consumed_at: Date.now() } satisfies ConsumedMarker),
+  )
+}
 
 export interface ExtensionHandoff {
   jd_id: string
   source: string
   step: string
   jd_review?: boolean
+  /** epoch ms this handoff was captured; drives EXTENSION_HANDOFF_TTL_MS expiry. */
+  captured_at?: number
 }
 
 export function saveExtensionHandoff(handoff: ExtensionHandoff): void {
   if (typeof window === "undefined") return
-  sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(handoff))
+  // Once this jd_id is consumed, every later re-derivation from the URL
+  // must be a no-op (AC9) — see markExtensionHandoffConsumed.
+  if (isExtensionHandoffConsumed(handoff.jd_id)) return
+  // Only extension-sourced handoffs are durable across auth/onboarding. An
+  // in-app "jobs" link replaces the URL with source=jobs; persisting that
+  // would make ExtensionHandoffBanner claim extension provenance for a job
+  // saved entirely in-app (S3).
+  if (handoff.source !== "extension") return
+  const stamped: ExtensionHandoff = {
+    ...handoff,
+    captured_at: handoff.captured_at ?? Date.now(),
+  }
+  sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(stamped))
 }
 
 export function getExtensionHandoff(): ExtensionHandoff | null {
@@ -21,11 +79,21 @@ export function getExtensionHandoff(): ExtensionHandoff | null {
     if (!raw) return null
     const parsed = JSON.parse(raw) as ExtensionHandoff
     if (!parsed?.jd_id) return null
+    if (
+      typeof parsed.captured_at === "number" &&
+      Date.now() - parsed.captured_at > EXTENSION_HANDOFF_TTL_MS
+    ) {
+      // Stale — clear so it cannot hijack a later tailoring run or leave the
+      // dashboard banner up forever.
+      clearExtensionHandoff()
+      return null
+    }
     return {
       jd_id: parsed.jd_id,
       source: parsed.source ?? "extension",
       step: parsed.step ?? "jd",
       jd_review: parsed.jd_review,
+      captured_at: parsed.captured_at,
     }
   } catch {
     return null

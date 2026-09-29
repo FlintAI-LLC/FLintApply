@@ -20,9 +20,10 @@ the row processed without mutation and log ``out_of_order_skip`` —
 Stripe is the source of truth and retransmits, but we never let an
 older event overwrite a newer state.
 
-One-time grants (``credits_5``, ``credits_15``, plus retired LLM packs) write a
-``CreditTransaction`` keyed by ``(stripe_event_id, credit_kind)`` so
-double delivery becomes a no-op via the partial UNIQUE index from §7.5.
+One-time grants (``credits_5`` / ``credits_15`` SKUs, 10 and 25 credits,
+plus retired LLM packs) write a ``CreditTransaction`` keyed by
+``(stripe_event_id, credit_kind)`` so double delivery becomes a no-op
+via the partial UNIQUE index from §7.5.
 """
 
 from __future__ import annotations

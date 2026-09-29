@@ -47,6 +47,7 @@ export default defineConfig({
       NEXTAUTH_SECRET: "playwright-local-secret",
       NEXTAUTH_URL: BASE_URL,
       NEXT_PUBLIC_SITE_URL: BASE_URL,
+      NEXT_PUBLIC_LAUNCH_AT: "",
       NEXT_PUBLIC_API_URL: "http://localhost:8000",
       NEXT_PUBLIC_APP_ENV: "local",
       GOOGLE_CLIENT_ID: "playwright-google-client-id",

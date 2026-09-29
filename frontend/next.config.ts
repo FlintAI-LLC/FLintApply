@@ -3,7 +3,7 @@ import { securityResponseHeaders } from "./lib/securityHeaders";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  allowedDevOrigins: ["192.168.88.24"],
+  allowedDevOrigins: ["localhost", "127.0.0.1", "192.168.88.24", "192.168.88.31"],
   async headers() {
     return [
       {

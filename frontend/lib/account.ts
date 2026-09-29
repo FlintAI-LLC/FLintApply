@@ -16,6 +16,9 @@ async function authRequest<T>(
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     const detail = body?.detail
+    if (res.status === 429) {
+      throw new Error("verify_send_rate_limited")
+    }
     const message =
       typeof detail === "string"
         ? detail

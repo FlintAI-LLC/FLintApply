@@ -23,7 +23,8 @@ import {
 import { patchResume } from "@/lib/dashboard";
 import { trackRecentSession } from "@/lib/recentSessions";
 import { saveAuthReturnUrl } from "@/lib/auth/returnUrl";
-import { refreshBackendSession } from "@/lib/auth/refreshBackendSession";
+import { requestBackendSessionRefresh } from "@/lib/auth/refreshBackendSession";
+import { SessionCheckFloor } from "@/lib/sessionCheckFloor";
 import { useSession } from "next-auth/react";
 import { KeywordDashboard } from "@/components/session/KeywordDashboard";
 import { AuditPanel } from "@/components/session/AuditPanel";
@@ -45,6 +46,7 @@ import {
   tryApplyMechanicalReinforceAt,
 } from "@/lib/mechanicalFix";
 import type { IssueAnchor } from "@/lib/api";
+import { resolvePhase3Delivery } from "@/lib/phase3Delivery";
 import { ExportButtons } from "@/components/session/ExportButtons";
 import { HumanProofreadNotice } from "@/components/session/HumanProofreadNotice";
 import { OpenInFlintButton } from "@/components/session/OpenInFlintButton";
@@ -98,6 +100,9 @@ const STEP_LABELS: Record<Step, string> = {
 };
 
 type AnalysisPipeline = { mode: "full" | "audit-only"; phase: 1 | 2 };
+
+type SessionSnapshot = Awaited<ReturnType<typeof checkSession>>;
+const sessionCheckFloor = new SessionCheckFloor<SessionSnapshot>();
 
 function SessionContent() {
   const { id: sessionId } = useParams<{ id: string }>();
@@ -271,10 +276,12 @@ function SessionContent() {
   const activeStepRef = useRef<Step>(step);
   const phase4RecalcRef = useRef(false);
   const tailoredBackupRef = useRef<TailoredResumeOutput | null>(null);
+  // Resume on screen when a forced regenerate began; partial events overwrite tailoredBackupRef.
+  const regenPriorRef = useRef<TailoredResumeOutput | null>(null);
   const aiControlsRef = useRef<HTMLDivElement>(null);
   // Guard: track the last Phase 3 done event that already bumped editorSyncKey.
   // Prevents the main lastEvent effect from double-firing when unstable deps
-  // (e.g. NextAuth's updateAuthSession) cause it to re-run with the same event.
+  // (e.g. a token rotation) cause it to re-run with the same event.
   const lastPhase3DoneRef = useRef<SSEEvent | null>(null);
   const processedEventCountRef = useRef(0);
   const analysisPipelineRef = useRef<AnalysisPipeline | null>(null);
@@ -293,7 +300,15 @@ function SessionContent() {
 
   const llmErrorActive = runErrorType?.startsWith("llm_") ?? false;
 
-  const { data: authSession, update: updateAuthSession } = useSession();
+  const { data: authSession } = useSession();
+  const accessTokenRef = useRef(authSession?.backendAccessToken);
+  const searchParamsRef = useRef(searchParams);
+  const userKeyRef = useRef(authSession?.backendUser?.id ?? "anon");
+  useEffect(() => {
+    accessTokenRef.current = authSession?.backendAccessToken;
+    searchParamsRef.current = searchParams;
+    userKeyRef.current = authSession?.backendUser?.id ?? "anon";
+  }, [authSession?.backendAccessToken, authSession?.backendUser?.id, searchParams]);
   const entitlement = useEntitlement();
   const requestCreditAction = useCallback(
     (label: string, run: () => void) => {
@@ -460,10 +475,12 @@ function SessionContent() {
         if (phase === 1) setKeywords(null);
         if (phase === 2) setAudit(null);
         if (phase === 3) {
-          tailoredBackupRef.current = tailoredBackupRef.current;
+          regenPriorRef.current = tailoredBackupRef.current;
           setTailored(null);
         }
         if (phase === 4) setQa(null);
+      } else if (phase === 3) {
+        regenPriorRef.current = null;
       }
       setProgressLog([]);
       processedEventCountRef.current = 0;
@@ -489,14 +506,16 @@ function SessionContent() {
           (e instanceof ApiError && e.status === 402)
         ) {
           dispatchCreditsExhausted();
-          void refreshBackendSession(updateAuthSession);
+          requestBackendSessionRefresh();
         }
-        if (phase === 3 && tailoredBackupRef.current) {
-          setTailored(tailoredBackupRef.current);
+        const restorable = regenPriorRef.current ?? tailoredBackupRef.current;
+        regenPriorRef.current = null;
+        if (phase === 3 && restorable) {
+          setTailored(restorable);
         }
       }
     },
-    [sessionId, connect, reset, updateAuthSession],
+    [sessionId, connect, reset],
   );
 
   const runPhase = useCallback(
@@ -917,7 +936,24 @@ function SessionContent() {
       });
     }
     if (lastEvent.event === "done" && lastEvent.phase !== undefined) {
-      applyPhaseOutputByNumber(lastEvent.phase, lastEvent.output);
+      sessionCheckFloor.invalidate(`${userKeyRef.current}:${sessionId}`);
+      if (lastEvent.phase === 3) {
+        const resolved = resolvePhase3Delivery({
+          output: lastEvent.output as TailoredResumeOutput,
+          priorKept: lastEvent.prior_kept,
+          creditRefunded: lastEvent.credit_refunded,
+          priorSnapshot: regenPriorRef.current,
+        });
+        regenPriorRef.current = null;
+        setTailored(resolved.tailored);
+        if (resolved.restoredFromSnapshot) {
+          void saveTailoredResume(sessionId, resolved.tailored).catch(() => {});
+        }
+        // Reconcile the credit display with what the server actually kept charged.
+        requestBackendSessionRefresh();
+      } else {
+        applyPhaseOutputByNumber(lastEvent.phase, lastEvent.output);
+      }
 
       const chainAudit =
         pipeline?.mode === "full" && lastEvent.phase === 1 && activeStep === "analysis";
@@ -941,7 +977,7 @@ function SessionContent() {
               errorCode === "insufficient_credits" ||
               (e instanceof ApiError && e.status === 402)
             ) {
-              void refreshBackendSession(updateAuthSession);
+              requestBackendSessionRefresh();
             }
           }
         })();
@@ -956,7 +992,7 @@ function SessionContent() {
       runInFlightRef.current = false;
       if (lastEvent.phase === 3) {
         setStale((prev) => ({ ...prev, "3": null, "4": null }));
-        if (authSession?.backendAccessToken) {
+        if (accessTokenRef.current) {
           void (async () => {
             try {
               const record = await getSessionResumeRecord(sessionId);
@@ -977,7 +1013,7 @@ function SessionContent() {
         setStale((prev) => ({ ...prev, "4": null }));
         setPhase4RecalcActive(false);
         setAtsRecalcRunning(false);
-        void refreshBackendSession(updateAuthSession);
+        requestBackendSessionRefresh();
       }
     }
     if (lastEvent.event === "error") {
@@ -994,9 +1030,7 @@ function SessionContent() {
     lastEvent,
     events.length,
     applyPhaseOutputByNumber,
-    authSession?.backendAccessToken,
     sessionId,
-    updateAuthSession,
     connect,
     reset,
   ]);
@@ -1013,8 +1047,10 @@ function SessionContent() {
     setAtsRecalcRunning(false);
     setRunError(sseError);
     setRunErrorType("connection_lost");
-    if (activeStepRef.current === "rewrite" && tailoredBackupRef.current) {
-      setTailored(tailoredBackupRef.current);
+    const restorable = regenPriorRef.current ?? tailoredBackupRef.current;
+    regenPriorRef.current = null;
+    if (activeStepRef.current === "rewrite" && restorable) {
+      setTailored(restorable);
     }
   }, [sseError]);
 
@@ -1027,12 +1063,13 @@ function SessionContent() {
     mechanicalUndoRef.current = {};
     setRewriteRestoreHint(null);
 
-    checkSession(sessionId)
+    sessionCheckFloor
+      .run(`${userKeyRef.current}:${sessionId}`, () => checkSession(sessionId))
       .then(async (s) => {
         if (cancelled) return;
         hydrateFromSession(s);
         const phase3Output = s.phases?.["3"]?.output;
-        if (!phase3Output && authSession?.backendAccessToken) {
+        if (!phase3Output && accessTokenRef.current) {
           try {
             const record = await getSessionResumeRecord(sessionId);
             if (record.tailoring_stage === "polished") {
@@ -1044,7 +1081,7 @@ function SessionContent() {
             // Anonymous or no dashboard row yet.
           }
         }
-        if (!searchParams.get("step")) {
+        if (!searchParamsRef.current.get("step")) {
           const initial = defaultSessionStep(s);
           if (initial !== "analysis") {
             setStep(initial);
@@ -1068,7 +1105,10 @@ function SessionContent() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, hydrateFromSession, router, searchParams, authSession?.backendAccessToken]);
+    // Hydrate once per session. Token and query params are read through refs so
+    // a rotation or a ?step= change cannot re-run this fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   useEffect(() => {
     runInFlightRef.current = false;

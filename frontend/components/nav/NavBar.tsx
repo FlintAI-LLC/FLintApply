@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   Settings,
+  UserCircle,
 } from "lucide-react"
 import { BrandLogo } from "@/components/brand/BrandLogo"
 import {
@@ -21,6 +22,10 @@ import {
   navPillarIsActive,
 } from "@/components/nav/navPillars"
 import { fetchMe, logoutUser } from "@/lib/auth/api"
+import { liveBackendAccessToken } from "@/lib/auth/accessToken"
+import { shouldShowUserMenu } from "@/lib/auth/navIdentity"
+import { isSessionDead } from "@/lib/auth/refreshBackendSession"
+import { needsEmailVerification } from "@/lib/auth/emailVerification"
 import { clsx } from "clsx"
 import { NotificationBell } from "@/components/nav/NotificationBell"
 import { UsageWidget } from "@/components/nav/UsageWidget"
@@ -37,10 +42,9 @@ export function NavBar() {
   const [activeLandingHref, setActiveLandingHref] = useState<string | null>(null)
   const [locationHash, setLocationHash] = useState("")
 
-  const accessToken =
-    session?.error === "TokenExpired" ? undefined : session?.backendAccessToken
+  const accessToken = liveBackendAccessToken(session)
 
-  const showUserMenu = Boolean(session?.user ?? session?.backendAccessToken)
+  const showUserMenu = shouldShowUserMenu(status, session, isSessionDead())
   useEffect(() => {
     if (showUserMenu) {
       setHadUserMenu(true)
@@ -115,7 +119,7 @@ export function NavBar() {
   }
 
   return (
-    <nav className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm sticky top-0 z-40">
+    <nav className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
         <Link href={renderUserMenu ? "/dashboard" : "/"} className="flex items-center hover:opacity-90 transition-opacity shrink-0 py-1">
           <BrandLogo className="h-10 w-auto max-w-[200px] sm:max-w-[240px]" />
@@ -243,11 +247,20 @@ export function NavBar() {
               email={session!.user?.email ?? ""}
               creditBalance={session!.backendUser?.credit_balance}
               accessToken={accessToken}
+              emailNeedsVerification={needsEmailVerification(session!.backendUser)}
               dropdownOpen={dropdownOpen}
               setDropdownOpen={setDropdownOpen}
               dropdownRef={dropdownRef}
               onLogout={handleLogout}
             />
+          ) : status === "authenticated" ? (
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 px-3 py-1.5"
+            >
+              Sign out
+            </button>
           ) : (
             <div className="flex items-center gap-2">
               <Link
@@ -341,6 +354,7 @@ interface UserMenuProps {
   email: string
   creditBalance?: number
   accessToken?: string
+  emailNeedsVerification?: boolean
   dropdownOpen: boolean
   setDropdownOpen: React.Dispatch<React.SetStateAction<boolean>>
   dropdownRef: React.RefObject<HTMLDivElement | null>
@@ -352,6 +366,7 @@ function UserMenu({
   email,
   creditBalance,
   accessToken,
+  emailNeedsVerification,
   dropdownOpen,
   setDropdownOpen,
   dropdownRef,
@@ -418,12 +433,24 @@ function UserMenu({
 
       {dropdownOpen && (
         <div
-          className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden z-50"
+          className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden z-[100]"
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
             <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{displayName}</p>
             <p className="text-xs text-slate-600 dark:text-slate-400 truncate">{email}</p>
+            {emailNeedsVerification && (
+              <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                Email not verified —{" "}
+                <Link
+                  href="/settings#email-verification"
+                  onClick={() => setDropdownOpen(false)}
+                  className="font-medium underline underline-offset-2"
+                >
+                  verify in Settings
+                </Link>
+              </p>
+            )}
             {liveCredits !== undefined && (
               <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                 {liveCredits} credit{liveCredits !== 1 ? "s" : ""} remaining
@@ -432,13 +459,32 @@ function UserMenu({
           </div>
 
           <div className="p-1">
-            <DropdownItem href="/dashboard" icon={<LayoutDashboard className="w-4 h-4" />}>
+            <DropdownItem
+              href="/dashboard"
+              icon={<LayoutDashboard className="w-4 h-4" />}
+              onNavigate={() => setDropdownOpen(false)}
+            >
               Dashboard
             </DropdownItem>
-            <DropdownItem href="/profile" icon={<Settings className="w-4 h-4" />}>
-              Profile &amp; settings
+            <DropdownItem
+              href="/profile"
+              icon={<UserCircle className="w-4 h-4" />}
+              onNavigate={() => setDropdownOpen(false)}
+            >
+              Master resume
             </DropdownItem>
-            <DropdownItem href="/billing" icon={<CreditCard className="w-4 h-4" />}>
+            <DropdownItem
+              href="/settings"
+              icon={<Settings className="w-4 h-4" />}
+              onNavigate={() => setDropdownOpen(false)}
+            >
+              Settings
+            </DropdownItem>
+            <DropdownItem
+              href="/billing"
+              icon={<CreditCard className="w-4 h-4" />}
+              onNavigate={() => setDropdownOpen(false)}
+            >
               Billing
             </DropdownItem>
           </div>
@@ -464,14 +510,17 @@ function DropdownItem({
   href,
   icon,
   children,
+  onNavigate,
 }: {
   href: string
   icon: React.ReactNode
   children: React.ReactNode
+  onNavigate?: () => void
 }) {
   return (
     <Link
       href={href}
+      onClick={() => onNavigate?.()}
       className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
     >
       <span className="text-slate-600 dark:text-slate-400">{icon}</span>

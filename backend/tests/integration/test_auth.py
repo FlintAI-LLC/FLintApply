@@ -23,11 +23,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import (
     AuthAuditEvent,
     AuthAuditLog,
+    AuthProvider,
     CreditTransaction,
     CreditTransactionAction,
     RefreshToken,
     User,
 )
+import app.routers.auth as auth_router
 from app.routers.auth import REFRESH_COOKIE_NAME
 
 pytestmark = pytest.mark.integration
@@ -302,3 +304,46 @@ async def test_password_reset_invalidates_all_refresh_tokens(
         json={"email": REGISTER_PAYLOAD["email"], "password": new_pw},
     )
     assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_microsoft_same_provider_email_links_account(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Extension-updated provider_id must not block website Microsoft sign-in."""
+    import uuid
+
+    email = "ms-web-relink@example.com"
+    existing = User(
+        id=uuid.uuid4(),
+        email=email,
+        display_name="MS User",
+        auth_provider=AuthProvider.microsoft,
+        provider_id="graph-id-from-extension",
+        credit_balance=0,
+        accepted_tos_version="oauth",
+    )
+    db_session.add(existing)
+    await db_session.commit()
+
+    async def fake_verify(_token: str) -> dict[str, object]:
+        return {
+            "email": email,
+            "provider_id": "oid-from-web-id-token",
+            "display_name": "MS User",
+            "email_verified": True,
+        }
+
+    monkeypatch.setattr(auth_router, "verify_microsoft_id_token", fake_verify)
+
+    r = await app_client.post(
+        "/api/auth/callback",
+        json={"provider": "microsoft", "id_token": "fake-token"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["email"] == email
+
+    await db_session.refresh(existing)
+    assert existing.provider_id == "oid-from-web-id-token"

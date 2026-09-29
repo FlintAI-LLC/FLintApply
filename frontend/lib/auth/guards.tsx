@@ -3,13 +3,12 @@
 /**
  * Client-side auth guards.
  */
-import { signOut, useSession } from "next-auth/react"
+import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef, ComponentType } from "react"
 import { fetchMe } from "@/lib/auth/api"
+import { needsBackendAccessRefresh } from "@/lib/auth/accessToken"
 import { isOnboardingExempt, mustCompleteOnboarding, needsOnboarding } from "@/lib/auth/onboarding"
-import { refreshBackendSession, isRefreshRateLimited } from "@/lib/auth/refreshBackendSession"
-import { isStaleAuthError } from "@/lib/auth/staleSession"
 import { saveAuthReturnUrl } from "@/lib/auth/returnUrl"
 
 function currentPath(): string {
@@ -25,7 +24,6 @@ function currentPath(): string {
 export function useRequireAuth(callbackUrl?: string) {
   const { data: session, status, update } = useSession()
   const router = useRouter()
-  const refreshingRef = useRef(false)
   const onboardingVerifyRef = useRef(false)
   const onboardingRedirectedRef = useRef(false)
 
@@ -50,25 +48,9 @@ export function useRequireAuth(callbackUrl?: string) {
       return
     }
 
-    if (session.error === "TokenExpired") {
-      if (refreshingRef.current || isRefreshRateLimited()) return
-      refreshingRef.current = true
-      void refreshBackendSession(update).then((ok) => {
-        refreshingRef.current = false
-        if (!ok && !isRefreshRateLimited()) {
-          saveAuthReturnUrl(dest)
-          void signOut({ callbackUrl: authUrl })
-        }
-      }).catch((err: unknown) => {
-        refreshingRef.current = false
-        const message = err instanceof Error ? err.message : ""
-        if (isStaleAuthError(message)) {
-          saveAuthReturnUrl(dest)
-          void signOut({ callbackUrl: authUrl })
-        }
-      })
-      return
-    }
+    // BackendTokenRefresh owns rotation and StaleSessionGuard owns sign-out;
+    // wait here rather than racing either of them.
+    if (needsBackendAccessRefresh(session)) return
 
     const path = typeof window !== "undefined" ? window.location.pathname : dest
     if (path === "/onboarding") {

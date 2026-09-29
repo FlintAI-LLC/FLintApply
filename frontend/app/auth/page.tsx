@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useRef, useState, useTransition, type ReactElement } from "react"
+import { Suspense, useEffect, useState, useTransition, type ReactElement } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { signIn, signOut, useSession, getProviders } from "next-auth/react"
@@ -15,11 +15,14 @@ import {
   loginUser,
   registerUser,
   verify2fa,
+  type BackendUser,
   type TfaRequired,
 } from "@/lib/auth/api"
 import { TurnstileField } from "@/components/auth/TurnstileField"
-import { isStaleAuthError } from "@/lib/auth/staleSession"
+import { liveBackendAccessToken } from "@/lib/auth/accessToken"
+import { PostAuthAttemptGuard } from "@/lib/auth/postAuthAttempt"
 import { resolveAuthReturnUrl, saveAuthReturnUrl } from "@/lib/auth/returnUrl"
+import { resolvePostAuthClientDestination } from "@/lib/auth/onboarding"
 import { friendlyAuthError } from "@/lib/auth/errors"
 import { getSignupDeviceFingerprint, persistSignupDeviceFingerprintForOAuth } from "@/lib/auth/deviceFingerprint"
 import {
@@ -100,7 +103,7 @@ function AuthPageContent() {
   const [ssoProviders, setSsoProviders] = useState<string[]>([])
   const [turnstileSiteKey, setTurnstileSiteKey] = useState("")
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
-  const postAuthRedirectRef = useRef(false)
+  const [postAuthGuard] = useState(() => new PostAuthAttemptGuard<BackendUser>())
 
   useEffect(() => {
     if (view !== "register") return
@@ -143,22 +146,24 @@ function AuthPageContent() {
     callbackUrl: string,
     onboardingCompletedAt: string | null | undefined,
   ) {
-    const dest = resolveAuthReturnUrl(callbackUrl)
-    if (dest && dest !== "/auth" && onboardingCompletedAt) {
-      router.replace(dest)
-    } else if (!onboardingCompletedAt) {
-      // Keep extension / deep-link return paths across onboarding.
+    if (!onboardingCompletedAt) {
+      const dest = resolveAuthReturnUrl(callbackUrl)
       saveAuthReturnUrl(dest !== "/dashboard" ? dest : undefined)
       router.replace("/onboarding")
-    } else {
-      router.replace("/dashboard")
+      return
     }
+    router.replace(resolvePostAuthClientDestination(callbackUrl || null))
   }
 
   // Redirect only when the backend token still resolves to a live user row.
+  // An expired token is never sent to /me: BackendTokenRefresh rotates it and
+  // StaleSessionGuard signs out if the refresh cookie is gone.
+  const liveToken = liveBackendAccessToken(session)
+  const hasBackendToken = Boolean(session?.backendAccessToken)
+  const sessionError = session?.error
   useEffect(() => {
     if (status !== "authenticated") {
-      postAuthRedirectRef.current = false
+      postAuthGuard.reset()
       return
     }
 
@@ -166,29 +171,24 @@ function AuthPageContent() {
       return
     }
 
-    if (session?.backendAccessToken) {
-      if (postAuthRedirectRef.current) return
-      void fetchMe(session.backendAccessToken)
-        .then((user) => {
-          if (postAuthRedirectRef.current) return
-          postAuthRedirectRef.current = true
+    if (liveToken) {
+      void postAuthGuard.verify(liveToken, fetchMe, {
+        onUser: (user) => {
           const callbackUrl = searchParams.get("callbackUrl") ?? ""
           doRedirect(callbackUrl, user.onboarding_completed_at)
-        })
-        .catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : ""
-          if (isStaleAuthError(message)) {
-            void signOut({ redirect: false })
-          }
-        })
+        },
+        onStale: () => {
+          void signOut({ redirect: false })
+        },
+      })
       return
     }
 
-    if (session?.error) {
-      showError(session.error)
+    if (!hasBackendToken && sessionError) {
+      showError(sessionError)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, session])
+  }, [status, liveToken, hasBackendToken, sessionError])
 
   function showError(code: string) {
     setErrorCode(code)
@@ -370,6 +370,15 @@ function AuthPageContent() {
                   className="text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 underline underline-offset-2"
                 >
                   Go to Sign in
+                </button>
+              )}
+              {status === "authenticated" && !session?.backendAccessToken && (
+                <button
+                  type="button"
+                  onClick={() => void signOut({ callbackUrl: "/auth" })}
+                  className="block text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 underline underline-offset-2"
+                >
+                  Sign out and try again
                 </button>
               )}
             </div>
@@ -690,6 +699,18 @@ function AuthPageContent() {
             </>
           )}
         </div>
+
+        {status === "authenticated" && (
+          <p className="text-center mt-4">
+            <button
+              type="button"
+              onClick={() => void signOut({ callbackUrl: "/auth" })}
+              className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 underline underline-offset-2"
+            >
+              Sign out
+            </button>
+          </p>
+        )}
 
         <p className="text-center text-slate-600 dark:text-slate-400 text-xs mt-6">
           By using {PRODUCT_NAME} you agree to our{" "}

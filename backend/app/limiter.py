@@ -22,5 +22,28 @@ def rate_limit_key(request: Request) -> str:
     return resolve_client_ip(request) or get_remote_address(request)
 
 
+def authenticated_user_rate_limit_key(request: Request) -> str:
+    """Bucket authenticated routes per user JWT, not only client IP.
+
+    When the reverse proxy is not in ``TRUSTED_PROXY_IPS``, every visitor
+    can appear as the same peer address and exhaust shared IP buckets on
+    high-traffic routes like ``GET /api/auth/me``.
+    """
+    auth = request.headers.get("Authorization", "")
+    if auth.lower().startswith("bearer "):
+        token = auth[7:].strip()
+        if token:
+            try:
+                from app.services.auth.tokens import decode_access_token
+
+                claims = decode_access_token(token, expected_type="access")
+                subject = str(claims.get("sub") or "").strip()
+                if subject:
+                    return f"user:{subject}"
+            except Exception:  # noqa: BLE001
+                return f"token:{token[:64]}"
+    return rate_limit_key(request)
+
+
 # Rate limits apply in ci/staging/production only — local dev should not 429 loops.
 limiter = Limiter(key_func=rate_limit_key, enabled=is_production_grade())

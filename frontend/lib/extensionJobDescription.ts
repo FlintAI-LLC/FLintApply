@@ -13,6 +13,14 @@ export interface ExtensionJobDescription {
   session_id: string | null;
 }
 
+/** Preserves the HTTP status so callers can show a specific message per cause (I6). */
+export class ExtensionJobDescriptionError extends Error {
+  constructor(public readonly status: number) {
+    super(`Could not load saved job (${status})`);
+    this.name = "ExtensionJobDescriptionError";
+  }
+}
+
 export async function getExtensionJobDescription(
   token: string,
   jdId: string,
@@ -21,7 +29,7 @@ export async function getExtensionJobDescription(
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
-    throw new Error(`Could not load saved job (${res.status})`);
+    throw new ExtensionJobDescriptionError(res.status);
   }
   return res.json() as Promise<ExtensionJobDescription>;
 }

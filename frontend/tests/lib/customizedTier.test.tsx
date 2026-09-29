@@ -59,7 +59,7 @@ describe("PricingTierGrid customized card", () => {
     assert.match(html, new RegExp(`>${CUSTOMIZED_TIER_DISPLAY_NAME}<`));
     assert.match(html, new RegExp(`>${CUSTOMIZED_TIER_PRICE_LABEL}<`));
     assert.match(html, /not sold through self-serve checkout/i);
-    assert.match(html, /href="mailto:privacy@zanganehai\.com\?subject=/);
+    assert.ok(html.includes(`href="mailto:${SALES_INQUIRY_EMAIL}?subject=`));
     assert.match(html, new RegExp(`>${CUSTOMIZED_TIER_CTA}<`));
     assert.doesNotMatch(html, /Choose Customized/);
   });

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 from app.agent.phase3_hollow import phase3_is_hollow
 from app.agent.phase3_truthfulness import _normalize_company
 from app.models.audit import AuditOutput
@@ -51,22 +49,11 @@ def _parsed_entry(parsed: ParsedResume | None, norm_key: str):
     return None
 
 
-def _absorb_keyword(bullet: str, keyword: str) -> str | None:
-    """Prepend a must-have keyword phrase only when it fits without new metrics."""
-    kw = keyword.strip()
-    if not kw or kw.lower() in bullet.lower():
-        return None
-    if re.search(r"\d", kw):
-        return None
-    return f"{kw}: {bullet}" if bullet else None
-
-
 def _bullets_for_company(
     norm_key: str,
     *,
     prior: TailoredResumeOutput | None,
     parsed: ParsedResume | None,
-    must_have_keywords: list[str] | None,
 ) -> tuple[list[str], str, str, str]:
     prior_entry = _prior_entry(prior, norm_key)
     parsed_entry = _parsed_entry(parsed, norm_key)
@@ -89,18 +76,6 @@ def _bullets_for_company(
         company = parsed_entry.company
         dates = parsed_entry.dates or ""
 
-    if bullets and must_have_keywords:
-        adjusted: list[str] = []
-        for bullet in bullets:
-            updated = bullet
-            for kw in must_have_keywords:
-                candidate = _absorb_keyword(updated, kw)
-                if candidate:
-                    updated = candidate
-                    break
-            adjusted.append(updated)
-        bullets = adjusted
-
     return bullets, title, company, dates
 
 
@@ -112,7 +87,8 @@ def apply_experience_fallback(
     prior_output: TailoredResumeOutput | None,
     must_have_keywords: list[str] | None,
 ) -> TailoredResumeOutput:
-    del phase2_output  # reserved for future section-scoped hints
+    # Bullets are copied verbatim; keyword placement lives in phase3_keyword_placement.
+    del phase2_output, must_have_keywords
     if phase3_is_hollow(output):
         experience: list[TailoredExperienceEntry] = []
         for norm_key in _company_keys(resume_parsed, prior_output):
@@ -120,7 +96,6 @@ def apply_experience_fallback(
                 norm_key,
                 prior=prior_output,
                 parsed=resume_parsed,
-                must_have_keywords=must_have_keywords,
             )
             if not bullets:
                 continue
@@ -151,7 +126,6 @@ def apply_experience_fallback(
             _normalize_company(entry.company),
             prior=prior_output,
             parsed=resume_parsed,
-            must_have_keywords=must_have_keywords,
         )
         if bullets:
             changed = True

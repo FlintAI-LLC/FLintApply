@@ -17,6 +17,12 @@ export interface SSEEvent {
   /** Structured error code (e.g. free_tier_ai_cap_reached, master_resume_required). */
   code?: string;
   debug?: string;
+  /** Phase 3 done: the server discarded a degraded rerun and kept the prior resume. */
+  prior_kept?: boolean;
+  /** Phase 3 done: whether this run's credit is still charged after any reversal. */
+  credit_charged?: boolean;
+  /** Phase 3 done: the server confirmed it returned this run's credit. */
+  credit_refunded?: boolean;
 }
 
 interface UseSSEResult {

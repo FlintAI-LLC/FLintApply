@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { LegalPageShell } from "@/components/legal/LegalPageShell"
+import { PRIVACY_EMAIL } from "@/lib/brand"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 const LAST_UPDATED = "2026-05-31"
@@ -55,7 +56,7 @@ export default function DpoContactPage() {
       <p>
         Use this form to reach our Data Protection Officer.  Submissions are
         delivered to{" "}
-        <a href="mailto:privacy@zanganehai.com">privacy@zanganehai.com</a>{" "}
+        <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>{" "}
         via Resend.  Please use this channel for GDPR / CCPA requests,
         sub-processor change inquiries, and privacy concerns.  For account or
         billing support, use in-product help.

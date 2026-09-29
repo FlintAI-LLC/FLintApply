@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import is_production_grade, settings
 from app.db.engine import get_db
-from app.limiter import limiter
+from app.limiter import authenticated_user_rate_limit_key, limiter
 from app.models.billing import CreditKind
 from app.models.user import (
     AuthAuditEvent,
@@ -243,15 +243,27 @@ def _client_ip(request: Request) -> str:
     return resolve_client_ip(request)
 
 
-def _signup_rate_limit_http() -> HTTPException:
+def _signup_rate_limit_http(exc: SignupRateLimitError) -> HTTPException:
+    messages = {
+        "signup_consumer_monthly_limit": (
+            "Too many signups with a personal email (Gmail, Outlook, Yahoo, etc.) "
+            "from this device this month. Try again next month or contact support."
+        ),
+        "signup_corporate_daily_limit": (
+            "Too many signups from this device today. Try again tomorrow or contact support."
+        ),
+        "signup_ip_daily_limit": (
+            "Too many signups from your network today — try again tomorrow, "
+            "or contact support."
+        ),
+    }
+    message = messages.get(exc.reason, messages["signup_ip_daily_limit"])
     return HTTPException(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         detail={
             "code": "signup_rate_limited",
-            "message": (
-                "Too many signups from your network today — try again tomorrow, "
-                "or contact support."
-            ),
+            "reason": exc.reason,
+            "message": message,
         },
     )
 
@@ -321,8 +333,17 @@ def _me(user: User, *, credit_balance: int | None = None) -> MeResponse:
     )
 
 
+async def _trust_sso_email_if_needed(db: AsyncSession, user: User) -> None:
+    """OAuth sign-in already proved inbox control — no separate verify email."""
+    if user.is_email_verified or user.auth_provider == AuthProvider.email:
+        return
+    user.email_verified_at = datetime.now(timezone.utc)
+    await db.flush()
+
+
 async def _me_from_ledger(db: AsyncSession, user: User) -> MeResponse:
     """Return profile fields with the authoritative free-credit ledger balance."""
+    await _trust_sso_email_if_needed(db, user)
     balance = await get_balance(db, user_id=user.id, credit_kind=CreditKind.free)
     if user.credit_balance != balance:
         user.credit_balance = max(0, balance)
@@ -345,6 +366,11 @@ async def _issue_session(
         user.id,
         auth_session_id,
         ttl=settings.REFRESH_TOKEN_TTL_SECONDS,
+    )
+    await redis_session.issue_cookie_bind_ticket(
+        user.id,
+        auth_session_id,
+        ttl=settings.ACCESS_TOKEN_TTL_SECONDS,
     )
     access = create_access_token(
         user.id,
@@ -442,6 +468,38 @@ async def _auth_session_id_for_refresh_token(
     return str(active) if active else None
 
 
+def _auth_session_id_for_access_token(request: Request) -> str:
+    """The ``sid`` of the bearer ``get_current_user`` has already validated."""
+    header = request.headers.get("Authorization", "")
+    token = header[7:].strip() if header.lower().startswith("bearer ") else ""
+    sid = decode_access_token(token, expected_type="access").get("sid") if token else None
+    if not sid:
+        raise HTTPException(status_code=401, detail={"code": "missing_session"})
+    return str(sid)
+
+
+async def _refresh_cookie_binds_session(
+    db: AsyncSession,
+    *,
+    refresh_token: str | None,
+    user_id: uuid.UUID,
+    auth_session_id: str,
+) -> bool:
+    """True when the browser already holds a live refresh token for this session."""
+    if not refresh_token:
+        return False
+    row = await find_refresh_token(db, token=refresh_token)
+    # The user check is defense in depth: session ids are globally unique.
+    if row is None or row.user_id != user_id or row.revoked_at is not None:
+        return False
+    if row.expires_at <= datetime.now(timezone.utc):
+        return False
+    meta = await redis_session.get_refresh_token_metadata(row.id)
+    if meta is None:
+        return False
+    return str(meta.get("auth_session_id")) == auth_session_id
+
+
 # ===========================================================================
 # Routes
 # ===========================================================================
@@ -481,6 +539,10 @@ async def register(
     payload: RegisterRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AuthSuccessResponse:
+    from app.services.launch_gate import assert_signup_allowed
+
+    assert_signup_allowed(request)
+
     email = payload.email.lower().strip()
     email_canonical = canonicalize_email(email)
 
@@ -550,11 +612,12 @@ async def register(
     try:
         await assert_signup_rate_limit_allowed(
             db,
+            signup_email=email,
             signup_ip=signup_ip or "",
             device_fingerprint_hash=signup_device_fingerprint_hash,
         )
     except SignupRateLimitError as exc:
-        raise _signup_rate_limit_http() from exc
+        raise _signup_rate_limit_http(exc) from exc
 
     grant_amount = await registration_grant_credits(db)
     user = User(
@@ -789,6 +852,9 @@ async def oauth_callback(
             detail={"code": "oauth_failed", "message": str(exc)},
         ) from exc
 
+    if payload.provider == "microsoft":
+        profile["email_verified"] = True
+
     provider_enum = AuthProvider(payload.provider)
 
     user = (
@@ -799,17 +865,28 @@ async def oauth_callback(
             )
         )
     ).scalar_one_or_none()
+
+    oauth_verified = profile.get("email_verified", False)
+    if user is not None and not user.is_email_verified and oauth_verified:
+        user.email_verified_at = datetime.now(timezone.utc)
+        await db.flush()
+
     if user is None:
         email = profile["email"].lower().strip()
         email_canonical = canonicalize_email(email)
-        # Also reject if the email already belongs to a different provider.
         existing = (
             await db.execute(select(User).where(User.email == email))
         ).scalar_one_or_none()
         canonical_owner = (
             await db.execute(select(User).where(User.email_canonical == email_canonical))
         ).scalar_one_or_none()
-        if existing is not None or (
+
+        if existing is not None and existing.auth_provider == provider_enum:
+            user = existing
+            if existing.provider_id != profile["provider_id"]:
+                existing.provider_id = profile["provider_id"]
+                await db.flush()
+        elif existing is not None or (
             canonical_owner is not None and canonical_owner.email != email
         ):
             conflict = existing or canonical_owner
@@ -821,69 +898,75 @@ async def oauth_callback(
                     "with_provider": conflict.auth_provider.value,
                 },
             )
-        if is_disposable_email(email):
-            raise _disposable_email_http()
-        signup_ip = _client_ip(request) or None
-        signup_device_fingerprint_hash = derive_signup_device_fingerprint_hash(
-            request,
-            client_fingerprint=payload.device_fingerprint,
-        )
-        try:
-            await assert_signup_rate_limit_allowed(
+        else:
+            from app.services.launch_gate import assert_signup_allowed
+
+            assert_signup_allowed(request)
+
+        if user is None:
+            if is_disposable_email(email):
+                raise _disposable_email_http()
+            signup_ip = _client_ip(request) or None
+            signup_device_fingerprint_hash = derive_signup_device_fingerprint_hash(
+                request,
+                client_fingerprint=payload.device_fingerprint,
+            )
+            try:
+                await assert_signup_rate_limit_allowed(
+                    db,
+                    signup_email=email,
+                    signup_ip=signup_ip or "",
+                    device_fingerprint_hash=signup_device_fingerprint_hash,
+                )
+            except SignupRateLimitError as exc:
+                raise _signup_rate_limit_http(exc) from exc
+            grant_amount = await registration_grant_credits(db)
+            user = User(
+                id=uuid.uuid4(),
+                email=email,
+                email_canonical=email_canonical,
+                display_name=profile["display_name"] or email.split("@", 1)[0],
+                auth_provider=provider_enum,
+                provider_id=profile["provider_id"],
+                email_verified_at=datetime.now(timezone.utc) if oauth_verified else None,
+                tier=UserTier.free,
+                credit_balance=grant_amount,
+                accepted_tos_version="oauth",  # frontend records ToS on the consent step
+                signup_ip=signup_ip,
+                signup_device_fingerprint_hash=signup_device_fingerprint_hash,
+                last_login_ip=signup_ip,
+            )
+            db.add(user)
+            await db.flush()
+            abuse_flag = await analyze_signup_links(
                 db,
-                signup_ip=signup_ip or "",
+                signup_ip=signup_ip,
                 device_fingerprint_hash=signup_device_fingerprint_hash,
             )
-        except SignupRateLimitError as exc:
-            raise _signup_rate_limit_http() from exc
-        grant_amount = await registration_grant_credits(db)
-        oauth_verified = profile.get("email_verified", False)
-        user = User(
-            id=uuid.uuid4(),
-            email=email,
-            email_canonical=email_canonical,
-            display_name=profile["display_name"] or email.split("@", 1)[0],
-            auth_provider=provider_enum,
-            provider_id=profile["provider_id"],
-            email_verified_at=datetime.now(timezone.utc) if oauth_verified else None,
-            tier=UserTier.free,
-            credit_balance=grant_amount,
-            accepted_tos_version="oauth",  # frontend records ToS on the consent step
-            signup_ip=signup_ip,
-            signup_device_fingerprint_hash=signup_device_fingerprint_hash,
-            last_login_ip=signup_ip,
-        )
-        db.add(user)
-        await db.flush()
-        abuse_flag = await analyze_signup_links(
-            db,
-            signup_ip=signup_ip,
-            device_fingerprint_hash=signup_device_fingerprint_hash,
-        )
-        if abuse_flag:
-            user.signup_abuse_review_flag = abuse_flag
-            await db.flush()
-        db.add(
-            CreditTransaction(
-                id=uuid.uuid4(),
-                user_id=user.id,
-                delta=grant_amount,
-                action=CreditTransactionAction.registration_grant,
-                reason="registration_grant",
-                note=f"registration grant via {provider_enum.value}",
-            )
-        )
-        await db.flush()
-
-        if not oauth_verified:
-            try:
-                await send_verification_email(
-                    to_email=user.email,
+            if abuse_flag:
+                user.signup_abuse_review_flag = abuse_flag
+                await db.flush()
+            db.add(
+                CreditTransaction(
+                    id=uuid.uuid4(),
                     user_id=user.id,
-                    display_name=user.display_name,
+                    delta=grant_amount,
+                    action=CreditTransactionAction.registration_grant,
+                    reason="registration_grant",
+                    note=f"registration grant via {provider_enum.value}",
                 )
-            except Exception as exc:  # pragma: no cover - email infra side
-                log.warning("auth.oauth.verification_send_failed", error=str(exc))
+            )
+            await db.flush()
+
+            if not oauth_verified:
+                try:
+                    await send_verification_email(
+                        to_email=user.email,
+                        user_id=user.id,
+                        display_name=user.display_name,
+                    )
+                except Exception as exc:  # pragma: no cover - email infra side
+                    log.warning("auth.oauth.verification_send_failed", error=str(exc))
 
     if user.is_suspended:
         raise HTTPException(
@@ -1049,9 +1132,80 @@ async def refresh(
     )
 
 
+# 6b. POST /refresh-cookie -------------------------------------------------
+@router.post("/refresh-cookie")
+@limiter.limit("10/minute", key_func=authenticated_user_rate_limit_key)
+async def bind_refresh_cookie(
+    request: Request,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    refresh_token: Annotated[str | None, Cookie(alias=REFRESH_COOKIE_NAME)] = None,
+) -> dict[str, Any]:
+    """Give the browser an ``sr_refresh`` cookie for the CURRENT auth session.
+
+    OAuth sign-in runs ``/callback`` from the Next.js server, so the cookie it
+    sets never reaches the browser and rotation 401s once the access token
+    expires. The signed-in browser calls this once, directly, to bind one.
+
+    Deliberately does not revoke other tokens, mint an access token, or start a
+    new auth session; the caller stays on the session it already has.
+
+    A bearer alone must not be enough to create a 7-day credential, so minting
+    spends a single-use ticket that sign-in issued for this exact session.
+    Accepted residuals: sessions signed in before this shipped have no ticket
+    and stay on the 15-minute behaviour until they sign in again, and someone
+    who steals the access token before the real browser binds can win the race
+    (the victim then gets 409 and signs in again).
+    """
+    auth_session_id = _auth_session_id_for_access_token(request)
+    if await _refresh_cookie_binds_session(
+        db,
+        refresh_token=refresh_token,
+        user_id=user.id,
+        auth_session_id=auth_session_id,
+    ):
+        return {"ok": True, "issued": False}
+
+    if not await redis_session.consume_cookie_bind_ticket(user.id, auth_session_id):
+        raise HTTPException(status_code=409, detail={"code": "bind_unavailable"})
+
+    try:
+        device_fp = _fingerprint(request)
+        issued = await create_refresh_token(
+            db,
+            user_id=user.id,
+            device_fingerprint=device_fp,
+            ttl_seconds=settings.REFRESH_TOKEN_TTL_SECONDS,
+        )
+        await redis_session.bind_refresh_token_to_redis(
+            issued.token_id,
+            user.id,
+            device_fp,
+            ttl=settings.REFRESH_TOKEN_TTL_SECONDS,
+            auth_session_id=auth_session_id,
+        )
+    except Exception:
+        # A transient failure must not cost the user their only bind.
+        await redis_session.issue_cookie_bind_ticket(
+            user.id, auth_session_id, ttl=settings.ACCESS_TOKEN_TTL_SECONDS
+        )
+        raise
+
+    await _set_refresh_cookie(response, issued.token, settings.REFRESH_TOKEN_TTL_SECONDS)
+    log.info(
+        "refresh_cookie_bound",
+        user_id=str(user.id),
+        auth_session_id=auth_session_id,
+        ip=_client_ip(request),
+        user_agent=_user_agent(request),
+    )
+    return {"ok": True, "issued": True}
+
+
 # 7. GET /me ---------------------------------------------------------------
 @router.get("/me")
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=authenticated_user_rate_limit_key)
 async def me(
     request: Request,
     response: Response,
@@ -1156,13 +1310,14 @@ async def revoke_session(
 
 # 10. POST /verify/send ----------------------------------------------------
 @router.post("/verify/send")
-@limiter.limit("1/5minute")
+@limiter.limit("6/hour", key_func=authenticated_user_rate_limit_key)
 async def verify_send(
     request: Request,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict[str, Any]:
+    await _trust_sso_email_if_needed(db, user)
     if user.is_email_verified:
         _attach_closure_header(request, response)
         return {"ok": True, "already_verified": True}

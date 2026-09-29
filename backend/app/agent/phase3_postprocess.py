@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 
+from app.agent.phase3_invariants import enforce_resume_invariants
 from app.agent.tone_lint import annotate_tone_alignment
 from app.agent.tone_profile import JDToneProfile
 from app.agent.phase3_truthfulness import TruthfulnessContext, apply_truthfulness_guards
@@ -252,11 +253,33 @@ def enforce_project_bullet_limits(projects: list[dict]) -> list[dict]:
     return updated
 
 
+def _apply_invariants(
+    output: TailoredResumeOutput,
+    truthfulness: TruthfulnessContext,
+    must_have_keywords: list[str] | None,
+) -> TailoredResumeOutput:
+    had_skills = any(s.strip() for s in output.skills)
+    restored = enforce_resume_invariants(
+        output,
+        resume_parsed=truthfulness.resume_parsed,
+        prior_output=truthfulness.prior_output,
+    )
+    if had_skills or not restored.skills:
+        return restored
+    # Restored skills come back flat; group them like every other skills list.
+    return restored.model_copy(
+        update={
+            "skills": normalize_skills_to_categories(restored.skills, must_have_keywords)
+        }
+    )
+
+
 def postprocess_tailored_output(
     output: TailoredResumeOutput,
     must_have_keywords: list[str] | None = None,
     tone_profile: JDToneProfile | None = None,
     truthfulness: TruthfulnessContext | None = None,
+    place_keywords: bool = True,
 ) -> TailoredResumeOutput:
     """Apply deterministic structure rules after LLM generation.
 
@@ -290,6 +313,12 @@ def postprocess_tailored_output(
 
     if truthfulness is not None:
         interim = apply_truthfulness_guards(interim, truthfulness)
+        interim = _apply_invariants(interim, truthfulness, must_have_keywords)
+        if place_keywords:
+            # Deferred import: the placer builds on this module's skill helpers.
+            from app.agent.phase3_keyword_placement import place_evidenced_keywords
+
+            interim = place_evidenced_keywords(interim, must_have_keywords, truthfulness)
 
     return interim
 

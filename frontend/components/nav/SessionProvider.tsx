@@ -3,6 +3,7 @@
 import type { Session } from "next-auth"
 import { SessionProvider as NextAuthSessionProvider } from "next-auth/react"
 import { BackendTokenRefresh } from "@/components/nav/BackendTokenRefresh"
+import { RefreshCookieBinder } from "@/components/nav/RefreshCookieBinder"
 import { StaleSessionGuard } from "@/components/nav/StaleSessionGuard"
 
 export function SessionProvider({
@@ -19,6 +20,7 @@ export function SessionProvider({
       refetchInterval={0}
     >
       <BackendTokenRefresh />
+      <RefreshCookieBinder />
       <StaleSessionGuard />
       {children}
     </NextAuthSessionProvider>

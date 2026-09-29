@@ -784,6 +784,7 @@ async def polish_resume_draft(
     request: Request,
     body: PolishResumeRequest,
     user: VerifiedUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     """
     Apply a single plain-English editing instruction to a resume draft.
@@ -844,7 +845,7 @@ async def story_coach_endpoint(
             },
         )
 
-    plan_code = await resolve_plan_code_for_llm(db, user)
+    plan_code = await resolve_plan_code_for_llm(session, user)
 
     # Charge 1 credit on the first coached segment of a story build session.
     if not body.history:
@@ -1009,7 +1010,7 @@ async def story_interview_submit(
 
     Returns the same shape as POST /resume/from-story.
     """
-    plan_code = await resolve_plan_code_for_llm(db, user)
+    plan_code = await resolve_plan_code_for_llm(session, user)
 
     history_dicts = [{"role": m.role, "text": m.text} for m in body.history]
     narrative = compile_answers_to_narrative(history_dicts)

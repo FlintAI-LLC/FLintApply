@@ -1,0 +1,36 @@
+# Production VM overlay (Lightsail + Caddy). Use with base + staging:
+#   docker compose -f docker-compose.yml -f docker-compose.staging.yml \
+#     -f docker-compose.prod-vm.yml up -d --build
+#
+# Staging overlay hardcodes localhost for NEXTAUTH_URL / NEXT_PUBLIC_* (local sim).
+# This file restores values from .env.staging for public HTTPS deploys.
+#
+# Set LAUNCH_PREVIEW_SECRET in .env.staging (same value for frontend + backend).
+
+services:
+  backend:
+    ports: !override
+      - "8000:8000"
+    environment:
+      - ALLOWED_ORIGINS=["https://flintapply.com"]
+      - FRONTEND_BASE_URL=https://flintapply.com
+      - TRUSTED_PROXY_IPS=["172.16.0.0/12","10.0.0.0/8","127.0.0.1","::1"]
+      - LAUNCH_AT=${LAUNCH_AT:-2026-10-15T09:00:00-07:00}
+      - LAUNCH_PREVIEW_SECRET=${LAUNCH_PREVIEW_SECRET:-}
+
+  frontend:
+    ports: !override
+      - "3000:3000"
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: https://api.flintapply.com
+        NEXT_PUBLIC_SITE_URL: https://flintapply.com
+        NEXT_PUBLIC_LAUNCH_AT: ${NEXT_PUBLIC_LAUNCH_AT:-2026-10-15T09:00:00-07:00}
+    environment:
+      - NEXT_PUBLIC_API_URL=https://api.flintapply.com
+      - NEXTAUTH_URL=https://flintapply.com
+      - AUTH_URL=https://flintapply.com
+      - AUTH_TRUST_HOST=true
+      - NEXT_PUBLIC_APP_ENV=production
+      - NEXT_PUBLIC_LAUNCH_AT=${NEXT_PUBLIC_LAUNCH_AT:-2026-10-15T09:00:00-07:00}
+      - LAUNCH_PREVIEW_SECRET=${LAUNCH_PREVIEW_SECRET:-}

@@ -4,12 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Bell } from "lucide-react";
-import {
-  fetchNotifications,
-  fetchUnreadCount,
-  markNotificationRead,
-  type NotificationItem,
-} from "@/lib/notifications";
+import { fetchNotifications, fetchUnreadCount, markNotificationRead, type NotificationItem } from "@/lib/notifications";
+import { liveBackendAccessToken } from "@/lib/auth/accessToken";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 60_000;
@@ -17,7 +13,7 @@ const POLL_MS = 60_000;
 export function NotificationBell() {
   const { data: session } = useSession();
   // Treat an expired backend token the same as no token — stop polling until re-auth.
-  const token = session?.error === "TokenExpired" ? undefined : session?.backendAccessToken;
+  const token = liveBackendAccessToken(session);
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState<NotificationItem[]>([]);

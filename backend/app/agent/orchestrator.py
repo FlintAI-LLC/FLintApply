@@ -17,6 +17,11 @@ from app.llm.token_accounting import (
     assert_session_within_token_ceiling,
     llm_accounting_context,
 )
+from app.agent.phase3_delivery import (
+    DeliveryOutcome,
+    apply_delivery_policy,
+    credit_was_charged,
+)
 from app.models.session import PhaseStatus, Session
 from app.services import session_store
 from app.services.company_intel import get_company_intel
@@ -269,6 +274,15 @@ async def _fetch_and_store_company_intel(session_id: str, session: Session) -> N
         log.warning("company_intel_background_task_failed", session_id=session_id, error=str(exc))
 
 
+async def _persist_phase3_charge(session_id: str, source: Session) -> None:
+    """Carry the (possibly reversed) charge onto the stored session."""
+    stored = await session_store.get_session(session_id)
+    if stored is None:
+        return
+    stored.phase3_charge = source.phase3_charge
+    await session_store.update_session(stored)
+
+
 async def run_phase(
     session_id: str,
     phase: int,
@@ -312,6 +326,7 @@ async def run_phase(
         return
 
     start = time.monotonic()
+    delivery: DeliveryOutcome | None = None
     try:
         from app.agent import phase1_keywords, phase2_audit, phase3_rewrite, phase4_qa
 
@@ -335,12 +350,21 @@ async def run_phase(
                     output = await phase3_rewrite.run(
                         session, phase3_llm, event_queue, scope=scope
                     )
+                    if scope is None:
+                        delivery = await apply_delivery_policy(
+                            session,
+                            output,
+                            session.phase3_output or session.phase3_prior_output,
+                        )
+                        output = delivery.output
                 case 4:
                     output = await phase4_qa.run(session, llm, event_queue)
                 case _:
                     raise ValueError(f"Unknown phase: {phase}")
 
         await session_store.save_phase_output(session_id, phase, output)
+        if phase == 3:
+            await _persist_phase3_charge(session_id, session)
 
         # After Phase 1: prefetch company intelligence while Phase 2 runs.
         # Phase 3 also loads intel synchronously if this task has not finished.
@@ -447,6 +471,7 @@ async def run_phase(
         session = await session_store.get_session(session_id)
         if session is not None:
             if phase == 3:
+                session.phase3_prior_output = None
                 session.phase3_stale_since = None
                 session.phase4_stale_since = None
                 session.phase_run_scope = None
@@ -459,11 +484,16 @@ async def run_phase(
         elapsed = round(time.monotonic() - start, 2)
         log.info("phase_complete", session_id=session_id, phase=phase, elapsed_s=elapsed,
                  provider=llm.provider_name, model=llm.model_name)
-        await event_queue.put({
+        done_event: dict[str, object] = {
             "event": "done",
             "phase": phase,
             "output": json.loads(output.model_dump_json()),
-        })
+        }
+        if phase == 3 and session is not None and delivery is not None:
+            done_event["prior_kept"] = delivery.prior_kept
+            done_event["credit_charged"] = credit_was_charged(session)
+            done_event["credit_refunded"] = delivery.credit_refunded
+        await event_queue.put(done_event)
 
     except MasterResumeRequiredError as e:
         # IMPLEMENTATION_PLAN §6a — surface 409 so the frontend can route

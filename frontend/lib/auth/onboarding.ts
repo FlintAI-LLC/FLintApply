@@ -3,16 +3,36 @@ import {
   buildSessionNewUrl,
   getExtensionHandoff,
 } from "@/lib/extensionHandoff"
+import { resolveAuthReturnUrl } from "@/lib/auth/returnUrl"
 
-/** Paths reachable while onboarding is incomplete (AI choice not finished). */
+/**
+ * Paths reachable while the onboarding wizard is incomplete.
+ * Dashboard and billing stay open so nav items work; profile/settings already
+ * allowed building a master resume outside the wizard.
+ */
 export const ONBOARDING_EXEMPT_PREFIXES = [
   "/onboarding",
+  "/dashboard",
+  "/billing",
   "/profile",
   "/session/new",
   "/jobs/setup",
   "/auth/reset",
   "/auth/verify",
   "/settings",
+  "/extension",
+  // proxy.ts's onboarding redirect is NOT gated on PROTECTED_PREFIXES (only
+  // the anon->/auth redirects are). Any authenticated-but-incomplete-onboarding
+  // request reaching this far gets redirected to /onboarding unless the
+  // pathname is exempt here. /auth/extension/{provider}/callback pages are
+  // the extension's OAuth tab-capture fallback: if the extension's
+  // webNavigation listener misses the redirect and the same browser profile
+  // happens to also have an incomplete-onboarding website session, the
+  // extension's ?code=...&state=... query string must not be dropped by a
+  // same-tab redirect to /onboarding. This was a pre-existing gap that
+  // affected the google callback page too; adding the whole /auth/extension
+  // prefix here covers google/github/microsoft uniformly.
+  "/auth/extension",
 ]
 
 export const ONBOARDING_STEP_COUNT = 5
@@ -46,8 +66,7 @@ export function needsOnboarding(user?: BackendUser | null): boolean {
 export function mustCompleteOnboarding(
   session?: { backendUser?: BackendUser | null } | null,
 ): boolean {
-  if (!session) return false
-  if (!session.backendUser) return true
+  if (!session?.backendUser) return false
   return needsOnboarding(session.backendUser)
 }
 
@@ -59,18 +78,31 @@ export function postAuthLandingPath(
 }
 
 export function postOnboardingDestination(_user?: BackendUser | null): string {
-  if (typeof window !== "undefined") {
-    const stored = sessionStorage.getItem("sr_auth_return_url")
-    if (stored && !stored.startsWith("/auth") && stored !== "/onboarding") {
-      sessionStorage.removeItem("sr_auth_return_url")
-      // Marketing home is not a post-onboarding destination for signed-in users.
-      if (stored !== "/") {
-        return stored
-      }
-    }
-    const handoff = getExtensionHandoff()
-    if (handoff) return buildSessionNewUrl(handoff)
+  return resolvePostAuthClientDestination(null)
+}
+
+/**
+ * After sign-in when onboarding is already complete: honor callbackUrl / stored
+ * return path, then an extension JD handoff, then dashboard.
+ */
+export function resolvePostAuthClientDestination(
+  callbackUrlFromQuery: string | null | undefined,
+): string {
+  if (typeof window === "undefined") return "/dashboard"
+
+  const resolved = resolveAuthReturnUrl(callbackUrlFromQuery ?? "")
+  if (
+    resolved !== "/dashboard" &&
+    resolved !== "/auth" &&
+    resolved !== "/onboarding" &&
+    resolved !== "/"
+  ) {
+    return resolved
   }
+
+  const handoff = getExtensionHandoff()
+  if (handoff) return buildSessionNewUrl(handoff)
+
   return "/dashboard"
 }
 

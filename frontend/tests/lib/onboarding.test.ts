@@ -31,7 +31,8 @@ describe("isOnboardingExempt", () => {
   it("lets password reset complete before onboarding", () => {
     assert.equal(isOnboardingExempt("/auth/reset"), true);
     assert.equal(isOnboardingExempt("/auth"), false);
-    assert.equal(isOnboardingExempt("/dashboard"), false);
+    assert.equal(isOnboardingExempt("/dashboard"), true);
+    assert.equal(isOnboardingExempt("/billing"), true);
   });
 
   it("lets email verification and settings complete before onboarding", () => {
@@ -43,13 +44,24 @@ describe("isOnboardingExempt", () => {
   it("does not over-match auth or settings prefixes", () => {
     assert.equal(isOnboardingExempt("/auth"), false);
     assert.equal(isOnboardingExempt("/settingsfoo"), false);
-    assert.equal(isOnboardingExempt("/dashboard"), false);
+    assert.equal(isOnboardingExempt("/jobs"), false);
+  });
+
+  it("exempts extension OAuth callback pages for every provider", () => {
+    // Regression: proxy.ts's onboarding redirect is NOT gated on
+    // PROTECTED_PREFIXES, so any of these paths would otherwise be
+    // redirected to /onboarding for a signed-in-but-incomplete website
+    // session sharing the same browser profile as the extension's OAuth
+    // tab, dropping the ?code=...&state=... the extension needs.
+    assert.equal(isOnboardingExempt("/auth/extension/google/callback"), true);
+    assert.equal(isOnboardingExempt("/auth/extension/github/callback"), true);
+    assert.equal(isOnboardingExempt("/auth/extension/microsoft/callback"), true);
   });
 });
 
 describe("mustCompleteOnboarding", () => {
-  it("treats missing backendUser as incomplete", () => {
-    assert.equal(mustCompleteOnboarding({}), true);
+  it("does not treat a Google-only session as onboarding", () => {
+    assert.equal(mustCompleteOnboarding({}), false);
     assert.equal(mustCompleteOnboarding(null), false);
   });
 
@@ -67,7 +79,7 @@ describe("mustCompleteOnboarding", () => {
 describe("postAuthLandingPath", () => {
   it("sends incomplete users to onboarding", () => {
     assert.equal(postAuthLandingPath({ backendUser: baseUser }), "/onboarding");
-    assert.equal(postAuthLandingPath({}), "/onboarding");
+    assert.equal(postAuthLandingPath({}), "/dashboard");
   });
 
   it("sends completed users to dashboard", () => {

@@ -31,13 +31,15 @@ export function friendlyAuthError(code: string): string {
     weak_password:
       "Please choose a stronger password (Fair or better on the strength meter).",
     signup_rate_limited:
-      "Too many signups from your network today. Try again tomorrow or use a different network.",
+      "Too many signups from this device or network. Try again later or contact support.",
     disposable_email_not_allowed:
       "Disposable email addresses cannot be used to sign up. Use a personal or work email you can receive mail at.",
     verify_token_expired:
       "This verification link has expired. Request a new one in Settings.",
     verify_token_invalid:
       "This verification link is invalid. Request a new one in Settings.",
+    verify_send_rate_limited:
+      "You can resend the verification email a few times per hour. Wait a few minutes, then try again.",
     email_verification_required:
       "Verify your email before using AI features. Check your inbox or resend from Settings.",
     credits_locked_until_verification:
@@ -52,6 +54,8 @@ export function friendlyAuthError(code: string): string {
     "Failed to fetch": "Could not reach the API. Is the backend running?",
     tfa_invalid: "Invalid TOTP code or recovery code.",
     challenge_token_invalid: "Your 2FA session has expired. Please log in again.",
+    launch_closed:
+      "Early access is required to create an account before launch. Enter your invite code, then sign in again.",
     OAuthBackendSyncPending:
       "Sign-in succeeded but the app could not reach the API. Sign out and try again.",
     missing_api_token:

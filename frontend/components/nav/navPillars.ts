@@ -33,6 +33,7 @@ export const NAV_PILLARS: readonly NavPillar[] = [
     links: [
       { href: "/jobs/setup", label: "Job roles" },
       { href: "/jobs", label: "Search jobs" },
+      { href: "/extension", label: "Browser extension" },
       { href: "/tracker", label: "Applications" },
       { href: "/career-watch", label: "Career Watch" },
     ],
@@ -46,9 +47,12 @@ export const NAV_PILLARS: readonly NavPillar[] = [
 ] as const
 
 /** Flat list for mobile scroll bar — excludes /dashboard (fixed pill in header). */
-export const MOBILE_NAV_LINKS: readonly NavLinkDef[] = NAV_PILLARS.flatMap((pillar) =>
-  pillar.comingSoon ? [] : pillar.links,
-).filter((link) => link.href !== "/dashboard")
+export const MOBILE_NAV_LINKS: readonly NavLinkDef[] = [
+  ...NAV_PILLARS.flatMap((pillar) =>
+    pillar.comingSoon ? [] : pillar.links,
+  ).filter((link) => link.href !== "/dashboard"),
+  { href: "/settings", label: "Settings" },
+]
 
 /** Public landing header — shown to signed-out visitors only. */
 export const LANDING_NAV_LINKS: readonly NavLinkDef[] = [

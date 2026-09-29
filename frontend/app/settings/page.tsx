@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Check, Loader2, Mail } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth/guards";
@@ -23,7 +23,7 @@ export default function SettingsPage() {
   const [resetSending, setResetSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const autoVerifySentRef = useRef(false);
+  const [verifySending, setVerifySending] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -43,16 +43,6 @@ export default function SettingsPage() {
     load();
   }, [load]);
 
-  useEffect(() => {
-    if (!token || verified || loading || autoVerifySentRef.current) return;
-    autoVerifySentRef.current = true;
-    void sendEmailVerification(token)
-      .then(() => setVerifySent(true))
-      .catch(() => {
-        autoVerifySentRef.current = false;
-      });
-  }, [token, verified, loading]);
-
   async function saveName() {
     if (!token || !displayName.trim()) return;
     setSaving(true);
@@ -69,13 +59,18 @@ export default function SettingsPage() {
   }
 
   async function resendVerification() {
-    if (!token) return;
+    if (!token || verifySending) return;
+    setVerifySending(true);
     setError(null);
     try {
       await sendEmailVerification(token);
       setVerifySent(true);
+      await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not send verification");
+      const code = e instanceof Error ? e.message : "";
+      setError(friendlyAuthError(code === "HTTP 429" ? "verify_send_rate_limited" : code));
+    } finally {
+      setVerifySending(false);
     }
   }
 
@@ -131,7 +126,10 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section className="mb-8 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
+      <section
+        id="email-verification"
+        className="mb-8 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3 scroll-mt-24"
+      >
         <h2 className="font-medium text-slate-800 dark:text-slate-200">Email</h2>
         <p className="text-sm text-slate-600 dark:text-slate-400">{email}</p>
         {verified ? (
@@ -143,15 +141,20 @@ export default function SettingsPage() {
             <p className="text-sm text-amber-700 dark:text-amber-300">
               {verifySent
                 ? "We sent a verification link to your inbox. Open it to unlock your credits and use AI features."
-                : "Email not verified — sending a verification link…"}
+                : "Email not verified — send a link to your inbox to unlock AI features and credits."}
             </p>
             <button
               type="button"
+              disabled={verifySending}
               onClick={() => void resendVerification()}
               className="inline-flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
             >
               <Mail className="w-4 h-4" />
-              {verifySent ? "Resend verification email" : "Send verification email"}
+              {verifySending
+                ? "Sending…"
+                : verifySent
+                  ? "Resend verification email"
+                  : "Send verification email"}
             </button>
           </div>
         )}
@@ -193,6 +196,20 @@ export default function SettingsPage() {
             change here.
           </p>
         )}
+      </section>
+
+      <section className="mb-8 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-2">
+        <h2 className="font-medium text-slate-800 dark:text-slate-200">Browser extension</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          Capture job postings from Greenhouse, Lever, and similar sites, or autofill applications
+          from your tailored resume.
+        </p>
+        <Link
+          href="/extension"
+          className="text-sm text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 font-medium"
+        >
+          Install or update the extension →
+        </Link>
       </section>
 
       <section className="mb-8 border border-slate-200 dark:border-slate-800 rounded-xl p-4">

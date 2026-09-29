@@ -124,6 +124,11 @@ class Settings(BaseSettings):
     # Base URL of the frontend, used to build email links (verify/reset/etc.)
     FRONTEND_BASE_URL: str = "http://localhost:3000"
 
+    # Pre-launch gate: block sign-up until this instant (ISO-8601). Empty = disabled.
+    LAUNCH_AT: str = ""
+    # Shared secret for early-access cookie (must match frontend LAUNCH_PREVIEW_SECRET).
+    LAUNCH_PREVIEW_SECRET: str = ""
+
     # Token TTLs (seconds) — overridable per environment for testing.
     ACCESS_TOKEN_TTL_SECONDS: int = 15 * 60        # 15 min — §18.2 hard cap
     REFRESH_TOKEN_TTL_SECONDS: int = 7 * 24 * 3600  # 7 days
@@ -246,7 +251,11 @@ class Settings(BaseSettings):
     # Signup abuse controls (M20 §11j slice 6).
     TRUSTED_PROXY_IPS: list[str] = ["127.0.0.1", "::1"]
     SIGNUP_IP_DAILY_LIMIT: int = 15
+    # Legacy alias — prefer CONSUMER/CORPORATE limits below (local-sim may still set this).
     SIGNUP_IP_DEVICE_DAILY_LIMIT: int = 3
+    SIGNUP_CONSUMER_IP_DEVICE_MONTHLY_LIMIT: int = 2
+    SIGNUP_CORPORATE_IP_DEVICE_DAILY_LIMIT: int = 2
+    SIGNUP_RATE_LIMIT_WHITELIST_DOMAINS: list[str] = []
     SIGNUP_FINGERPRINT_COLLISION_THRESHOLD: int = 5
 
     # Unverified email-account cleanup (M20 §11j slice 7).

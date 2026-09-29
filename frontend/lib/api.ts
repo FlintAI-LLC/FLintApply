@@ -793,6 +793,8 @@ export interface TailoredResumeOutput {
   certifications: string[];
   rewrite_notes: string[];
   metrics_needed: MetricNeeded[];
+  /** "deterministic_fallback" when the model output was unusable and sections were rebuilt. */
+  phase3_delivery?: "llm" | "deterministic_fallback";
   selected_chunks?: Array<{ chunk_id: string; section: string; score: number; tokens: number }>;
   skipped_chunks?: Array<{ chunk_id: string; section: string; score: number; reason: string; content?: string }>;
   retrieval_meta?: Record<string, unknown>;

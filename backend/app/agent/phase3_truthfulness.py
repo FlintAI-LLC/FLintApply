@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 
 from app.models.rewrite import (
     MetricNeeded,
-    TailoredEducationEntry,
     TailoredExperienceEntry,
     TailoredResumeOutput,
 )
@@ -383,54 +382,16 @@ def restore_missing_sections(
     *,
     prior: TailoredResumeOutput | None = None,
 ) -> TailoredResumeOutput:
-    """Re-inject education/projects/certs silently dropped by the LLM."""
+    """Re-inject certifications silently dropped by the LLM.
+
+    Education and projects are restored by ``enforce_resume_invariants``, which
+    respects deliberate deletions and copies without synthesizing metadata.
+    """
     if resume_parsed is None and prior is None:
         return output
 
     notes = list(output.rewrite_notes)
-    education = list(output.education)
-    projects = list(output.projects)
     certifications = list(output.certifications)
-
-    if not education:
-        source_edu = (
-            prior.education if prior and prior.education else []
-        )
-        if not source_edu and resume_parsed:
-            source_edu = [
-                TailoredEducationEntry(
-                    degree=e.degree,
-                    institution=e.institution,
-                    year=e.year or "",
-                    bullets=[],
-                )
-                for e in resume_parsed.education
-            ]
-        if source_edu:
-            education = list(source_edu)
-            notes.append(
-                "Restored Education section — LLM output omitted it despite "
-                "being present in the original resume."
-            )
-
-    if not projects:
-        source_projects = prior.projects if prior and prior.projects else []
-        if not source_projects and resume_parsed:
-            source_projects = [
-                {
-                    "name": p.name,
-                    "url": p.url,
-                    "bullets": list(p.bullets or []),
-                    "relevant_to_jd": True,
-                }
-                for p in resume_parsed.projects
-            ]
-        if source_projects:
-            projects = list(source_projects)
-            notes.append(
-                "Restored Projects section — LLM output omitted projects from "
-                "the original resume."
-            )
 
     if not certifications:
         source_certs = prior.certifications if prior and prior.certifications else []
@@ -444,8 +405,6 @@ def restore_missing_sections(
 
     return output.model_copy(
         update={
-            "education": education,
-            "projects": projects,
             "certifications": certifications,
             "rewrite_notes": notes,
         }

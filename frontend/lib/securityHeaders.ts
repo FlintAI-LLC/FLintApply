@@ -85,7 +85,7 @@ export function buildContentSecurityPolicy(options: CspOptions = {}): string {
 }
 
 const PERMISSIONS_POLICY =
-  "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(self), usb=()";
+  "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(self), payment=(self), usb=()";
 
 /** Non-CSP security headers (CSP is set per request in proxy.ts). */
 export function securityResponseHeaders(options?: {

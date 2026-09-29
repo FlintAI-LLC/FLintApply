@@ -17,12 +17,21 @@ import {
   mustCompleteOnboarding,
   postAuthLandingPath,
 } from "@/lib/auth/onboarding"
+import {
+  AUTH_RETURN_COOKIE,
+  clearAuthReturnCookie,
+  readAuthReturnCookie,
+  setAuthReturnCookie,
+} from "@/lib/auth/returnUrl"
+import { hasLaunchPreviewAccess, launchGateActive } from "@/lib/launchGate"
+import { isLaunchPublicPath } from "@/lib/launchPreview"
 
 // Prefix-match protected routes.
 const PROTECTED_PREFIXES = [
   "/session/new",
   "/session/",
   "/profile",
+  "/settings",
   "/billing",
   "/dashboard",
   "/onboarding",
@@ -41,6 +50,28 @@ export default auth(async function proxy(req) {
   const { pathname } = req.nextUrl
   const session = req.auth
 
+  // ── Pre-launch gate (marketing only; early access via preview cookie) ───
+  if (launchGateActive() && !hasLaunchPreviewAccess(req)) {
+    const blocked =
+      !isLaunchPublicPath(pathname) ||
+      pathname.startsWith("/api/auth/signin")
+    if (blocked) {
+      const invite = new URL("/launch-preview", req.url)
+      return redirectWithContentSecurityPolicy(invite, nonce)
+    }
+  }
+
+  // NextAuth JSON endpoints must never be redirected to HTML pages.
+  // /api/auth/signout is the one that broke logout during onboarding:
+  // proxy sent it to /onboarding, the client parsed "<!DOCTYPE" as JSON,
+  // and the session cookie stayed put.
+  if (
+    pathname.startsWith("/api/") &&
+    !pathname.startsWith("/api/auth/signin")
+  ) {
+    return nextWithContentSecurityPolicy(req, nonce)
+  }
+
   // ── Separate admin guard (isolated from user NextAuth session) ────────────
   if (pathname.startsWith("/admin") && !pathname.startsWith(ADMIN_AUTH_PATH)) {
     const cookie = req.cookies.get(ADMIN_COOKIE)?.value
@@ -57,10 +88,31 @@ export default auth(async function proxy(req) {
     (prefix) => pathname === prefix || pathname.startsWith(prefix + "/") || pathname.startsWith(prefix),
   )
 
+  // Google/GitHub can create a NextAuth session before FastAPI creates the user.
+  // Do not send that half-session into onboarding — it loops and blocks sign-out.
+  if (isProtected && session && !session.backendAccessToken) {
+    const url = new URL("/auth", req.url)
+    if (session.error) url.searchParams.set("error", String(session.error))
+    const returnPath = `${pathname}${req.nextUrl.search}`
+    url.searchParams.set("callbackUrl", returnPath)
+    const jdId = req.nextUrl.searchParams.get("jd_id")
+    if (jdId) {
+      url.searchParams.set("jd_id", jdId)
+      const source = req.nextUrl.searchParams.get("source")
+      if (source) url.searchParams.set("source", source)
+      const jdReview = req.nextUrl.searchParams.get("jd_review")
+      if (jdReview) url.searchParams.set("jd_review", jdReview)
+    }
+    const response = redirectWithContentSecurityPolicy(url, nonce)
+    setAuthReturnCookie(response, returnPath)
+    return response
+  }
+
   if (isProtected && !session) {
     const url = new URL("/auth", req.url)
     // Preserve query string (e.g. extension handoff ?jd_id=…&source=extension).
-    url.searchParams.set("callbackUrl", `${pathname}${req.nextUrl.search}`)
+    const returnPath = `${pathname}${req.nextUrl.search}`
+    url.searchParams.set("callbackUrl", returnPath)
     // Duplicate jd_id at top level — OAuth providers sometimes strip nested
     // query params from callbackUrl during the redirect round-trip.
     const jdId = req.nextUrl.searchParams.get("jd_id")
@@ -71,14 +123,23 @@ export default auth(async function proxy(req) {
       const jdReview = req.nextUrl.searchParams.get("jd_review")
       if (jdReview) url.searchParams.set("jd_review", jdReview)
     }
-    return redirectWithContentSecurityPolicy(url, nonce)
+    const response = redirectWithContentSecurityPolicy(url, nonce)
+    setAuthReturnCookie(response, returnPath)
+    return response
   }
 
-  if (session && mustCompleteOnboarding(session) && !isOnboardingExempt(pathname)) {
+  if (
+    session?.backendAccessToken &&
+    mustCompleteOnboarding(session) &&
+    !isOnboardingExempt(pathname)
+  ) {
     const onboardingUrl = new URL("/onboarding", req.url)
-    // Preserve deep links (e.g. return from email verify → settings).
-    if (pathname !== "/onboarding" && req.nextUrl.search) {
-      onboardingUrl.searchParams.set("returnTo", `${pathname}${req.nextUrl.search}`)
+    // Remember where they were headed (dashboard, jobs, etc.) for after the wizard.
+    if (pathname !== "/onboarding") {
+      onboardingUrl.searchParams.set(
+        "returnTo",
+        `${pathname}${req.nextUrl.search}`,
+      )
     }
     return redirectWithContentSecurityPolicy(onboardingUrl, nonce)
   }
@@ -99,10 +160,19 @@ export default auth(async function proxy(req) {
     AUTH_ONLY_PATHS.some((p) => pathname === p) &&
     session?.backendAccessToken
   ) {
-    return redirectWithContentSecurityPolicy(
-      new URL(postAuthLandingPath(session), req.url),
+    const cookieReturn = readAuthReturnCookie(
+      req.cookies.get(AUTH_RETURN_COOKIE)?.value,
+    )
+    const landing =
+      cookieReturn && cookieReturn !== "/auth"
+        ? cookieReturn
+        : postAuthLandingPath(session)
+    const response = redirectWithContentSecurityPolicy(
+      new URL(landing, req.url),
       nonce,
     )
+    clearAuthReturnCookie(response)
+    return response
   }
 
   return nextWithContentSecurityPolicy(req, nonce)
@@ -114,6 +184,6 @@ export const config = {
     // extension this pattern already skips, so without them every crawler hit
     // would run auth() to reach a file that is public by definition.
     // `opengraph-image.png` is already covered by the `.png` case.
-    "/((?!api/auth|_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|eot|css|js)$).*)",
+    "/((?!api/auth/callback|api/auth/session|api/auth/providers|api/auth/csrf|api/auth/error|api/auth/signout|_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|eot|css|js)$).*)",
   ],
 }

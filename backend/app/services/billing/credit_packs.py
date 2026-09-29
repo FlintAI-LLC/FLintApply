@@ -2,6 +2,10 @@
 
 Replaces legacy ``better_pack`` / ``best_per_resume`` LLM add-on packs with
 ``CreditKind.free`` purchases exposed via ``/api/billing/prices`` addons.
+
+SKU codes ``credits_5`` / ``credits_15`` stay stable so live Stripe price IDs
+and PlanConfig rows do not need to change. Display names and grant sizes
+are the customer-facing truth: $5 → 10 credits, $12 → 25 credits.
 """
 
 from __future__ import annotations
@@ -25,13 +29,13 @@ class CreditPackSpec(TypedDict):
 
 CREDIT_PACK_SPECS: dict[str, CreditPackSpec] = {
     "credits_5": {
-        "display_name": "5 credits",
-        "credits_granted": 5,
+        "display_name": "10 credits",
+        "credits_granted": 10,
         "kind": "credit_pack",
     },
     "credits_15": {
-        "display_name": "15 credits",
-        "credits_granted": 15,
+        "display_name": "25 credits",
+        "credits_granted": 25,
         "kind": "credit_pack",
     },
 }

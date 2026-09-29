@@ -3,7 +3,7 @@
 Currently exposes a single public route (``POST /api/legal/dpo-contact``)
 used by ``frontend/app/legal/contact/page.tsx``.  The endpoint is rate
 limited (5/min/IP) to keep abuse surface small and forwards the message
-to ``privacy@zanganehai.com`` via Resend.
+to ``privacy@flintapply.com`` via Resend.
 
 The route never reveals whether Resend was actually called — if the
 provider is missing or fails, the API still returns ``200`` with a
@@ -29,7 +29,7 @@ log = structlog.get_logger("legal.dpo_contact")
 router = APIRouter(prefix="/api/legal", tags=["legal"])
 
 
-_DPO_INBOX = "privacy@zanganehai.com"
+_DPO_INBOX = "privacy@flintapply.com"
 
 
 _VALID_TOPICS = {

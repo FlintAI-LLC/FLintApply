@@ -8,6 +8,12 @@ test("Configuration explains host mismatch in local dev", () => {
   assert.match(msg, /localhost/i)
 })
 
+test("launch_closed tells testers to use the invite", () => {
+  const msg = friendlyAuthError("launch_closed")
+  assert.match(msg, /invite/i)
+  assert.notEqual(msg, friendlyAuthError("Default"))
+})
+
 test("OAuthBackendSyncPending mentions API reachability", () => {
   const msg = friendlyAuthError("OAuthBackendSyncPending")
   assert.match(msg, /API/i)
