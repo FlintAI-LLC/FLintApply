@@ -7,22 +7,14 @@ import { Loader2, TrendingUp, Zap } from "lucide-react"
 import { getSubscriptionCurrent, ApiError, type SubscriptionCurrentResponse } from "@/lib/api"
 import { isSubscriptionActive } from "@/lib/billing"
 import { CreditMeter } from "@/components/billing/CreditMeter"
-import {
-  isRefreshRateLimited,
-  refreshBackendSession,
-} from "@/lib/auth/refreshBackendSession"
+import { liveBackendAccessToken } from "@/lib/auth/accessToken"
 
 const POLL_MS = 60_000
 
 export function UsageWidget() {
-  const { data: session, status, update } = useSession()
-  const updateRef = useRef(update)
-  useEffect(() => {
-    updateRef.current = update
-  }, [update])
+  const { data: session, status } = useSession()
 
-  const tokenExpired = session?.error === "TokenExpired"
-  const token = tokenExpired ? undefined : session?.backendAccessToken
+  const token = liveBackendAccessToken(session)
 
   const [current, setCurrent] = useState<SubscriptionCurrentResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -30,17 +22,22 @@ export function UsageWidget() {
   const hasDataRef = useRef(false)
 
   useEffect(() => {
-    if (!token || status !== "authenticated") {
+    if (status !== "authenticated") {
       setCurrent(null)
       setLoading(false)
       fetchedTokenRef.current = null
       hasDataRef.current = false
       return
     }
+    // Mid-rotation the token is briefly absent: keep what is on screen.
+    if (!token) return
 
     let cancelled = false
+    // A 401 for this token stays a 401; wait for rotation to hand us a new one.
+    let rejected = false
 
     const load = async (force = false) => {
+      if (rejected) return
       if (!force && fetchedTokenRef.current === token) return
 
       if (!hasDataRef.current) setLoading(true)
@@ -56,8 +53,8 @@ export function UsageWidget() {
           return
         }
         if (!hasDataRef.current) setCurrent(null)
-        if (e instanceof ApiError && e.status === 401 && !isRefreshRateLimited()) {
-          void refreshBackendSession(updateRef.current)
+        if (e instanceof ApiError && e.status === 401) {
+          rejected = true
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -72,7 +69,7 @@ export function UsageWidget() {
     }
   }, [token, status])
 
-  if (status === "loading" || status === "unauthenticated" || !token) return null
+  if (status !== "authenticated") return null
   if (loading && !current) {
     return <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-600 dark:text-slate-400" />
   }

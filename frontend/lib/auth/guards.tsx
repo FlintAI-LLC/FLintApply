@@ -3,18 +3,12 @@
 /**
  * Client-side auth guards.
  */
-import { signOut, useSession } from "next-auth/react"
+import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef, ComponentType } from "react"
 import { fetchMe } from "@/lib/auth/api"
-import { expiredSessionAuthUrl, needsBackendAccessRefresh } from "@/lib/auth/accessToken"
+import { needsBackendAccessRefresh } from "@/lib/auth/accessToken"
 import { isOnboardingExempt, mustCompleteOnboarding, needsOnboarding } from "@/lib/auth/onboarding"
-import {
-  refreshBackendSession,
-  isRefreshRateLimited,
-  lastRefreshFailureHttpStatus,
-} from "@/lib/auth/refreshBackendSession"
-import { isStaleAuthError } from "@/lib/auth/staleSession"
 import { saveAuthReturnUrl } from "@/lib/auth/returnUrl"
 
 function currentPath(): string {
@@ -30,7 +24,6 @@ function currentPath(): string {
 export function useRequireAuth(callbackUrl?: string) {
   const { data: session, status, update } = useSession()
   const router = useRouter()
-  const refreshingRef = useRef(false)
   const onboardingVerifyRef = useRef(false)
   const onboardingRedirectedRef = useRef(false)
 
@@ -55,31 +48,9 @@ export function useRequireAuth(callbackUrl?: string) {
       return
     }
 
-    if (needsBackendAccessRefresh(session)) {
-      if (refreshingRef.current) return
-      if (isRefreshRateLimited() && lastRefreshFailureHttpStatus() === 429) return
-      if (isRefreshRateLimited()) {
-        saveAuthReturnUrl(dest)
-        void signOut({ callbackUrl: expiredSessionAuthUrl(dest) })
-        return
-      }
-      refreshingRef.current = true
-      void refreshBackendSession(update).then((ok) => {
-        refreshingRef.current = false
-        if (ok) return
-        if (lastRefreshFailureHttpStatus() === 429) return
-        saveAuthReturnUrl(dest)
-        void signOut({ callbackUrl: expiredSessionAuthUrl(dest) })
-      }).catch((err: unknown) => {
-        refreshingRef.current = false
-        const message = err instanceof Error ? err.message : ""
-        if (isStaleAuthError(message) || lastRefreshFailureHttpStatus() === 401) {
-          saveAuthReturnUrl(dest)
-          void signOut({ callbackUrl: expiredSessionAuthUrl(dest) })
-        }
-      })
-      return
-    }
+    // BackendTokenRefresh owns rotation and StaleSessionGuard owns sign-out;
+    // wait here rather than racing either of them.
+    if (needsBackendAccessRefresh(session)) return
 
     const path = typeof window !== "undefined" ? window.location.pathname : dest
     if (path === "/onboarding") {

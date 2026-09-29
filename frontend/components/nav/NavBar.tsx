@@ -23,6 +23,8 @@ import {
 } from "@/components/nav/navPillars"
 import { fetchMe, logoutUser } from "@/lib/auth/api"
 import { liveBackendAccessToken } from "@/lib/auth/accessToken"
+import { shouldShowUserMenu } from "@/lib/auth/navIdentity"
+import { isSessionDead } from "@/lib/auth/refreshBackendSession"
 import { needsEmailVerification } from "@/lib/auth/emailVerification"
 import { clsx } from "clsx"
 import { NotificationBell } from "@/components/nav/NotificationBell"
@@ -42,7 +44,7 @@ export function NavBar() {
 
   const accessToken = liveBackendAccessToken(session)
 
-  const showUserMenu = Boolean(session?.backendAccessToken)
+  const showUserMenu = shouldShowUserMenu(status, session, isSessionDead())
   useEffect(() => {
     if (showUserMenu) {
       setHadUserMenu(true)
