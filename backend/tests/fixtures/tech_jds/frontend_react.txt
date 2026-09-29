@@ -1,0 +1,3 @@
+MUST_HAVE: React, TypeScript, Next.js, GraphQL, Tailwind
+Frontend Engineer (Company D)
+Build product surfaces in React and TypeScript on Next.js. You will consume GraphQL APIs and style with Tailwind.

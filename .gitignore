@@ -42,6 +42,13 @@ node_modules/
 *.log
 scripts/eval_results/
 
+# Job corpus expansion artifacts (local only)
+backend/data/job_corpus/candidates.jsonl
+backend/data/job_corpus/probe_cache.jsonl
+backend/data/job_corpus/quarantine.json
+backend/data/job_corpus/wayback_raw/
+backend/data/job_corpus/seed_2000.json.bak
+
 # Terraform
 .terraform/
 *.tfstate

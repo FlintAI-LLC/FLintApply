@@ -11,7 +11,9 @@ from urllib.parse import urlparse
 import httpx
 
 from app.brand import PRODUCT_NAME
+from app.config import settings
 from app.parsers.html_parser import strip_html_to_text
+from app.parsers.jd_normalize import normalize_job_description
 
 _LEVER_POSTING_URL = re.compile(
     r"^https?://(?:www\.)?jobs\.lever\.co/([^/]+)/([0-9a-f-]{36})(?:[/?#].*)?$",
@@ -147,6 +149,7 @@ async def _fetch_lever_posting(
         return None
 
     text = f"{title}\n\n{description}" if title else description
+    text = normalize_job_description(text, max_chars=settings.JD_TEXT_MAX_CHARS).text
     return FetchedJD(text=text, title=title)
 
 

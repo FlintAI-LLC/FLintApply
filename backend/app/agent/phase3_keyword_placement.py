@@ -15,6 +15,7 @@ from app.agent.phase3_postprocess import (
     flatten_skill_terms,
     is_category_skill_line,
     normalize_skills_to_categories,
+    skill_spellings,
 )
 from app.agent.phase3_truthfulness import TruthfulnessContext
 from app.models.resume import ParsedResume
@@ -26,8 +27,10 @@ _MAX_TERM_CHARS = 60
 _MAX_NOTE_TERMS = 10
 
 
-def _term_pattern(term: str) -> re.Pattern[str]:
-    return re.compile(rf"(?<!\w){re.escape(term.strip())}(?!\w)", re.IGNORECASE)
+def _evidence_pattern(term: str) -> re.Pattern[str]:
+    """Match the term or a safe same-technology spelling (e.g. k8s for Kubernetes)."""
+    alternatives = "|".join(re.escape(s) for s in sorted(skill_spellings(term)))
+    return re.compile(rf"(?<!\w)(?:{alternatives})(?!\w)", re.IGNORECASE)
 
 
 def _tailored_body_text(output: TailoredResumeOutput) -> list[str]:
@@ -129,7 +132,7 @@ def place_evidenced_keywords(
     for term in terms:
         if term.lower() in skill_terms:
             continue
-        if _term_pattern(term).search(corpus):
+        if _evidence_pattern(term).search(corpus):
             to_add.append(term)
         else:
             unevidenced.append(term)

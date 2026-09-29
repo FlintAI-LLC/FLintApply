@@ -1,0 +1,3 @@
+MUST_HAVE: Spark, Airflow, Snowflake, Kafka, Python, dbt
+Data Engineer (Company C)
+Design batch and streaming pipelines using Spark, Airflow and Kafka. Model warehouse tables in Snowflake with dbt. Python required.

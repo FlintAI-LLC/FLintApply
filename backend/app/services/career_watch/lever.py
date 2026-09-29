@@ -7,9 +7,21 @@ from typing import Any
 
 import httpx
 
+from app.config import settings
 from app.models.career_watch import WatchedCompany
+from app.parsers.jd_normalize import normalize_job_description
 from app.services.career_watch.fetch import fetch_json
 from app.services.career_watch.types import ParsedJob
+
+
+def _normalize_description(raw: str) -> str:
+    return normalize_job_description(raw or "", max_chars=settings.JD_TEXT_MAX_CHARS).text
+
+
+def _lever_description(item: dict[str, Any]) -> str:
+    plain = str(item.get("descriptionPlain") or "")
+    html = str(item.get("description") or "")
+    return _normalize_description(plain or html)
 
 
 def _parse_ts(value: object) -> datetime | None:
@@ -56,9 +68,7 @@ class LeverAdapter:
                     title=str(item.get("text") or "Untitled"),
                     location=location,
                     apply_url=str(item.get("hostedUrl") or item.get("applyUrl") or ""),
-                    description_text=str(
-                        (item.get("descriptionPlain") or item.get("description") or "")
-                    ),
+                    description_text=_lever_description(item),
                     posted_at=_parse_ts(item.get("createdAt")),
                     raw_payload=item,
                 )
@@ -80,7 +90,7 @@ def parse_lever_payload(items: list[dict[str, Any]]) -> list[ParsedJob]:
                 title=str(item.get("text") or "Untitled"),
                 location=location,
                 apply_url=str(item.get("hostedUrl") or ""),
-                description_text=str(item.get("descriptionPlain") or ""),
+                description_text=_lever_description(item),
                 posted_at=_parse_ts(item.get("createdAt")),
                 raw_payload=item,
             )

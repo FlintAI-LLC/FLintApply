@@ -10,7 +10,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.jobs import JobCache
+from app.parsers.jd_normalize import normalize_job_description
 from app.services.jobs.normalization import (
     compute_dedup_key,
     normalize_location,
@@ -80,7 +82,10 @@ def normalize_apify_record(
         "salary_currency_original": currency,
         "employment_type": str(raw.get("employment_type") or raw.get("employmentType") or ""),
         "posted_date": posted_date,
-        "description": str(raw.get("description") or ""),
+        "description": normalize_job_description(
+            str(raw.get("description") or ""),
+            max_chars=settings.JD_TEXT_MAX_CHARS,
+        ).text,
         "apply_url": str(raw.get("apply_url") or raw.get("url") or raw.get("link") or ""),
         "raw_json": raw,
         "cached_at": now,

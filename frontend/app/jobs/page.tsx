@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { AlertCircle, ArrowLeft, Loader2, Search, Settings2, Sparkles } from "lucide-react"
 import { useRequireAuth } from "@/lib/auth/guards"
+import { JOB_CORPUS_ROADMAP_NOTE, JOB_CORPUS_SCOPE_LABEL } from "@/lib/brand"
 import { getSubscriptionCurrent } from "@/lib/api"
 import { isSubscriptionActive } from "@/lib/billing"
 import { JobsStaleBanner } from "@/components/jobs/JobsStaleBanner"
@@ -309,7 +310,8 @@ function JobsPageContent() {
         {!titlesConfirmed && searchMode === "keyword" && (
           <div className="mb-6 rounded-xl border border-amber-400/30 bg-amber-400/5 p-4 text-sm text-slate-700 dark:text-slate-300">
             <p className="mb-2">
-              Pick job titles from your resume to search our company job corpus (500+ tech employers).
+              Pick job titles from your resume to search our tech job corpus ({JOB_CORPUS_SCOPE_LABEL}).{" "}
+              {JOB_CORPUS_ROADMAP_NOTE}
             </p>
             <Link
               href="/jobs/setup?return=/jobs"

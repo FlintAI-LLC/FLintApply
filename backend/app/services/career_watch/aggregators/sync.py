@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.jobs import JobCache
+from app.parsers.jd_normalize import normalize_job_description
 from app.services.career_watch.corpus_privacy import (
     assert_corpus_sources,
     sanitize_parsed_job_for_corpus,
@@ -67,7 +68,9 @@ def _aggregator_record(
         "salary_currency_original": None,
         "employment_type": str(job.raw_payload.get("job_type") or ""),
         "posted_date": posted_date,
-        "description": job.description_text,
+        "description": normalize_job_description(
+            job.description_text, max_chars=settings.JD_TEXT_MAX_CHARS
+        ).text,
         "apply_url": job.apply_url,
         "raw_json": job.raw_payload,
         "cached_at": now,

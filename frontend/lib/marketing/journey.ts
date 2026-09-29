@@ -10,7 +10,14 @@
  * detail disclosure so gating can never drift between the places we state it.
  */
 
-import { COMPANY_LINE, FLINT_DESKTOP_URL, FLINT_MARK_SRC, FLINT_PRODUCT_NAME, PRODUCT_NAME } from "@/lib/brand";
+import {
+  COMPANY_LINE,
+  FLINT_DESKTOP_URL,
+  FLINT_MARK_SRC,
+  FLINT_PRODUCT_NAME,
+  JOB_CORPUS_ROADMAP_NOTE,
+  PRODUCT_NAME,
+} from "@/lib/brand";
 
 /**
  * `mixed` means partially usable on the free tier. Job search is the only such
@@ -61,10 +68,10 @@ export const JOURNEY_STEPS: readonly JourneyStep[] = [
     step: 3,
     title: "Search jobs",
     description:
-      `Search our company job corpus with your target roles. ${PRODUCT_NAME} surfaces real openings from hundreds of tech employers — and Career Watch can alert you when a company you follow posts a new role.`,
+      `Search our tech job corpus with your target roles. ${PRODUCT_NAME} surfaces real openings from hundreds of tech employers on major ATS boards — and Career Watch can alert you when a company you follow posts a new role. ${JOB_CORPUS_ROADMAP_NOTE}`,
     access: "mixed",
     accessNote:
-      "Free plans watch one company every 30 minutes and search the corpus once you confirm your target job titles. Paid plans watch more companies, check more often, and add expanded search and fit scoring.",
+      "Free plans watch one company every 30 minutes and search the tech corpus once you confirm your target job titles. Paid plans watch more companies, check more often, and add expanded search and fit scoring.",
     ctaLabel: "Search the job corpus",
     ctaHref: REGISTER,
   },

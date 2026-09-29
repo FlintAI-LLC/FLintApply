@@ -1,0 +1,3 @@
+MUST_HAVE: Kubernetes, Terraform, Prometheus, Observability, AWS, Docker
+Site Reliability Engineer (Company B)
+Run production Kubernetes on AWS. Codify infrastructure in Terraform, ship Docker images through CI/CD, and build observability with Prometheus and Grafana. On-call participation required.

@@ -3,21 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from html import unescape
-import re
 from typing import Any
 
 import httpx
 
+from app.config import settings
 from app.models.career_watch import WatchedCompany
+from app.parsers.jd_normalize import normalize_job_description
 from app.services.career_watch.fetch import fetch_json
 from app.services.career_watch.types import ParsedJob
 
-_TAG_RE = re.compile(r"<[^>]+>")
 
-
-def _strip_html(value: str) -> str:
-    return unescape(_TAG_RE.sub(" ", value or "")).strip()
+def _normalize_content(value: str) -> str:
+    return normalize_job_description(value or "", max_chars=settings.JD_TEXT_MAX_CHARS).text
 
 
 def _parse_posted_at(value: str | None) -> datetime | None:
@@ -60,7 +58,7 @@ class GreenhouseAdapter:
             elif isinstance(loc, str):
                 location = loc
             absolute_url = str(item.get("absolute_url") or company.careers_page_url)
-            content = _strip_html(str(item.get("content") or ""))
+            content = _normalize_content(str(item.get("content") or ""))
             parsed.append(
                 ParsedJob(
                     external_job_id=job_id,
@@ -80,13 +78,6 @@ class GreenhouseAdapter:
 
 def parse_greenhouse_payload(jobs_raw: list[dict[str, Any]]) -> list[ParsedJob]:
     """Parse a Greenhouse jobs list without network I/O (tests)."""
-    adapter = GreenhouseAdapter()
-    company = WatchedCompany(
-        name="Test",
-        slug="test",
-        careers_page_url="https://boards.greenhouse.io/test",
-        ats_board_token="test",
-    )
     parsed: list[ParsedJob] = []
     for item in jobs_raw:
         job_id = str(item.get("id") or "")
@@ -102,7 +93,7 @@ def parse_greenhouse_payload(jobs_raw: list[dict[str, Any]]) -> list[ParsedJob]:
                 title=str(item.get("title") or "Untitled"),
                 location=location,
                 apply_url=str(item.get("absolute_url") or ""),
-                description_text=_strip_html(str(item.get("content") or "")),
+                description_text=_normalize_content(str(item.get("content") or "")),
                 posted_at=_parse_posted_at(
                     str(item.get("updated_at") or item.get("created_at") or "") or None
                 ),

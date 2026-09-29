@@ -68,7 +68,21 @@ export const METADATA_TITLE =
   `${PRODUCT_NAME} — AI resume tailoring, ATS optimization & job search` as const;
 
 export const METADATA_DESCRIPTION =
-  "Discover the job titles you actually fit, then tailor an ATS-optimized resume to every job description. Master resume, cover letters, job search, and application tracking in one place." as const;
+  "Discover the job titles you actually fit, then tailor an ATS-optimized resume to every job description. Job search starts with tech employers; more industries are coming. Master resume, cover letters, application tracking in one place." as const;
+
+/**
+ * Job corpus scope — matches backend global seed (ATS-polled tech employers today).
+ * Use these strings anywhere we describe in-app search so marketing stays honest.
+ */
+export const JOB_CORPUS_ROADMAP_NOTE =
+  "We're starting with tech jobs and employers; other industries are planned in a later phase." as const;
+
+/** Short label for filters, badges, and tight UI slots. */
+export const JOB_CORPUS_SCOPE_LABEL = "Tech jobs (expanding soon)" as const;
+
+/** One sentence for setup / jobs intro blocks. */
+export const JOB_CORPUS_INTRO =
+  `${PRODUCT_NAME} matches your story to real openings from our tech employer job corpus. ${JOB_CORPUS_ROADMAP_NOTE}` as const;
 
 export const METADATA_OG_TITLE = PRODUCT_NAME;
 

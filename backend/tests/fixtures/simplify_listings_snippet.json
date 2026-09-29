@@ -1,0 +1,16 @@
+[
+  {
+    "url": "https://boards.greenhouse.io/acme/jobs/123",
+    "company": "Acme Corp",
+    "category": "Software Engineering"
+  },
+  {
+    "url": "https://jobs.lever.co/flint",
+    "company": "Flint",
+    "category": "Software Engineering"
+  },
+  {
+    "url": "https://example.com/not-ats",
+    "company": "Skip"
+  }
+]

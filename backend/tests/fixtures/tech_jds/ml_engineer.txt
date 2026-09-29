@@ -1,0 +1,3 @@
+MUST_HAVE: PyTorch, Python, MLOps, Kubernetes, LLM
+Machine Learning Engineer (Company F)
+Train and serve PyTorch models. Own MLOps on Kubernetes, and build LLM-backed features end to end in Python.
