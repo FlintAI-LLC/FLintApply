@@ -240,6 +240,7 @@ async def run(
         score_result,
         existing_issues=corrected_issues,
         flagged_keyword_terms=flagged_terms,
+        jd_text=session.jd_raw,
     )
 
     guidance = build_checkup_guidance(score_result, blocking_issues=corrected_issues)

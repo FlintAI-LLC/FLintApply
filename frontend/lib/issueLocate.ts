@@ -141,6 +141,9 @@ export function resolveIssueAnchor(
 }
 
 export function locateIssueHint(issue: BlockingIssue, tailored: TailoredResumeOutput | null): string | null {
+  if (issue.suggestion.includes("In the JD they use it like:")) {
+    return null;
+  }
   if (issue.anchor) return null;
   const terms = searchTermsForIssue(issue);
   if (terms.length === 0) return "Showing the closest section — adjust wording there.";
