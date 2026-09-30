@@ -15,6 +15,8 @@ export interface Entitlement {
   creditBalance: number | null;
   creditCap: number | null;
   creditsUsed: number | null;
+  aiBudgetCapUsd: number | null;
+  aiBudgetUsedUsd: number | null;
   subscription: Subscription | null;
   /** null limit means no per-period cap (Premium fair use). */
   whisperAvailable: boolean;
@@ -27,6 +29,8 @@ const UNRESOLVED: Entitlement = {
   creditBalance: null,
   creditCap: null,
   creditsUsed: null,
+  aiBudgetCapUsd: null,
+  aiBudgetUsedUsd: null,
   subscription: null,
   whisperAvailable: false,
   loading: true,
@@ -63,6 +67,10 @@ export function useEntitlement(): Entitlement {
           creditBalance: data.credit_balance,
           creditCap: data.credit_cap ?? (subscribed ? sub?.resumes_limit ?? null : null),
           creditsUsed: data.credits_used ?? (subscribed ? sub?.resumes_used ?? null : null),
+          aiBudgetCapUsd:
+            typeof data.ai_budget_cap_usd === "number" ? data.ai_budget_cap_usd : null,
+          aiBudgetUsedUsd:
+            typeof data.ai_budget_used_usd === "number" ? data.ai_budget_used_usd : null,
           subscription: sub ?? null,
           whisperAvailable: subscribed,
           loading: false,

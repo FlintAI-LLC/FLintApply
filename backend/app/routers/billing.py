@@ -87,7 +87,11 @@ from app.services.billing.flint_credits import (
     deduct_flint_credits,
     release_hold,
 )
-from app.services.billing.free_tier_budget import free_credit_meter
+from app.services.billing.free_tier_budget import (
+    free_credit_meter,
+    get_user_lifetime_usd,
+    user_on_paid_plan,
+)
 from app.services.billing.llm_upgrade import (
     VALID_LLM_UPGRADE_CODES,
     TierStatus,
@@ -262,6 +266,8 @@ class SubscriptionCurrentResponse(BaseModel):
         "Job search, checkups, fit analysis, story sessions, and tracker rows use "
         "separate monthly counters on the free plan."
     )
+    ai_budget_cap_usd: float | None = None
+    ai_budget_used_usd: float | None = None
 
 
 class RefundRequestPayload(BaseModel):
@@ -293,7 +299,7 @@ class RefundRequestPayload(BaseModel):
 
 def _subscription_credit_fields(
     user: User, *, free_credits: int, exhaustion_top_up_eligible: bool = False
-) -> dict[str, int | bool | str]:
+) -> dict[str, int | bool | str | float | None]:
     return {
         "credit_balance": free_credits,
         "spendable_credit_balance": spendable_free_credits(user, balance=free_credits),
@@ -302,6 +308,18 @@ def _subscription_credit_fields(
         ),
         "exhaustion_top_up_eligible": exhaustion_top_up_eligible,
         "exhaustion_top_up_amount": settings.EXHAUSTION_TOP_UP_CREDITS,
+    }
+
+
+async def _ai_budget_fields(db: AsyncSession, user: User) -> dict[str, float | None]:
+    if await user_on_paid_plan(db, user_id=user.id):
+        return {"ai_budget_cap_usd": None, "ai_budget_used_usd": None}
+    if settings.FREE_TIER_MAX_USD <= 0:
+        return {"ai_budget_cap_usd": None, "ai_budget_used_usd": None}
+    used = await get_user_lifetime_usd(str(user.id))
+    return {
+        "ai_budget_cap_usd": float(settings.FREE_TIER_MAX_USD),
+        "ai_budget_used_usd": round(used, 4),
     }
 
 
@@ -741,10 +759,12 @@ async def subscriptions_current(
     if sub is None:
         top_up = await get_exhaustion_top_up_eligibility(session=db, user=user)
         meter = await free_credit_meter(db, user=user)
+        ai_budget = await _ai_budget_fields(db, user)
         return SubscriptionCurrentResponse(
             subscription=None,
             credit_cap=int(meter["credit_cap"]),
             credits_used=int(meter["credits_used"]),
+            **ai_budget,
             **_subscription_credit_fields(
                 user,
                 free_credits=free_credits,
@@ -756,6 +776,7 @@ async def subscriptions_current(
         sub, plan_config_code=await reverse_lookup_code(db, sub.stripe_price_id)
     )
     limits = await get_active_tier_limits(db, plan_code)
+    ai_budget = await _ai_budget_fields(db, user)
 
     return SubscriptionCurrentResponse(
         subscription=SubscriptionView(
@@ -789,6 +810,7 @@ async def subscriptions_current(
         ),
         credit_cap=limits.resumes_per_period,
         credits_used=sub.resumes_used,
+        **ai_budget,
         **_subscription_credit_fields(user, free_credits=free_credits),
     )
 
