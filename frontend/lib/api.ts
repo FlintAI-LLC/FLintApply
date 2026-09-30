@@ -821,7 +821,7 @@ export interface QAItem {
 }
 
 export interface IssueAnchor {
-  section: "experience" | "projects" | "education";
+  section: "experience" | "projects" | "education" | "summary" | "skills";
   entry_index: number;
   bullet_index?: number;
 }
@@ -1255,6 +1255,9 @@ export interface SubscriptionCurrentResponse {
   exhaustion_top_up_eligible?: boolean;
   exhaustion_top_up_amount?: number;
   free_tier_usage_note?: string;
+  /** Lifetime platform LLM spend cap (free tier only). */
+  ai_budget_cap_usd?: number | null;
+  ai_budget_used_usd?: number | null;
 }
 
 // ── Resume Chat ──────────────────────────────────────────────────────────────

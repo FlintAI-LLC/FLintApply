@@ -5,6 +5,7 @@ import { Check, ChevronDown, ChevronUp, Info, MessageSquare, Sparkles, Zap } fro
 import { type BlockingIssue, type IssueAnchor, type QAOutput, type TailoredResumeOutput } from "@/lib/api";
 import { buildBatchChatMessage } from "@/lib/anchoredPatch";
 import { issueKey } from "@/lib/issueAnchors";
+import { locateIssueHint } from "@/lib/issueLocate";
 import { canApplyMechanicalQuickWin } from "@/lib/mechanicalFix";
 import { applyAllRoundsRemaining } from "@/lib/applyAllImprovements";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,8 @@ interface Props {
   recalculateDisabled?: boolean;
   /** Scroll the tailored editor to an anchored resume entry. */
   onScrollToAnchor?: (anchor: IssueAnchor) => void;
+  /** Jump to the best matching resume location for this issue (with or without model anchor). */
+  onLocateIssue?: (issue: BlockingIssue) => void;
   /** Apply a mechanical one-click fix (e.g. insert missing keyword into Skills). */
   onApplyMechanicalFix?: (issue: BlockingIssue) => void;
   /** Per-issue mechanical apply outcome shown on the quick-win card. */
@@ -304,6 +307,8 @@ function BlockingIssueRow({
   onStartQueue,
   onNavigateToBatchFix,
   onScrollToAnchor,
+  onLocateInResume,
+  locateHint,
   selected,
   onToggleSelect,
 }: {
@@ -314,6 +319,8 @@ function BlockingIssueRow({
   onStartQueue?: () => void;
   onNavigateToBatchFix?: () => void;
   onScrollToAnchor?: (anchor: IssueAnchor) => void;
+  onLocateInResume?: () => void;
+  locateHint?: string | null;
   selected?: boolean;
   onToggleSelect?: () => void;
 }) {
@@ -357,7 +364,10 @@ function BlockingIssueRow({
         )}
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setOpen((v) => !v);
+          if (!open && onLocateInResume) onLocateInResume();
+        }}
         className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 bg-slate-100/50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition"
       >
         <span
@@ -398,13 +408,19 @@ function BlockingIssueRow({
           <p className="text-[10px] text-slate-600 dark:text-slate-400">
             Fix effort: {issue.fix_effort.replace(/_/g, " ")}
           </p>
-          {issue.anchor && onScrollToAnchor && (
+          {locateHint && (
+            <p className="text-[10px] text-amber-700 dark:text-amber-300">{locateHint}</p>
+          )}
+          {(onLocateInResume || (issue.anchor && onScrollToAnchor)) && (
             <button
               type="button"
-              onClick={() => onScrollToAnchor(issue.anchor!)}
+              onClick={() => {
+                if (onLocateInResume) onLocateInResume();
+                else if (issue.anchor && onScrollToAnchor) onScrollToAnchor(issue.anchor);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
-              Jump to entry in editor →
+              Show in resume →
             </button>
           )}
           {/* Export: navigate to tailoring ATS tab; sidebar: queue or chat */}
@@ -524,6 +540,7 @@ export function ATSGuidancePanel({
   onRecalculate,
   recalculateDisabled = false,
   onScrollToAnchor,
+  onLocateIssue,
   onApplyMechanicalFix,
   mechanicalOutcomes = {},
   onUndoMechanicalFix,
@@ -680,10 +697,15 @@ export function ATSGuidancePanel({
               disabled={recalculateDisabled}
               className="shrink-0 px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 disabled:opacity-50 text-amber-800 dark:text-amber-200 text-xs font-semibold border border-amber-400/40"
             >
-              Recalculate
+              Refresh score (free)
             </button>
           )}
         </div>
+      )}
+      {!staleSince && output && (
+        <p className="text-xs text-slate-500 dark:text-slate-400 px-1">
+          No change in ATS score — your number matches this resume. Edit the resume to refresh for free.
+        </p>
       )}
 
       {/* Score header */}
@@ -1043,6 +1065,8 @@ export function ATSGuidancePanel({
                     }
                   : undefined}
                 onScrollToAnchor={onScrollToAnchor}
+                onLocateInResume={onLocateIssue ? () => onLocateIssue(issue) : undefined}
+                locateHint={onLocateIssue ? locateIssueHint(issue, tailored) : null}
               />
             );})}
           </div>

@@ -74,6 +74,7 @@ import {
   bulletAnchorKey,
   entryAnchorKey,
   resumeAnchorDomId,
+  resumeBulletDomId,
   scrollToResumeAnchorWithRetry,
   type EntryIssueBadge,
 } from "@/lib/issueAnchors";
@@ -297,7 +298,19 @@ function BulletList({
         const hints = hintKey ? bulletAtsIssues?.[hintKey] ?? [] : [];
 
         return (
-        <div key={idx} className="space-y-1">
+        <div
+          key={idx}
+          id={
+            section !== undefined && entryIndex !== undefined
+              ? resumeBulletDomId({
+                  section,
+                  entry_index: entryIndex,
+                  bullet_index: idx,
+                }) ?? undefined
+              : undefined
+          }
+          className="space-y-1"
+        >
           <div className="group flex items-start gap-2">
             {editingIdx === idx ? (
               <div className="flex-1 space-y-1.5">
@@ -493,7 +506,19 @@ function ScopedBulletList({
         const hints = hintKey ? bulletAtsIssues?.[hintKey] ?? [] : [];
 
         return (
-        <div key={idx} className="space-y-1">
+        <div
+          key={idx}
+          id={
+            section !== undefined && entryIndex !== undefined
+              ? resumeBulletDomId({
+                  section,
+                  entry_index: entryIndex,
+                  bullet_index: idx,
+                }) ?? undefined
+              : undefined
+          }
+          className="space-y-1"
+        >
           <div className="group flex items-start gap-2">
           {editingIdx === idx ? (
             <div className="flex-1 space-y-1.5">
@@ -1583,7 +1608,7 @@ export function TailoredEditor({ initial, sessionId, editorSyncKey = 0, onSaved,
       </section>
 
       {/* ── Summary ──────────────────────────────────────────────────────── */}
-      <section>
+      <section id={resumeAnchorDomId({ section: "summary", entry_index: 0 })}>
         <div className="flex items-center justify-between mb-3">
           <SectionHeader title="Professional Summary" />
           <button
@@ -1611,7 +1636,7 @@ export function TailoredEditor({ initial, sessionId, editorSyncKey = 0, onSaved,
       </section>
 
       {/* ── Skills ───────────────────────────────────────────────────────── */}
-      <section>
+      <section id={resumeAnchorDomId({ section: "skills", entry_index: 0 })}>
         <div className="flex items-center justify-between mb-3">
           <SectionHeader title="Skills" count={data.skills.length} />
           <div className="flex items-center gap-3">

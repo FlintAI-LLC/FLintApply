@@ -68,6 +68,13 @@ export function resumeAnchorDomId(anchor: Pick<IssueAnchor, "section" | "entry_i
   return `resume-anchor-${anchor.section}-${anchor.entry_index}`;
 }
 
+export function resumeBulletDomId(
+  anchor: Pick<IssueAnchor, "section" | "entry_index" | "bullet_index">,
+): string | null {
+  if (anchor.bullet_index === undefined) return null;
+  return `resume-bullet-${anchor.section}-${anchor.entry_index}-${anchor.bullet_index}`;
+}
+
 export function summarizeEntryIssueBadges(
   issues: BlockingIssue[],
 ): Record<string, EntryIssueBadge> {
@@ -101,15 +108,19 @@ const SCROLL_HIGHLIGHT_CLASSES = [
 ] as const;
 
 export function scrollToResumeAnchor(anchor: IssueAnchor): boolean {
-  const el = document.getElementById(
+  const bulletId =
+    anchor.bullet_index !== undefined ? resumeBulletDomId(anchor) : null;
+  const bulletEl = bulletId ? document.getElementById(bulletId) : null;
+  const entryEl = document.getElementById(
     resumeAnchorDomId({ section: anchor.section, entry_index: anchor.entry_index }),
   );
+  const el = bulletEl ?? entryEl;
   if (!el) return false;
   el.scrollIntoView({ behavior: "smooth", block: "center" });
   el.classList.add(...SCROLL_HIGHLIGHT_CLASSES);
   window.setTimeout(() => {
     el.classList.remove(...SCROLL_HIGHLIGHT_CLASSES);
-  }, 1800);
+  }, 2200);
   return true;
 }
 

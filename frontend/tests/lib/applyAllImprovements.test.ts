@@ -322,7 +322,7 @@ describe("applyAllImprovements wiring", () => {
     const slice = sliceBetween(
       pageSource,
       "const rescoreFree",
-      "const recalculateAtsWithConfirm",
+      "const requestFullAtsReanalysis",
     );
     assert.match(slice, /await rescoreAtsFree\(sessionId\)/);
     assert.doesNotMatch(slice, /recalculateAts\(/);
@@ -336,7 +336,7 @@ describe("applyAllImprovements wiring", () => {
     const slice = sliceBetween(
       pageSource,
       "const rescoreFree",
-      "const recalculateAtsWithConfirm",
+      "const requestFullAtsReanalysis",
     );
     const catchSlice = sliceBetween(slice, "} catch (err)", "} finally");
     assert.doesNotMatch(catchSlice, /setStale/);
@@ -353,14 +353,11 @@ describe("applyAllImprovements wiring", () => {
     assert.doesNotMatch(slice, /recalculateAts\(/);
   });
 
-  it("stale recalculation uses the free rescore; full recalc stays credit-gated", () => {
-    const slice = sliceBetween(
-      pageSource,
-      "const recalculateAtsWithConfirm",
-      "const applyAllImprovements",
-    );
-    assert.match(slice, /if \(stale\["4"\]\) \{\s*void rescoreFree\(\)/);
-    assert.match(slice, /requestCreditAction\("Recalculate ATS score"/);
+  it("full AI re-analysis is credit-gated separately from the free refresh", () => {
+    assert.match(pageSource, /requestFullAtsReanalysis/);
+    assert.match(pageSource, /requestCreditAction\("Full AI re-analysis"/);
+    assert.match(pageSource, /AtsScoreRefreshControls/);
+    assert.match(pageSource, /deriveAtsScoreRefreshMode/);
   });
 
   it("auto rescore makes one attempt per stale marker so failures cannot loop", () => {

@@ -40,6 +40,7 @@ import {
   buildBulletAtsIssueMap,
   summarizeEntryIssueBadges,
 } from "@/lib/issueAnchors";
+import { resolveIssueAnchor } from "@/lib/issueLocate";
 import {
   canApplyMechanicalQuickWin,
   tryApplyMechanicalQuickWin,
@@ -62,6 +63,11 @@ import { ResumeChat } from "@/components/session/ResumeChat";
 import { ExhaustionPaywall } from "@/components/billing/ExhaustionPaywall";
 import { CreditChargeConfirm } from "@/components/billing/CreditChargeConfirm";
 import { CreditMeter } from "@/components/billing/CreditMeter";
+import { AiBudgetMeter } from "@/components/billing/AiBudgetMeter";
+import {
+  AtsScoreRefreshControls,
+  deriveAtsScoreRefreshMode,
+} from "@/components/session/AtsScoreRefreshControls";
 import { useEntitlement } from "@/hooks/useEntitlement";
 import {
   saveTailoredResume,
@@ -228,6 +234,14 @@ function SessionContent() {
       }
     },
     [step, sessionId, router],
+  );
+  const locateIssueInResume = useCallback(
+    (issue: import("@/lib/api").BlockingIssue) => {
+      const anchor = resolveIssueAnchor(issue, tailored);
+      if (!anchor) return;
+      scrollToIssueAnchor(anchor);
+    },
+    [tailored, scrollToIssueAnchor],
   );
   const applyMechanicalFix = useCallback(
     (issue: import("@/lib/api").BlockingIssue) => {
@@ -954,15 +968,16 @@ function SessionContent() {
     [tailored, qa, sessionId, recordAtsScore],
   );
 
-  const recalculateAtsWithConfirm = useCallback(() => {
-    if (stale["4"]) {
-      void rescoreFree();
-      return;
-    }
-    requestCreditAction("Recalculate ATS score", () => {
+  const requestFullAtsReanalysis = useCallback(() => {
+    requestCreditAction("Full AI re-analysis", () => {
       void recalculateAts();
     });
-  }, [requestCreditAction, recalculateAts, rescoreFree, stale]);
+  }, [requestCreditAction, recalculateAts]);
+
+  const atsScoreRefreshMode = deriveAtsScoreRefreshMode({
+    staleSince: stale["4"],
+    pendingPaidConfirm: pendingCreditAction?.label === "Full AI re-analysis",
+  });
 
   const applyAllImprovements = useCallback(async () => {
     if (
@@ -1818,12 +1833,19 @@ function SessionContent() {
                   {entitlement.isFreeUser &&
                     entitlement.creditCap != null &&
                     entitlement.creditsUsed != null && (
-                      <div className="mt-3 max-w-xs">
+                      <div className="mt-3 max-w-xs space-y-3">
                         <CreditMeter
                           used={entitlement.creditsUsed}
                           cap={entitlement.creditCap}
                           label="Credits"
                         />
+                        {entitlement.aiBudgetCapUsd != null &&
+                          entitlement.aiBudgetUsedUsd != null && (
+                            <AiBudgetMeter
+                              usedUsd={entitlement.aiBudgetUsedUsd}
+                              capUsd={entitlement.aiBudgetCapUsd}
+                            />
+                          )}
                       </div>
                     )}
                 </div>
@@ -1859,27 +1881,19 @@ function SessionContent() {
                         {phaseRunning ? "Re-tailoring…" : RE_TAILOR_ACTION_LABEL}
                       </button>
                     )}
-                    {pendingCreditAction?.label === "Recalculate ATS score" ? (
-                      <CreditChargeConfirm
-                        actionLabel="Recalculate ATS score"
-                        onConfirm={() => {
-                          const run = pendingCreditAction.run;
-                          setPendingCreditAction(null);
-                          run();
-                        }}
-                        onCancel={() => setPendingCreditAction(null)}
-                        disabled={atsRecalcRunning || phaseRunning}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={recalculateAtsWithConfirm}
-                        disabled={atsRecalcRunning || phaseRunning || !!pendingCreditAction}
-                        className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40"
-                      >
-                        {atsRecalcRunning ? "Recalculating…" : "Recalculate ATS Score"}
-                      </button>
-                    )}
+                    <AtsScoreRefreshControls
+                      mode={atsScoreRefreshMode}
+                      busy={atsRecalcRunning}
+                      disabled={phaseRunning || (!!pendingCreditAction && pendingCreditAction.label !== "Full AI re-analysis")}
+                      onRefreshFree={() => void rescoreFree()}
+                      onRequestFullReanalysis={requestFullAtsReanalysis}
+                      onConfirmFullReanalysis={() => {
+                        const run = pendingCreditAction?.run;
+                        setPendingCreditAction(null);
+                        run?.();
+                      }}
+                      onCancelFullReanalysis={() => setPendingCreditAction(null)}
+                    />
                   </div>
                 )}
               </div>
@@ -2044,8 +2058,8 @@ function SessionContent() {
                             tailored={tailored}
                             variant="sidebar"
                             staleSince={stale["4"]}
-                            onRecalculate={recalculateAtsWithConfirm}
-                            recalculateDisabled={atsRecalcRunning || phaseRunning || !!pendingCreditAction}
+                            onRecalculate={() => void rescoreFree()}
+                            recalculateDisabled={atsRecalcRunning || phaseRunning || !stale["4"]}
                             addressedKeys={addressedAtsKeys}
                             skippedKeys={skippedAtsKeys}
                             onSkipIssue={skipAtsIssue}
@@ -2054,6 +2068,7 @@ function SessionContent() {
                             initialSelectedKeys={atsGuidanceSelectedKeys}
                             onInitialSelectionApplied={() => setAtsGuidanceSelectedKeys(null)}
                             onScrollToAnchor={scrollToIssueAnchor}
+                            onLocateIssue={locateIssueInResume}
                             onApplyMechanicalFix={applyMechanicalFix}
                             mechanicalOutcomes={mechanicalOutcomes}
                             onUndoMechanicalFix={undoMechanicalFix}
@@ -2130,18 +2145,27 @@ function SessionContent() {
                   <ProgressLog messages={progressLog} done={false} />
                 </div>
               )}
-              {pendingCreditAction?.label === "Recalculate ATS score" && (
-                <CreditChargeConfirm
-                  className="mb-4"
-                  actionLabel="Recalculate ATS score"
-                  onConfirm={() => {
-                    const run = pendingCreditAction.run;
-                    setPendingCreditAction(null);
-                    run();
-                  }}
-                  onCancel={() => setPendingCreditAction(null)}
-                  disabled={atsRecalcRunning || phaseRunning}
-                />
+              {qa && (
+                <div className="mb-4">
+                  <AtsScoreRefreshControls
+                    mode={atsScoreRefreshMode}
+                    busy={atsRecalcRunning}
+                    disabled={
+                      phaseRunning ||
+                      (!!pendingCreditAction &&
+                        pendingCreditAction.label !== "Full AI re-analysis")
+                    }
+                    onRefreshFree={() => void rescoreFree()}
+                    onRequestFullReanalysis={requestFullAtsReanalysis}
+                    onConfirmFullReanalysis={() => {
+                      const run = pendingCreditAction?.run;
+                      setPendingCreditAction(null);
+                      run?.();
+                    }}
+                    onCancelFullReanalysis={() => setPendingCreditAction(null)}
+                    className="items-start"
+                  />
+                </div>
               )}
               <div className="mb-8">
                 <ATSGuidancePanel
@@ -2152,18 +2176,19 @@ function SessionContent() {
                   tailored={tailored}
                   variant="primary"
                   staleSince={stale["4"]}
-                  onRecalculate={recalculateAtsWithConfirm}
-                  recalculateDisabled={atsRecalcRunning || phaseRunning || !!pendingCreditAction}
+                  onRecalculate={() => void rescoreFree()}
+                  recalculateDisabled={atsRecalcRunning || phaseRunning || !stale["4"]}
                   addressedKeys={addressedAtsKeys}
                   skippedKeys={skippedAtsKeys}
                   onSkipIssue={skipAtsIssue}
                   onStartQueue={startIssueQueue}
                   onNavigateToBatchFix={navigateToRewriteWithAtsSelection}
+                  onScrollToAnchor={scrollToIssueAnchor}
+                  onLocateIssue={locateIssueInResume}
                   onSendToChat={(msg, issues) => {
                     openChatForAtsIssues(msg, issues);
                     goTo("rewrite");
                   }}
-                  onScrollToAnchor={scrollToIssueAnchor}
                   onApplyMechanicalFix={applyMechanicalFix}
                   mechanicalOutcomes={mechanicalOutcomes}
                   onUndoMechanicalFix={undoMechanicalFix}
