@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from app.agent.phase4_score import ResumeQualityResult, compute_ats_score
+from app.agent.tone_issue_guidance import enrich_tone_vocabulary_suggestion
 from app.agent.tone_profile import JDToneProfile
 from app.models.keywords import Keyword
 from app.models.qa import BlockingIssue, IssueAnchor
@@ -108,6 +109,7 @@ def build_blocking_issues_from_score(
     *,
     existing_issues: list[BlockingIssue] | None = None,
     flagged_keyword_terms: set[str] | None = None,
+    jd_text: str | None = None,
 ) -> list[BlockingIssue]:
     """Turn deterministic axis findings into blocking issues."""
     corrected_issues = list(existing_issues or [])
@@ -170,11 +172,14 @@ def build_blocking_issues_from_score(
                 )
             continue
         for issue_text in axis.issues:
+            text = issue_text
+            if axis.key == "tone_alignment":
+                text = enrich_tone_vocabulary_suggestion(issue_text, jd_text)
             corrected_issues.append(
                 BlockingIssue(
                     category=category,  # type: ignore[arg-type]
                     description=axis.label,
-                    suggestion=issue_text,
+                    suggestion=text,
                     impact=impact,  # type: ignore[arg-type]
                     fix_effort=fix_effort,  # type: ignore[arg-type]
                 )

@@ -357,6 +357,7 @@ async def rescore_ats(
         career_stage=user_info.career_stage if user_info else "mid",
         tone_profile=session.phase1_output.tone_profile,
         target_role=_rescore_target_role(session),
+        jd_text=session.jd_raw,
     )
 
     # Re-read before writing: an edit saved while we scored must keep the stale flag.

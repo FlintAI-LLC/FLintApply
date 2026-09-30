@@ -401,7 +401,7 @@ function BlockingIssueRow({
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {issue.description}
           </p>
-          <p className="text-slate-600 dark:text-slate-400 text-xs">
+          <p className="text-slate-600 dark:text-slate-400 text-xs whitespace-pre-line">
             <span className="text-slate-600 dark:text-slate-400 font-medium">Suggestion: </span>
             {issue.suggestion}
           </p>

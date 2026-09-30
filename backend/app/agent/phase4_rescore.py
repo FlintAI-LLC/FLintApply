@@ -50,6 +50,7 @@ def rescore_qa_output(
     career_stage: str,
     tone_profile,
     target_role: str,
+    jd_text: str | None = None,
 ) -> QAOutput:
     """Return `prior` with score, axes, deterministic issues and guidance refreshed."""
     score_result = compute_score_result(
@@ -75,6 +76,7 @@ def rescore_qa_output(
         score_result,
         existing_issues=kept,
         flagged_keyword_terms=flagged_terms,
+        jd_text=jd_text,
     )
     narrative = build_deterministic_narrative(
         score_result=score_result,
