@@ -1337,6 +1337,14 @@ export async function commitTailoredResume(
   });
 }
 
+/**
+ * Free ATS refresh after edits: deterministic score, no AI call, no credit.
+ * The server only recomputes when the saved resume changed since the last score.
+ */
+export async function rescoreAtsFree(sessionId: string): Promise<QAOutput> {
+  return request(`/api/sessions/${sessionId}/rescore`, { method: "POST" });
+}
+
 export async function chatWithResume(
   sessionId: string,
   payload: {

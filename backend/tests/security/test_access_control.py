@@ -69,6 +69,7 @@ from app.models.dashboard import ResumeRecord, ResumeRecordStatus
 from app.models.user import CreditTransaction
 from app.services.session_store import create_session, get_session, update_session
 from tests.admin.conftest import issue_admin_session, make_admin
+from tests.integration.test_session_rescore import STALE_SCORE, scored_session
 
 # Dependencies that establish an authenticated principal.  A route whose
 # dependency tree contains none of these — and no ``require_admin_role``
@@ -232,6 +233,7 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("PATCH", "/api/sessions/{session_id}/additions"): "anonymous tailoring flow",
     ("PATCH", "/api/sessions/{session_id}/approved-metrics"): "anonymous tailoring flow",
     ("PATCH", "/api/sessions/{session_id}/tailored"): "anonymous tailoring flow",
+    ("POST", "/api/sessions/{session_id}/rescore"): "anonymous tailoring flow",
     ("POST", "/api/sessions/{session_id}/tailored/commit"): "anonymous tailoring flow",
     ("POST", "/api/sessions/{session_id}/chat"): "anonymous tailoring flow",
     ("GET", "/api/sessions/{session_id}/cover-letter"): "anonymous tailoring flow",
@@ -1065,6 +1067,77 @@ async def test_commit_tailored_rejects_a_different_bearer(
         "commit_tailored must reject a bearer that does not match the "
         f"claimed session, got {hijack.status_code} {hijack.text[:300]}"
     )
+
+
+async def _claimed_stale_session(owner_id: uuid.UUID):
+    session = await scored_session(stale=True)
+    session.user_id = str(owner_id)
+    session.jd_raw = "Senior platform engineer. Kubernetes required."
+    await update_session(session)
+    return session
+
+
+@pytest.mark.integration
+async def test_rescore_rejects_a_different_bearer(
+    app_client: AsyncClient,
+    two_users: tuple[tuple[str, uuid.UUID], tuple[str, uuid.UUID]],
+) -> None:
+    (_, victim_id), (attacker_token, _) = two_users
+    session = await _claimed_stale_session(victim_id)
+
+    hijack = await app_client.post(
+        f"/api/sessions/{session.session_id}/rescore",
+        headers=_auth(attacker_token),
+    )
+
+    assert hijack.status_code == 403, hijack.text[:300]
+    stored = await get_session(session.session_id)
+    assert stored is not None
+    assert stored.phase4_stale_since is not None
+    assert stored.phase4_output.ats_score == STALE_SCORE
+
+
+@pytest.mark.integration
+async def test_rescore_without_bearer_never_writes_the_owners_dashboard(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    two_users: tuple[tuple[str, uuid.UUID], tuple[str, uuid.UUID]],
+) -> None:
+    (_, victim_id), _ = two_users
+    session = await _claimed_stale_session(victim_id)
+
+    response = await app_client.post(f"/api/sessions/{session.session_id}/rescore")
+
+    assert response.status_code == 200, response.text[:300]
+    records = (
+        await db_session.execute(
+            select(ResumeRecord).where(ResumeRecord.user_id == victim_id)
+        )
+    ).scalars().all()
+    assert records == []
+
+
+@pytest.mark.integration
+async def test_rescore_with_owner_bearer_updates_the_dashboard(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    two_users: tuple[tuple[str, uuid.UUID], tuple[str, uuid.UUID]],
+) -> None:
+    (victim_token, victim_id), _ = two_users
+    session = await _claimed_stale_session(victim_id)
+
+    response = await app_client.post(
+        f"/api/sessions/{session.session_id}/rescore",
+        headers=_auth(victim_token),
+    )
+
+    assert response.status_code == 200, response.text[:300]
+    record = (
+        await db_session.execute(
+            select(ResumeRecord).where(ResumeRecord.user_id == victim_id)
+        )
+    ).scalar_one()
+    assert record.current_ats_score == response.json()["ats_score"]
 
 
 @pytest_asyncio.fixture()

@@ -68,6 +68,7 @@ import {
   saveTailoredVersionSnapshot,
   commitTailoredResume,
   chatWithResume,
+  rescoreAtsFree,
   type ResumePatch,
 } from "@/lib/api";
 import {
@@ -78,14 +79,16 @@ import {
 import { reconcileAddressedKeys } from "@/lib/reconcileAddressedKeys";
 import { applyResumePatch, normalizeResumePatch } from "@/lib/applyResumePatch";
 import { isPatchPlaceable } from "@/lib/suggestionHighlight";
-import { mergeSuggestionBatch, type ResumeSuggestion } from "@/lib/suggestions";
+import { mergeSuggestionBatch, patchFingerprint, type ResumeSuggestion } from "@/lib/suggestions";
 import {
   applyMechanicalQuickWins,
   applyPatchesDeterministically,
   buildApplyAllChatMessage,
   buildApplyAllReport,
   countNotAttemptedIssues,
+  isApplyAllRoundLimitReached,
   issuesForAddressedKeys,
+  MAX_APPLY_ALL_ROUNDS,
   partitionMechanicalAndChatIssues,
   selectOpenImprovementIssues,
 } from "@/lib/applyAllImprovements";
@@ -123,6 +126,9 @@ const STEP_LABELS: Record<Step, string> = {
 };
 
 type AnalysisPipeline = { mode: "full" | "audit-only"; phase: 1 | 2 };
+
+/** Wait for edits to settle before the free deterministic score refresh. */
+const AUTO_RESCORE_DEBOUNCE_MS = 1500;
 
 type SessionSnapshot = Awaited<ReturnType<typeof checkSession>>;
 const sessionCheckFloor = new SessionCheckFloor<SessionSnapshot>();
@@ -173,6 +179,10 @@ function SessionContent() {
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
   const [applyAllRunning, setApplyAllRunning] = useState(false);
   const [applyAllStatus, setApplyAllStatus] = useState<string | null>(null);
+  const [applyAllRoundsUsed, setApplyAllRoundsUsed] = useState(0);
+  const [dismissedSuggestionFingerprints, setDismissedSuggestionFingerprints] = useState<
+    Set<string>
+  >(() => new Set());
   const [reTailorConfirmOpen, setReTailorConfirmOpen] = useState(false);
   const [phase4RecalcActive, setPhase4RecalcActive] = useState(false);
   const [atsRecalcRunning, setAtsRecalcRunning] = useState(false);
@@ -299,6 +309,8 @@ function SessionContent() {
     [sessionId],
   );
   const runInFlightRef = useRef(false);
+  const rescoreInFlightRef = useRef(false);
+  const autoRescoreAttemptRef = useRef<string | null>(null);
   const applyAllInFlightRef = useRef(false);
   const activeStepRef = useRef<Step>(step);
   const phase4RecalcRef = useRef(false);
@@ -417,6 +429,8 @@ function SessionContent() {
       setQa(qaOut);
       recordAtsScore(qaOut);
       reconcileAtsTrackingAfterRescore(qaOut);
+      // A full analysis refreshes the AI-written issue list, so batches unlock again.
+      setApplyAllRoundsUsed(0);
     }
   }, [recordAtsScore]);
 
@@ -620,6 +634,26 @@ function SessionContent() {
     });
   }
 
+  function skipAtsIssueByKey(key: string) {
+    if (!key.trim()) return;
+    setSkippedAtsKeys((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  }
+
+  function dismissSuggestionPatch(sug: ResumeSuggestion) {
+    setDismissedSuggestionFingerprints((prev) => {
+      const next = new Set(prev);
+      next.add(patchFingerprint(sug.patch));
+      return next;
+    });
+    if (sug.sourceIssueKey) {
+      skipAtsIssueByKey(sug.sourceIssueKey);
+    }
+  }
+
   function openChatForAtsIssues(message: string, issues: import("@/lib/api").BlockingIssue[]) {
     pendingAtsFixRef.current = issues;
     setAtsTargetIssues(issues);
@@ -643,6 +677,8 @@ function SessionContent() {
     setSkippedAtsKeys(new Set());
     setMechanicalOutcomes({});
     mechanicalUndoRef.current = {};
+    setApplyAllRoundsUsed(0);
+    setDismissedSuggestionFingerprints(new Set());
   }
 
   /** After re-score: keep skip/dismiss state; drop "addressed" only for bullets still failing. */
@@ -681,6 +717,7 @@ function SessionContent() {
         prev,
         placeable.map((entry) => entry.patch),
         placeable.map((entry) => entry.sourceIssueKey),
+        dismissedSuggestionFingerprints,
       ),
     );
   }
@@ -735,6 +772,8 @@ function SessionContent() {
   }
 
   function rejectSuggestion(id: string) {
+    const sug = pendingSuggestions.find((s) => s.id === id);
+    if (sug) dismissSuggestionPatch(sug);
     setPendingSuggestions((prev) =>
       prev.map((s) => (s.id === id ? { ...s, status: "rejected" } : s)),
     );
@@ -781,7 +820,7 @@ function SessionContent() {
     if (!placeable.length) {
       setSuggestionError(
         orphanCount > 0
-          ? "None of the pending suggestions matched your resume. Use the Couldn't apply banner to retarget or dismiss them."
+          ? "These suggestions no longer match your resume (often after other edits). Use Ignore all, or fix remaining items in ATS Guidance and Recalculate ATS score."
           : pending.length === 1
             ? "Could not apply this suggestion. Try Accept on the highlighted bullet or edit manually."
             : "Could not apply these suggestions. Try accepting each highlight individually.",
@@ -879,15 +918,51 @@ function SessionContent() {
     [runPhase, sessionId, tailored],
   );
 
+  /**
+   * Deterministic score refresh after edits: no AI call, no credit. Skips quietly
+   * when nothing needs refreshing or another run owns the score.
+   */
+  const rescoreFree = useCallback(
+    async (options?: { resume?: TailoredResumeOutput }) => {
+      const snapshot = options?.resume ?? tailored;
+      if (!snapshot || !qa || runInFlightRef.current || rescoreInFlightRef.current) return;
+      rescoreInFlightRef.current = true;
+      setAtsRecalcRunning(true);
+      const startedAtMs = Date.now();
+      try {
+        // Saving first makes the server mark the score stale for this exact resume.
+        await saveTailoredResume(sessionId, snapshot);
+        const qaOut = await rescoreAtsFree(sessionId);
+        setQa(qaOut);
+        recordAtsScore(qaOut);
+        reconcileAtsTrackingAfterRescore(qaOut);
+        // An edit made while scoring carries a newer marker and must stay stale.
+        setStale((prev) => {
+          const marker = prev["4"];
+          const editedDuringScoring = marker != null && Date.parse(marker) > startedAtMs;
+          return editedDuringScoring ? prev : { ...prev, "4": null };
+        });
+      } catch (err) {
+        setRunError(
+          err instanceof Error ? err.message : "Could not refresh the ATS score. Please try again.",
+        );
+      } finally {
+        rescoreInFlightRef.current = false;
+        setAtsRecalcRunning(false);
+      }
+    },
+    [tailored, qa, sessionId, recordAtsScore],
+  );
+
   const recalculateAtsWithConfirm = useCallback(() => {
     if (stale["4"]) {
-      void recalculateAts();
+      void rescoreFree();
       return;
     }
     requestCreditAction("Recalculate ATS score", () => {
       void recalculateAts();
     });
-  }, [requestCreditAction, recalculateAts, stale]);
+  }, [requestCreditAction, recalculateAts, rescoreFree, stale]);
 
   const applyAllImprovements = useCallback(async () => {
     if (
@@ -903,6 +978,13 @@ function SessionContent() {
     const { issues } = selectOpenImprovementIssues(qa, addressedAtsKeys, skippedAtsKeys);
     if (!issues.length) return;
 
+    if (isApplyAllRoundLimitReached(applyAllRoundsUsed)) {
+      setApplyAllStatus(
+        `Batch apply limit reached (${MAX_APPLY_ALL_ROUNDS} rounds per analysis). Fix remaining items manually or skip them in ATS Guidance; a full Recalculate ATS score unlocks new batches.`,
+      );
+      return;
+    }
+
     applyAllInFlightRef.current = true;
     setApplyAllRunning(true);
     setSuggestionError(null);
@@ -913,6 +995,7 @@ function SessionContent() {
     const catalog = [...(qa.blocking_issues ?? []), ...(qa.quick_wins ?? [])];
 
     try {
+      setApplyAllRoundsUsed((n) => n + 1);
       const { mechanical, chat } = partitionMechanicalAndChatIssues(tailored, issues);
       const mechanicalResult = applyMechanicalQuickWins(tailored, mechanical);
       let current = mechanicalResult.resume;
@@ -950,6 +1033,7 @@ function SessionContent() {
             prev,
             patchResult.orphanPatches.map((entry) => entry.patch),
             patchResult.orphanPatches.map((entry) => entry.sourceIssueKey),
+            dismissedSuggestionFingerprints,
           ),
         );
       }
@@ -974,9 +1058,8 @@ function SessionContent() {
         setTailored(current);
         setEditorSyncKey((k) => k + 1);
         setStale((prev) => ({ ...prev, "4": new Date().toISOString() }));
-        applyAllInFlightRef.current = false;
-        setApplyAllRunning(false);
-        await recalculateAts({ resume: current });
+        // Deterministic refresh: shows the real gain from this batch with no AI cost.
+        await rescoreFree({ resume: current });
       }
     } catch (err) {
       const errorCode = err instanceof ApiError ? err.code : undefined;
@@ -992,11 +1075,27 @@ function SessionContent() {
     tailored,
     qa,
     applyAllRunning,
+    applyAllRoundsUsed,
     addressedAtsKeys,
+    dismissedSuggestionFingerprints,
     skippedAtsKeys,
     sessionId,
-    recalculateAts,
+    rescoreFree,
   ]);
+
+  // Keep the score live after any edit path (accept, manual edit, mechanical fix).
+  // One attempt per stale marker: a failed refresh waits for the next edit instead of looping.
+  useEffect(() => {
+    const staleMarker = stale["4"];
+    if (!staleMarker || !qa || !tailored) return;
+    if (phaseRunning || atsRecalcRunning || applyAllRunning) return;
+    if (autoRescoreAttemptRef.current === staleMarker) return;
+    const timer = setTimeout(() => {
+      autoRescoreAttemptRef.current = staleMarker;
+      void rescoreFree();
+    }, AUTO_RESCORE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [stale, qa, tailored, phaseRunning, atsRecalcRunning, applyAllRunning, rescoreFree]);
 
   const runCurrentPhase = useCallback(
     async (options?: { force?: boolean; scope?: PhaseRunScope; auditOnly?: boolean }) => {
@@ -1774,11 +1873,7 @@ function SessionContent() {
                     ) : (
                       <button
                         type="button"
-                        onClick={() =>
-                          requestCreditAction("Recalculate ATS score", () => {
-                            void recalculateAts();
-                          })
-                        }
+                        onClick={recalculateAtsWithConfirm}
                         disabled={atsRecalcRunning || phaseRunning || !!pendingCreditAction}
                         className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40"
                       >
@@ -1968,6 +2063,10 @@ function SessionContent() {
                               atsRecalcRunning || phaseRunning || !!pendingCreditAction
                             }
                             applyAllImprovementsRunning={applyAllRunning}
+                            applyAllRoundsUsed={applyAllRoundsUsed}
+                            applyAllRoundLimitReached={isApplyAllRoundLimitReached(
+                              applyAllRoundsUsed,
+                            )}
                           />
                         ) : (
                           <p className="text-slate-600 dark:text-slate-400 text-xs py-4 text-center">
@@ -2074,6 +2173,8 @@ function SessionContent() {
                     atsRecalcRunning || phaseRunning || !!pendingCreditAction
                   }
                   applyAllImprovementsRunning={applyAllRunning}
+                  applyAllRoundsUsed={applyAllRoundsUsed}
+                  applyAllRoundLimitReached={isApplyAllRoundLimitReached(applyAllRoundsUsed)}
                 />
               </div>
               <QAChecklist output={qa} streaming={isStreaming && !showProgress} />

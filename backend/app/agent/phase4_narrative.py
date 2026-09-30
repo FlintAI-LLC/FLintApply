@@ -213,6 +213,35 @@ def _sanitize_headline(
     return cleaned
 
 
+def build_deterministic_narrative(
+    *,
+    score_result: ResumeQualityResult,
+    target_role: str,
+    prior_categories: list[NarrativeCategorySummary] | None = None,
+) -> Phase4NarrativeResult:
+    """Headline + category rows for a score snapshot without an LLM call.
+
+    Category "why it matters" copy is carried over from the previous full run;
+    counts, severities and the headline are recomputed from the new axes.
+    """
+    why_by_key = {
+        item.category_key: item.why_it_matters
+        for item in (prior_categories or [])
+        if item.why_it_matters
+    }
+    categories = [
+        item.model_copy(update={"why_it_matters": why_by_key.get(item.category_key, "")})
+        for item in build_category_summaries(score_result)
+    ]
+    return Phase4NarrativeResult(
+        rank_label=compute_rank_label(score_result.ats_score),
+        headline=_fallback_headline(
+            score_result=score_result, target_role=target_role, categories=categories
+        ),
+        category_summaries=categories,
+    )
+
+
 async def synthesize_phase4_narrative(
     *,
     llm: LLMClient,

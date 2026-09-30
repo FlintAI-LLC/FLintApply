@@ -15,6 +15,17 @@ import { isPatchPlaceable } from "@/lib/suggestionHighlight";
 /** Matches backend `MAX_CHAT_TARGET_ISSUES` in app/agent/chat.py */
 export const MAX_CHAT_TARGET_ISSUES = 8;
 
+/** Batch apply-all rounds allowed per ATS score (resets after manual Recalculate ATS). */
+export const MAX_APPLY_ALL_ROUNDS = 3;
+
+export function applyAllRoundsRemaining(roundsUsed: number): number {
+  return Math.max(0, MAX_APPLY_ALL_ROUNDS - roundsUsed);
+}
+
+export function isApplyAllRoundLimitReached(roundsUsed: number): boolean {
+  return roundsUsed >= MAX_APPLY_ALL_ROUNDS;
+}
+
 export type OpenImprovementSelection = {
   /** All open blocking + quick-win issues (deduped blocking, not skipped or addressed). */
   issues: BlockingIssue[];

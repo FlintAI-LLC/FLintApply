@@ -6,10 +6,13 @@ import type { BlockingIssue, QAOutput, TailoredResumeOutput } from "@/lib/api";
 import {
   applyMechanicalQuickWins,
   applyPatchesDeterministically,
+  applyAllRoundsRemaining,
   buildApplyAllReport,
   countNotAttemptedIssues,
   filterIssuesForChatBatch,
+  isApplyAllRoundLimitReached,
   issuesForAddressedKeys,
+  MAX_APPLY_ALL_ROUNDS,
   MAX_CHAT_TARGET_ISSUES,
   partitionMechanicalAndChatIssues,
   selectOpenImprovementIssues,
@@ -286,14 +289,109 @@ describe("applyAllImprovements wiring", () => {
     assert.match(pageSource, /applyAllImprovements/);
   });
 
-  it("releases apply-all in-flight guard before ATS recalculation", () => {
-    const slice = pageSource.slice(
-      pageSource.indexOf("const applyAllImprovements"),
-      pageSource.indexOf("const runCurrentPhase"),
+  function sliceBetween(source: string, from: string, to: string): string {
+    const start = source.indexOf(from);
+    const end = source.indexOf(to, start + from.length);
+    assert.ok(start >= 0 && end > start, `could not slice ${from} .. ${to}`);
+    return source.slice(start, end);
+  }
+
+  it("apply-all round cap helpers", () => {
+    assert.equal(MAX_APPLY_ALL_ROUNDS, 3);
+    assert.equal(applyAllRoundsRemaining(0), 3);
+    assert.equal(applyAllRoundsRemaining(2), 1);
+    assert.equal(applyAllRoundsRemaining(3), 0);
+    assert.equal(applyAllRoundsRemaining(5), 0);
+    assert.equal(isApplyAllRoundLimitReached(0), false);
+    assert.equal(isApplyAllRoundLimitReached(2), false);
+    assert.equal(isApplyAllRoundLimitReached(3), true);
+  });
+
+  it("apply-all enforces the cap before counting a round", () => {
+    const slice = sliceBetween(
+      pageSource,
+      "const applyAllImprovements",
+      "// Keep the score live",
     );
-    const releaseIdx = slice.indexOf("applyAllInFlightRef.current = false");
-    const recalcIdx = slice.indexOf("recalculateAts({ resume: current })");
-    assert.ok(releaseIdx >= 0 && recalcIdx > releaseIdx);
+    const guard = slice.indexOf("isApplyAllRoundLimitReached(applyAllRoundsUsed)");
+    const increment = slice.indexOf("setApplyAllRoundsUsed((n) => n + 1)");
+    assert.ok(guard >= 0 && increment > guard);
+  });
+
+  it("rescoreFree calls only the free endpoint", () => {
+    const slice = sliceBetween(
+      pageSource,
+      "const rescoreFree",
+      "const recalculateAtsWithConfirm",
+    );
+    assert.match(slice, /await rescoreAtsFree\(sessionId\)/);
+    assert.doesNotMatch(slice, /recalculateAts\(/);
+    assert.doesNotMatch(slice, /runPhase\(|triggerPhase\(/);
+    assert.doesNotMatch(slice, /requestCreditAction/);
+    assert.doesNotMatch(slice, /setApplyAllRoundsUsed/);
+    assert.match(pageSource, /rescoreAtsFree,/);
+  });
+
+  it("rescoreFree keeps the score stale on failure and on mid-scoring edits", () => {
+    const slice = sliceBetween(
+      pageSource,
+      "const rescoreFree",
+      "const recalculateAtsWithConfirm",
+    );
+    const catchSlice = sliceBetween(slice, "} catch (err)", "} finally");
+    assert.doesNotMatch(catchSlice, /setStale/);
+    assert.match(slice, /editedDuringScoring/);
+  });
+
+  it("apply-all refreshes the score with the free rescore, never the AI recalc", () => {
+    const slice = sliceBetween(
+      pageSource,
+      "const applyAllImprovements",
+      "// Keep the score live",
+    );
+    assert.match(slice, /rescoreFree\(\{ resume: current \}\)/);
+    assert.doesNotMatch(slice, /recalculateAts\(/);
+  });
+
+  it("stale recalculation uses the free rescore; full recalc stays credit-gated", () => {
+    const slice = sliceBetween(
+      pageSource,
+      "const recalculateAtsWithConfirm",
+      "const applyAllImprovements",
+    );
+    assert.match(slice, /if \(stale\["4"\]\) \{\s*void rescoreFree\(\)/);
+    assert.match(slice, /requestCreditAction\("Recalculate ATS score"/);
+  });
+
+  it("auto rescore makes one attempt per stale marker so failures cannot loop", () => {
+    const slice = sliceBetween(pageSource, "// Keep the score live", "const runCurrentPhase");
+    const guard = slice.indexOf(
+      "if (autoRescoreAttemptRef.current === staleMarker) return;",
+    );
+    const record = slice.indexOf("autoRescoreAttemptRef.current = staleMarker");
+    assert.ok(guard >= 0 && record > guard);
+  });
+
+  it("only a full analysis resets the apply-all round counter", () => {
+    const phaseSlice = sliceBetween(
+      pageSource,
+      "const applyPhaseOutputByNumber",
+      "const hydrateFromSession",
+    );
+    assert.match(phaseSlice, /setApplyAllRoundsUsed\(0\)/);
+  });
+
+  it("dismissed fingerprints reach every mergeSuggestionBatch call site", () => {
+    const calls = pageSource.split("mergeSuggestionBatch(").slice(1);
+    assert.ok(calls.length >= 2);
+    for (const call of calls) {
+      assert.match(call.slice(0, 400), /dismissedSuggestionFingerprints/);
+    }
+  });
+
+  it("ATS panel swaps the banner for the limit notice", () => {
+    assert.match(panelSource, /applyAllRoundLimitReached/);
+    assert.match(panelSource, /No more batch improvements/);
   });
 
   it("ATS panel exposes Apply all improvements handler", () => {
