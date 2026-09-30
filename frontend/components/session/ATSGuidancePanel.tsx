@@ -6,6 +6,7 @@ import { type BlockingIssue, type IssueAnchor, type QAOutput, type TailoredResum
 import { buildBatchChatMessage } from "@/lib/anchoredPatch";
 import { issueKey } from "@/lib/issueAnchors";
 import { canApplyMechanicalQuickWin } from "@/lib/mechanicalFix";
+import { applyAllRoundsRemaining } from "@/lib/applyAllImprovements";
 import { cn } from "@/lib/utils";
 import { ScoreBreakdownPanel } from "./ScoreBreakdownPanel";
 import { QuickWinCard, shouldShowUndoButton, type QuickWinMechanicalOutcome } from "./QuickWinCard";
@@ -56,10 +57,13 @@ interface Props {
   /** Revert the last mechanical apply for a quick-win issue. */
   onUndoMechanicalFix?: (issue: BlockingIssue) => void;
   onApplyMechanicalFixAtRole?: (issue: BlockingIssue, experienceIndex: number) => void;
-  /** Deterministic batch: mechanical fixes + one chat round, then recalculate ATS. */
+  /** Deterministic batch: mechanical fixes + one chat round (no auto ATS recalc). */
   onApplyAllImprovements?: () => void;
   applyAllImprovementsDisabled?: boolean;
   applyAllImprovementsRunning?: boolean;
+  /** Rounds used this ATS score (resets after Recalculate ATS). */
+  applyAllRoundsUsed?: number;
+  applyAllRoundLimitReached?: boolean;
 }
 
 const IMPACT_ORDER = { high: 0, medium: 1, low: 2 } as const;
@@ -527,6 +531,8 @@ export function ATSGuidancePanel({
   onApplyAllImprovements,
   applyAllImprovementsDisabled = false,
   applyAllImprovementsRunning = false,
+  applyAllRoundsUsed = 0,
+  applyAllRoundLimitReached = false,
 }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -622,17 +628,20 @@ export function ATSGuidancePanel({
   const content = (
     <div className={cn("space-y-5", variant === "sidebar" && "text-sm")}>
       {/* Stale banner — shown after the user accepts a chat patch but hasn't recalculated yet */}
-      {onApplyAllImprovements && openImprovementCount > 0 && (
+      {onApplyAllImprovements && openImprovementCount > 0 && !applyAllRoundLimitReached && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-3 py-3 rounded-lg bg-emerald-500/10 dark:bg-emerald-400/10 border border-emerald-400/30">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
               Apply improvements without re-tailoring
             </p>
             <p className="text-[11px] text-emerald-800/90 dark:text-emerald-200/80 mt-0.5 leading-relaxed">
-              Uses one-click fixes and a single AI patch round for{" "}
+              Uses one-click fixes and a single AI patch round for up to{" "}
               {openImprovementCount} open item{openImprovementCount === 1 ? "" : "s"} — no resume
-              credit. Recalculates ATS for free only when your resume actually changes. Does not
-              replace a full re-tailor from your source resume.
+              credit. Each click handles one batch (mechanical fixes + up to 8 AI targets) and uses
+              a little of your free AI allowance. Your score refreshes afterward at no cost.{" "}
+              {applyAllRoundsRemaining(applyAllRoundsUsed)} batch
+              {applyAllRoundsRemaining(applyAllRoundsUsed) === 1 ? "" : "es"} left before a full
+              re-analysis.
             </p>
           </div>
           <button
@@ -643,6 +652,19 @@ export function ATSGuidancePanel({
           >
             {applyAllImprovementsRunning ? "Applying…" : "Apply all improvements"}
           </button>
+        </div>
+      )}
+
+      {onApplyAllImprovements && openImprovementCount > 0 && applyAllRoundLimitReached && (
+        <div className="px-3 py-3 rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-600">
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            No more batch improvements this score
+          </p>
+          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">
+            You used all automated apply-all rounds for this analysis. Fix or skip the remaining
+            items in the list below and accept highlights individually; your score keeps updating
+            for free. A full <strong>Recalculate ATS score</strong> re-analysis unlocks new batches.
+          </p>
         </div>
       )}
 

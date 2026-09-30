@@ -10,6 +10,7 @@ from app.agent.checkup_guidance import build_checkup_guidance
 from app.agent.phase3_postprocess import flatten_skill_terms
 from app.agent.phase4_deterministic import (
     build_blocking_issues_from_score,
+    candidate_keyword_terms,
     compute_score_result,
     issue_anchor_from_dict,
     scoring_terms_from_keywords,
@@ -175,29 +176,8 @@ async def run(
     #       Skills, rewrite the suggestion to point at Experience/Summary.
     full_text_corpus = _collect_resume_text(tailored).lower()
 
-    def _extract_quoted_terms(text: str) -> list[str]:
-        """Find any 'X', \"X\", or 'X' style phrases in the suggestion."""
-        import re
-        matches = re.findall(
-            r"['\"\u2018\u2019\u201c\u201d]([^'\"\u2018\u2019\u201c\u201d]{2,80})['\"\u2018\u2019\u201c\u201d]",
-            text,
-        )
-        return [m.strip() for m in matches if m.strip()]
-
     def _candidate_keywords(suggestion: str) -> list[str]:
-        """Terms that the suggestion is likely advocating for.
-
-        Uses both quoted phrases AND any Phase 1 must-have keyword whose
-        verbatim form appears inside the suggestion text. This catches
-        unquoted suggestions like "Add Python to the Skills section".
-        """
-        terms = _extract_quoted_terms(suggestion)
-        lower = suggestion.lower()
-        for term in must_have_terms:
-            t = term.strip()
-            if t and t.lower() in lower and t not in terms:
-                terms.append(t)
-        return terms
+        return candidate_keyword_terms(suggestion, must_have_terms)
 
     def _skills_present(suggestion_lower: str) -> list[str]:
         return [t for t in flat_skill_terms if t.lower() in suggestion_lower]

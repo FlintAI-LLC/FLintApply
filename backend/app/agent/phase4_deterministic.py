@@ -2,10 +2,45 @@
 
 from __future__ import annotations
 
+import re
+
 from app.agent.phase4_score import ResumeQualityResult, compute_ats_score
 from app.agent.tone_profile import JDToneProfile
 from app.models.keywords import Keyword
 from app.models.qa import BlockingIssue, IssueAnchor
+
+MISSING_KEYWORD_PREFIX = "Missing must-have keyword: "
+SINGLE_SECTION_MARKER = " appears only in "
+
+_QUOTED_TERM = re.compile(
+    r"['\"\u2018\u2019\u201c\u201d]([^'\"\u2018\u2019\u201c\u201d]{2,80})['\"\u2018\u2019\u201c\u201d]"
+)
+
+
+def extract_quoted_terms(text: str) -> list[str]:
+    """Phrases the suggestion wraps in quotes (e.g. Add 'Python' to Skills)."""
+    return [m.strip() for m in _QUOTED_TERM.findall(text) if m.strip()]
+
+
+def candidate_keyword_terms(suggestion: str, must_have_terms: list[str]) -> list[str]:
+    """Terms a keyword suggestion advocates: quoted phrases plus verbatim must-haves."""
+    terms = extract_quoted_terms(suggestion)
+    lower = suggestion.lower()
+    for term in must_have_terms:
+        t = term.strip()
+        if t and t.lower() in lower and t not in terms:
+            terms.append(t)
+    return terms
+
+
+def is_deterministic_issue(issue: BlockingIssue, axis_labels: frozenset[str]) -> bool:
+    """True when the issue was produced by the scoring engine, not the QA LLM."""
+    description = issue.description
+    if description.startswith(MISSING_KEYWORD_PREFIX):
+        return True
+    if description.startswith("'") and SINGLE_SECTION_MARKER in description:
+        return True
+    return description in axis_labels
 
 _AXIS_TO_CATEGORY: dict[str, tuple[str, str, str]] = {
     "tone_alignment": ("bullet", "medium", "manual_rewrite"),
@@ -84,7 +119,7 @@ def build_blocking_issues_from_score(
         corrected_issues.append(
             BlockingIssue(
                 category="keyword",
-                description=f"Missing must-have keyword: {kw}",
+                description=f"{MISSING_KEYWORD_PREFIX}{kw}",
                 suggestion=(
                     f"Add '{kw}' to the Skills section AND reinforce it in an Experience bullet "
                     "or your Professional Summary. If you don't have this skill, dismiss to ignore."
@@ -104,7 +139,7 @@ def build_blocking_issues_from_score(
         corrected_issues.append(
             BlockingIssue(
                 category="keyword",
-                description=f"'{kw}' appears only in {section_label}",
+                description=f"'{kw}'{SINGLE_SECTION_MARKER}{section_label}",
                 suggestion=(
                     f"Reinforce '{kw}' in your {target_str} so it appears in 2+ sections "
                     "(ATS keyword density rule)."

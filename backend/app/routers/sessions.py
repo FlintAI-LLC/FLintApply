@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
@@ -16,6 +17,8 @@ from app.llm.factory import get_llm_client_for_step
 from app.services.llm.plan_code_for_llm import resolve_plan_code_for_llm_user_id
 from app.llm.token_accounting import llm_accounting_context
 from app.models.chat import ChatRequest, ChatResponse
+from app.models.qa import QAOutput
+from app.agent.phase4_rescore import rescore_qa_output
 from app.models.dashboard import ResumeRecord
 from app.services.dashboard.resume_record import resolve_company_name
 from app.models.rewrite import TailoredResumeOutput
@@ -302,6 +305,90 @@ async def chat_with_resume(
                 status_code=402,
                 detail=free_tier_ai_cap_detail(),
             ) from exc
+
+
+def _rescore_target_role(session) -> str:
+    if session.user_info and session.user_info.target_role.strip():
+        return session.user_info.target_role.strip()
+    if session.phase1_output and session.phase1_output.role_context.primary_domain:
+        return session.phase1_output.role_context.primary_domain.strip()
+    return ""
+
+
+@router.post("/{session_id}/rescore", response_model=QAOutput)
+@limiter.limit("30/minute")
+async def rescore_ats(
+    request: Request,
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> QAOutput:
+    """Recompute the ATS score after edits with no LLM call and no credit charge.
+
+    Only does work when the resume changed since the last Phase 4 score; otherwise
+    the stored result is returned unchanged. The full Phase 4 run (LLM checklist and
+    issue prose) stays a separate, billed action.
+    """
+    session = await load_session_for_request(
+        db, session_id=session_id, authorization=authorization
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if (
+        session.phase4_output is None
+        or session.phase3_output is None
+        or session.phase1_output is None
+    ):
+        raise HTTPException(
+            status_code=409, detail="Run the ATS score once before re-scoring."
+        )
+    if session.phase4_stale_since is None:
+        return session.phase4_output
+
+    user_info = session.user_info
+    scored_resume_json = session.phase3_output.model_dump_json()
+    updated = await asyncio.to_thread(
+        rescore_qa_output,
+        session.phase4_output,
+        tailored=session.phase3_output,
+        must_have_terms=scoring_terms_from_keywords(
+            session.phase1_output.must_have_keywords
+        ),
+        career_stage=user_info.career_stage if user_info else "mid",
+        tone_profile=session.phase1_output.tone_profile,
+        target_role=_rescore_target_role(session),
+    )
+
+    # Re-read before writing: an edit saved while we scored must keep the stale flag.
+    latest = await get_session(session_id)
+    if (
+        latest is None
+        or latest.phase3_output is None
+        or latest.phase3_output.model_dump_json() != scored_resume_json
+    ):
+        raise HTTPException(
+            status_code=409, detail="Resume changed while re-scoring. Try again."
+        )
+    latest.phase4_output = updated
+    latest.phase4_stale_since = None
+    await update_session(latest)
+
+    # Dashboard writes need a verified owner, not just a claimed session id.
+    verified_user_id = await _resolve_user_id_for_restore(authorization)
+    if verified_user_id is not None and latest.user_id == str(verified_user_id):
+        from app.services.dashboard.resume_record import (
+            upsert_resume_record_from_session,
+        )
+
+        await upsert_resume_record_from_session(
+            db,
+            user_id=verified_user_id,
+            session=latest,
+            ats_score=updated.ats_score,
+        )
+        await sync_session_cache_for_session(db, latest)
+        await db.commit()
+    return updated
 
 
 class ApplicationLabelRequest(BaseModel):

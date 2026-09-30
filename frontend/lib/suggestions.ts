@@ -10,6 +10,26 @@ export interface ResumeSuggestion {
   sourceIssueKey?: string;
 }
 
+/** Stable id so ignored suggestions are not re-queued by apply-all orphans. */
+export function patchFingerprint(patch: ResumePatch): string {
+  const p = patch;
+  return [
+    p.section,
+    p.new_summary?.trim() ?? "",
+    p.new_name?.trim() ?? "",
+    p.company?.trim() ?? "",
+    p.bullet_old?.trim() ?? "",
+    p.bullet_new?.trim() ?? "",
+    p.project_name?.trim() ?? "",
+    p.project_bullet_old?.trim() ?? "",
+    p.project_bullet_new?.trim() ?? "",
+    p.new_project?.name?.trim() ?? "",
+    (p.new_project?.bullets ?? []).join("\n"),
+    (p.add_skills ?? []).join(","),
+    (p.project_bullets_replace_all ?? []).join("\n"),
+  ].join("|");
+}
+
 export function makeSuggestions(
   patches: ResumePatch[],
   sourceIssueKeys?: Array<string | undefined>,
@@ -34,14 +54,22 @@ export function mergeSuggestionBatch(
   prev: ResumeSuggestion[],
   patches: ResumePatch[],
   sourceIssueKeys?: Array<string | undefined>,
+  dismissedFingerprints?: ReadonlySet<string>,
 ): ResumeSuggestion[] {
-  const incoming = makeSuggestions(patches, sourceIssueKeys);
+  const filteredPatches: ResumePatch[] = [];
+  const filteredKeys: Array<string | undefined> = [];
+  patches.forEach((patch, index) => {
+    if (dismissedFingerprints?.has(patchFingerprint(patch))) return;
+    filteredPatches.push(patch);
+    filteredKeys.push(sourceIssueKeys?.[index]);
+  });
+  const incoming = makeSuggestions(filteredPatches, filteredKeys);
   const incomingAnchorKeys = new Set(
     incoming.map((s) => s.sourceIssueKey).filter((key): key is string => !!key),
   );
   const targetedProjects = [
     ...new Set(
-      patches
+      filteredPatches
         .map((p) => patchTargetsProjectName(p))
         .filter((name): name is string => !!name),
     ),
