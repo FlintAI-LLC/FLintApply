@@ -347,3 +347,57 @@ async def test_oauth_callback_microsoft_same_provider_email_links_account(
 
     await db_session.refresh(existing)
     assert existing.provider_id == "oid-from-web-id-token"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_links_microsoft_to_email_password_account(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same email as an email+password user: Microsoft SSO links and signs in."""
+    import uuid
+
+    from app.services.auth.password import hash_password
+
+    email = "email-then-ms@example.com"
+    password_hash = hash_password("S3cur3-Test-Password!")
+    existing = User(
+        id=uuid.uuid4(),
+        email=email,
+        display_name="Email User",
+        auth_provider=AuthProvider.email,
+        password_hash=password_hash,
+        credit_balance=3,
+        accepted_tos_version="2024-01",
+    )
+    db_session.add(existing)
+    await db_session.commit()
+
+    async def fake_verify(_token: str) -> dict[str, object]:
+        return {
+            "email": email,
+            "provider_id": "microsoft-oid-123",
+            "display_name": "Email User",
+            "email_verified": True,
+        }
+
+    monkeypatch.setattr(auth_router, "verify_microsoft_id_token", fake_verify)
+
+    r = await app_client.post(
+        "/api/auth/callback",
+        json={"provider": "microsoft", "id_token": "fake-token"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["email"] == email
+
+    await db_session.refresh(existing)
+    assert existing.auth_provider == AuthProvider.microsoft
+    assert existing.provider_id == "microsoft-oid-123"
+    assert existing.password_hash == password_hash
+
+    login = await app_client.post(
+        "/api/auth/login",
+        json={"email": email, "password": "S3cur3-Test-Password!"},
+    )
+    assert login.status_code == 200, login.text

@@ -83,3 +83,48 @@ def enrich_tone_vocabulary_suggestion(issue_text: str, jd_text: str | None) -> s
             parts.append(f'In the JD they use it like: "{snippet}"')
     parts.append(resume_example_line(term))
     return "\n\n".join(parts)
+
+
+def _mirror_vocab_term(suggestion: str) -> str | None:
+    """Lowercase JD term when the first line is a Mirror JD vocabulary issue."""
+    first = suggestion.strip().split("\n")[0].strip()
+    match = MIRROR_JD_VOCABULARY.match(first)
+    if not match:
+        return None
+    return match.group(1).strip().lower()
+
+
+def refresh_mirror_jd_blocking_issues(
+    issues: list,
+    jd_text: str | None,
+) -> list:
+    """Enrich every mirror-JD row and collapse duplicate terms (keep richest copy)."""
+    from app.models.qa import BlockingIssue
+
+    enriched: list[BlockingIssue] = []
+    for issue in issues:
+        first_line = issue.suggestion.strip().split("\n")[0].strip()
+        if MIRROR_JD_VOCABULARY.match(first_line) and "Example for your resume" not in issue.suggestion:
+            enriched.append(
+                issue.model_copy(
+                    update={
+                        "suggestion": enrich_tone_vocabulary_suggestion(
+                            first_line, jd_text
+                        )
+                    }
+                )
+            )
+        else:
+            enriched.append(issue)
+
+    by_term: dict[str, BlockingIssue] = {}
+    rest: list[BlockingIssue] = []
+    for issue in enriched:
+        term_key = _mirror_vocab_term(issue.suggestion)
+        if term_key is None:
+            rest.append(issue)
+            continue
+        prev = by_term.get(term_key)
+        if prev is None or len(issue.suggestion) > len(prev.suggestion):
+            by_term[term_key] = issue
+    return rest + list(by_term.values())

@@ -34,7 +34,7 @@ from app.services.session_ownership import (
     bearer_claims_or_none,
     resolve_bearer_user_id,
 )
-from app.agent.phase4_deterministic import compute_score_result, scoring_terms_from_keywords
+from app.agent.phase4_deterministic import compute_score_result, scoring_terms_from_keywords, refresh_qa_tone_guidance
 from app.services.checkup_service import parsed_to_tailored
 from app.services.dashboard.session_cache import (
     load_session_for_request,
@@ -62,6 +62,8 @@ def _session_check_payload(session) -> dict:
     def phase_payload(n: int) -> dict:
         status = getattr(session, f"phase{n}_status")
         output = getattr(session, f"phase{n}_output")
+        if output is not None and n == 4:
+            output = refresh_qa_tone_guidance(output, session.jd_raw)
         return {
             "status": status.value if hasattr(status, "value") else status,
             "output": json.loads(output.model_dump_json()) if output is not None else None,
@@ -343,7 +345,7 @@ async def rescore_ats(
             status_code=409, detail="Run the ATS score once before re-scoring."
         )
     if session.phase4_stale_since is None:
-        return session.phase4_output
+        return refresh_qa_tone_guidance(session.phase4_output, session.jd_raw)
 
     user_info = session.user_info
     scored_resume_json = session.phase3_output.model_dump_json()
@@ -389,7 +391,7 @@ async def rescore_ats(
         )
         await sync_session_cache_for_session(db, latest)
         await db.commit()
-    return updated
+    return refresh_qa_tone_guidance(updated, session.jd_raw)
 
 
 class ApplicationLabelRequest(BaseModel):

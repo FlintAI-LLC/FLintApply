@@ -5,10 +5,13 @@ from __future__ import annotations
 import re
 
 from app.agent.phase4_score import ResumeQualityResult, compute_ats_score
-from app.agent.tone_issue_guidance import enrich_tone_vocabulary_suggestion
+from app.agent.tone_issue_guidance import (
+    enrich_tone_vocabulary_suggestion,
+    refresh_mirror_jd_blocking_issues,
+)
 from app.agent.tone_profile import JDToneProfile
 from app.models.keywords import Keyword
-from app.models.qa import BlockingIssue, IssueAnchor
+from app.models.qa import BlockingIssue, IssueAnchor, QAOutput
 
 MISSING_KEYWORD_PREFIX = "Missing must-have keyword: "
 SINGLE_SECTION_MARKER = " appears only in "
@@ -185,4 +188,13 @@ def build_blocking_issues_from_score(
                 )
             )
 
-    return corrected_issues
+    return refresh_mirror_jd_blocking_issues(corrected_issues, jd_text)
+
+
+def refresh_qa_tone_guidance(qa: QAOutput, jd_text: str | None) -> QAOutput:
+    """Ensure stored Phase 4 rows include JD snippet + example for mirror-vocabulary issues."""
+    blocking = refresh_mirror_jd_blocking_issues(list(qa.blocking_issues or []), jd_text)
+    quick = refresh_mirror_jd_blocking_issues(list(qa.quick_wins or []), jd_text)
+    if blocking == qa.blocking_issues and quick == qa.quick_wins:
+        return qa
+    return qa.model_copy(update={"blocking_issues": blocking, "quick_wins": quick})

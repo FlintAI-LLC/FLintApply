@@ -359,8 +359,9 @@ function AuthPageContent() {
           {error && (
             <div className="mb-5 p-3 rounded-lg bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm space-y-2">
               <p>{error}</p>
-              {(errorCode === "email_registered_with_sso" ||
-                errorCode === "sso_sign_in_required") && (
+              {(errorCode === "sso_sign_in_required" ||
+                errorCode === "email_registered_with_sso" ||
+                errorCode?.startsWith("email_registered_with_sso:")) && (
                 <button
                   type="button"
                   onClick={() => {
