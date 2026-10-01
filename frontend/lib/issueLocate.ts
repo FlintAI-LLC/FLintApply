@@ -18,8 +18,10 @@ function quotedTerms(text: string): string[] {
 export function searchTermsForIssue(issue: BlockingIssue): string[] {
   const raw = `${issue.description} ${issue.suggestion}`;
   const terms = [...quotedTerms(raw)];
-  const mirror = raw.match(/vocabulary\s+([A-Za-z][A-Za-z0-9-]{2,})/i);
+  const mirror = raw.match(/Mirror JD vocabulary:\s*['"]([^'"]+)['"]/i);
   if (mirror?.[1]) terms.push(mirror[1]);
+  const legacy = raw.match(/vocabulary\s+([A-Za-z][A-Za-z0-9-]{2,})/i);
+  if (legacy?.[1]) terms.push(legacy[1]);
   for (const match of raw.matchAll(/\b([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]+)*)\b/g)) {
     const phrase = match[1]?.trim();
     if (!phrase || phrase.length > 40) continue;

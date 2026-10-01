@@ -289,6 +289,43 @@ def _fingerprint(request: Request) -> str:
     return make_device_fingerprint(_user_agent(request), _client_ip(request))
 
 
+def _oauth_can_link_to_email_password_user(
+    existing: User,
+    *,
+    provider_enum: AuthProvider,
+    oauth_verified: bool,
+    canonical_owner: User | None,
+    email: str,
+) -> bool:
+    """Allow SSO sign-in when OAuth email matches an email+password account."""
+    del provider_enum  # reserved for provider-specific rules later
+    if existing.auth_provider != AuthProvider.email or not existing.password_hash:
+        return False
+    if not oauth_verified:
+        return False
+    if canonical_owner is not None and canonical_owner.email != email:
+        return False
+    if canonical_owner is not None and canonical_owner.id != existing.id:
+        return False
+    return True
+
+
+def _link_oauth_to_email_user(
+    user: User,
+    profile: dict[str, Any],
+    provider_enum: AuthProvider,
+    *,
+    oauth_verified: bool,
+) -> None:
+    user.auth_provider = provider_enum
+    user.provider_id = str(profile["provider_id"])
+    if oauth_verified and not user.is_email_verified:
+        user.email_verified_at = datetime.now(timezone.utc)
+    display = (profile.get("display_name") or "").strip()
+    if display and not (user.display_name or "").strip():
+        user.display_name = display
+
+
 async def _set_refresh_cookie(response: Response, token: str, expires_in: int) -> None:
     response.set_cookie(
         key=REFRESH_COOKIE_NAME,
@@ -891,13 +928,29 @@ async def oauth_callback(
         ):
             conflict = existing or canonical_owner
             assert conflict is not None
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "email_already_registered",
-                    "with_provider": conflict.auth_provider.value,
-                },
-            )
+            if existing is not None and _oauth_can_link_to_email_password_user(
+                existing,
+                provider_enum=provider_enum,
+                oauth_verified=oauth_verified,
+                canonical_owner=canonical_owner,
+                email=email,
+            ):
+                user = existing
+                _link_oauth_to_email_user(
+                    user,
+                    profile,
+                    provider_enum,
+                    oauth_verified=oauth_verified,
+                )
+                await db.flush()
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "email_already_registered",
+                        "with_provider": conflict.auth_provider.value,
+                    },
+                )
         else:
             from app.services.launch_gate import assert_signup_allowed
 

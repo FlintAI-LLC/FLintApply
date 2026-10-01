@@ -190,6 +190,7 @@ const oauthProviders = [
         Google({
           clientId: process.env.GOOGLE_CLIENT_ID!,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+          authorization: { params: { prompt: "select_account" } },
         }),
       ]
     : []),
@@ -207,6 +208,7 @@ const oauthProviders = [
           clientId: process.env.AZURE_AD_CLIENT_ID!,
           clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
           issuer: "https://login.microsoftonline.com/common/v2.0",
+          authorization: { params: { prompt: "select_account" } },
         }),
       ]
     : []),
