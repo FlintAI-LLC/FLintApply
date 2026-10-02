@@ -60,6 +60,36 @@ async def test_duplicate_candidates_near_identical() -> None:
     assert review["duplicate_candidates"]
 
 
+@pytest.mark.asyncio
+async def test_embed_cache_reuses_vectors_per_session() -> None:
+    output = TailoredResumeOutput(
+        experience=[
+            TailoredExperienceEntry(
+                company="A",
+                bullets=["First bullet about platform work", "Second related bullet"],
+            )
+        ]
+    )
+    call_count = 0
+
+    async def counting_embed(texts: list[str]) -> list[list[float]]:
+        nonlocal call_count
+        call_count += 1
+        return [[1.0, 0.0], [0.9, 0.1]]
+
+    with patch(
+        "app.services.draft_review.embed_texts",
+        new=AsyncMock(side_effect=counting_embed),
+    ):
+        await build_draft_review(
+            output, session_id="sess-1", jd_text="", must_have=[]
+        )
+        await build_draft_review(
+            output, session_id="sess-1", jd_text="", must_have=[]
+        )
+    assert call_count == 1
+
+
 def test_remove_bullet_does_not_touch_brick_store() -> None:
     bid = bullet_id_for("experience", 0, 0)
     output = TailoredResumeOutput(

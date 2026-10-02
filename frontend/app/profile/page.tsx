@@ -22,8 +22,10 @@ import {
   SECTION_LABELS,
   SECTION_ORDER,
   uploadProfileResume,
+  countDistinctSourceDocs,
   type ProfileChunk,
   type ProfileResume,
+  type ResumeRoleConflict,
 } from "@/lib/profile"
 import { clsx } from "clsx"
 
@@ -59,6 +61,7 @@ function ProfilePageContent() {
   const [editedChunkIds, setEditedChunkIds] = useState<Set<string>>(new Set())
   const [panelCollapsed, setPanelCollapsed] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [uploadConflicts, setUploadConflicts] = useState<ResumeRoleConflict[]>([])
 
   const loadProfile = useCallback(async () => {
     if (!token) return
@@ -90,6 +93,7 @@ function ProfilePageContent() {
 
   const grouped = useMemo(() => groupChunksBySection(chunks), [chunks])
   const liveCount = liveChunkCount(chunks)
+  const sourceDocCount = countDistinctSourceDocs(chunks)
   const showReembed =
     editedChunkIds.size >= REEMBED_THRESHOLD && Boolean(profile?.raw_text)
   const onboardingIncomplete = needsOnboarding(session?.backendUser)
@@ -129,10 +133,15 @@ function ProfilePageContent() {
     if (!token) return
     setUploading(true)
     setError(null)
+    setUploadConflicts([])
     try {
       const result = await uploadProfileResume(token, payload)
       setProfile(result)
-      setChunks(result.chunks)
+      if (result.conflicts?.length) {
+        setUploadConflicts(result.conflicts)
+      }
+      const chunkRows = await getProfileChunks(token)
+      setChunks(chunkRows)
       setEditedChunkIds(new Set())
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed")
@@ -229,6 +238,22 @@ function ProfilePageContent() {
             </div>
           )}
 
+          {uploadConflicts.length > 0 && (
+            <div
+              className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 text-sm px-4 py-3 rounded-xl"
+              data-testid="profile-upload-conflicts"
+            >
+              <p className="font-medium mb-1">Title mismatch detected (upload still saved)</p>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {uploadConflicts.map((c) => (
+                  <li key={`${c.company}-${c.new}`}>
+                    {c.company}: existing “{c.existing}” vs new “{c.new}”
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <section className="bg-white/60 dark:bg-slate-900/60 border border-slate-300 dark:border-slate-700 rounded-2xl p-6">
             <ProfileUploadZone
               onSubmit={handleUpload}
@@ -258,6 +283,16 @@ function ProfilePageContent() {
                   <p>
                     <span className="text-slate-800 dark:text-slate-200 font-medium tabular-nums">{liveCount}</span>{" "}
                     live chunk{liveCount === 1 ? "" : "s"}
+                    {sourceDocCount > 0 && (
+                      <>
+                        {" "}
+                        from{" "}
+                        <span className="text-slate-800 dark:text-slate-200 font-medium tabular-nums">
+                          {sourceDocCount}
+                        </span>{" "}
+                        source resume{sourceDocCount === 1 ? "" : "s"}
+                      </>
+                    )}
                   </p>
                   <p>
                     Last embedded{" "}

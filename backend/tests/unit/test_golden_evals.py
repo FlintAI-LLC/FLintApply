@@ -11,7 +11,6 @@ def test_golden_eval_cases() -> None:
         issues = lint_bullets(case.bullets, case.skills, case.jd)
         rules = {i.rule for i in issues}
         if case.expect_clean:
-            assert not (rules & BLOCKING_RULES), case.name
-            assert case.expected_rules <= rules, case.name
+            assert len(issues) == 0, case.name
         else:
             assert case.expected_rules <= rules, f"{case.name}: {rules}"

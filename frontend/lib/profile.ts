@@ -31,11 +31,18 @@ export interface ProfileChunk {
   section_type: string
   content: string
   token_count: number
+  source_doc_id?: string | null
   metadata: Record<string, unknown>
   created_at: string | null
   updated_at: string | null
   deleted_at?: string | null
   score?: number | null
+}
+
+export interface ResumeRoleConflict {
+  company: string
+  existing: string
+  new: string
 }
 
 export interface ProfileResume {
@@ -50,6 +57,15 @@ export interface ProfileResume {
 
 export interface ProfileUploadResponse extends ProfileResume {
   chunks: ProfileChunk[]
+  conflicts?: ResumeRoleConflict[]
+}
+
+export function countDistinctSourceDocs(chunks: ProfileChunk[]): number {
+  const ids = new Set<string>()
+  for (const c of chunks) {
+    if (c.source_doc_id) ids.add(c.source_doc_id)
+  }
+  return ids.size
 }
 
 // ── Section display ──────────────────────────────────────────────────────────

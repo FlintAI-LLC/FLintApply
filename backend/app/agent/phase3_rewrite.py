@@ -40,7 +40,7 @@ from app.services.retrieval.retrieval_service import (
     assert_prompt_fits,
     retrieve_for_jd,
 )
-from app.llm.model_registry import ENABLE_MULTIPASS_COMPOSITION
+from app.config import settings
 from app.llm.factory import get_llm_client_for_step
 
 log = structlog.get_logger()
@@ -606,7 +606,7 @@ async def run(
     output: TailoredResumeOutput
     used_multipass = False
     if (
-        ENABLE_MULTIPASS_COMPOSITION
+        settings.ENABLE_MULTIPASS_COMPOSITION
         and not scoped
         and tailoring_brief is not None
         and tailoring_brief.sections

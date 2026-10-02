@@ -1,0 +1,7 @@
+{
+  "name": "fixture_clean_short",
+  "bullets": ["Shipped payment APIs with measurable latency wins"],
+  "skills": ["Python"],
+  "jd": "Backend engineer role",
+  "expected_clean": true
+}
