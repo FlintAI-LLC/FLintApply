@@ -32,7 +32,6 @@ from app.services.billing.exceptions import (
 from app.services.session_ownership import (
     bind_session_user_from_bearer,
     bearer_claims_or_none,
-    require_session_user,
     resolve_bearer_user_id,
 )
 from app.agent.phase4_deterministic import compute_score_result, scoring_terms_from_keywords, refresh_qa_tone_guidance
@@ -207,12 +206,14 @@ async def get_draft_review(
     request: Request,
     session_id: str,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
     authorization: str | None = Header(default=None, alias="Authorization"),
 ):
     session = await _load_session_for_check(session_id, authorization, db)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    await require_session_user(authorization, session, db)
+    if session.user_id and session.user_id != str(user.id):
+        raise HTTPException(status_code=404, detail="Session not found")
     if session.phase3_output is None:
         raise HTTPException(status_code=404, detail="No draft resume for session")
     from app.services.draft_review import build_draft_review
@@ -236,12 +237,14 @@ async def delete_draft_bullet(
     session_id: str,
     bullet_id: str,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
     authorization: str | None = Header(default=None, alias="Authorization"),
 ):
     session = await _load_session_for_check(session_id, authorization, db)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    await require_session_user(authorization, session, db)
+    if session.user_id and session.user_id != str(user.id):
+        raise HTTPException(status_code=404, detail="Session not found")
     if session.phase3_output is None:
         raise HTTPException(status_code=404, detail="No draft resume for session")
     from app.services.draft_review import build_draft_review, remove_bullet_from_output
