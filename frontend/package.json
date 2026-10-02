@@ -26,7 +26,7 @@
     "@types/zxcvbn": "^4.4.5",
     "clsx": "^2.1.1",
     "lucide-react": "^1.17.0",
-    "next": "16.3.3",
+    "next": "16.3.8",
     "next-auth": "5.0.0-beta.32",
     "react": "19.2.4",
     "react-diff-viewer-continued": "^4.2.2",
@@ -52,10 +52,11 @@
       "nanoid": ">=3.3.18",
       "postcss": ">=8.5.18",
       "sharp": ">=0.35.4",
-      "js-yaml": ">=4.3.1",
+      "js-yaml": ">=5.4.1",
       "browserslist": ">=4.28.7",
-      "brace-expansion@1": "1.1.18",
-      "brace-expansion@5": "5.0.9"
+      "brace-expansion": "5.0.12",
+      "next": ">=16.3.6",
+      "esbuild": ">=0.28.1"
     }
   }
 }
