@@ -31,6 +31,10 @@ from app.services.retrieval.exceptions import (
     MasterResumeRequiredError,
     PromptBudgetExceededError,
 )
+from app.agent.brief import (
+    assemble_tailoring_ingredients,
+    render_brief_for_prompt,
+)
 from app.services.retrieval.retrieval_service import (
     RetrievalResult,
     assert_prompt_fits,
@@ -52,12 +56,14 @@ _COMPANY_INTEL_INSTRUCTION = (
 # Snippet appended to the system prompt when retrieval has produced
 # selected chunks.  Wording per SYSTEM_DESIGN_PHASE_2 §18.4 — the LLM
 # composes *only* from the listed content and never invents new facts.
-_RETRIEVAL_INSTRUCTION = (
-    "\n\nAVAILABLE PROFILE CONTENT — compose the tailored resume from these "
-    "chunks ONLY.  Do not invent companies, dates, metrics, or skills that "
-    "are not present below.  Each chunk shows its relevance score against "
-    "the job description so you can prioritize the highest-scoring ones."
+_BRIEF_COMPOSER_INSTRUCTION = (
+    "\n\nYou are a resume composer. Use ONLY the bricks in the TAILORING BRIEF. "
+    "Do not invent any metric, company name, or technology not present in a "
+    "brick. Do not place a keyword in a section other than the one marked "
+    "[must place]."
 )
+
+_RETRIEVAL_INSTRUCTION = _BRIEF_COMPOSER_INSTRUCTION
 
 _SCOPED_INSTRUCTION = (
     "\n\nSCOPED REGENERATION — regenerate ONLY the requested section or bullet. "
@@ -480,7 +486,25 @@ async def run(
     if scoped:
         system_content += _SCOPED_INSTRUCTION
     chunks_prompt_block = ""
-    if retrieval_result is not None and retrieval_result.selected:
+    tailoring_brief = None
+    if (
+        not scoped
+        and retrieval_result is not None
+        and session.phase1_output is not None
+        and session.resume_parsed is not None
+        and (retrieval_result.selected or retrieval_result.skipped)
+    ):
+        target_pages = 1
+        tailoring_brief = assemble_tailoring_ingredients(
+            retrieval_result,
+            session.phase1_output,
+            session.resume_parsed,
+            target_pages,
+        )
+        session.tailoring_brief = tailoring_brief.to_json()
+        system_content += _RETRIEVAL_INSTRUCTION
+        chunks_prompt_block = f"\n\n{render_brief_for_prompt(tailoring_brief)}\n"
+    elif retrieval_result is not None and retrieval_result.selected:
         system_content += _RETRIEVAL_INSTRUCTION
         chunks_prompt_block = (
             "\n\nAVAILABLE PROFILE CONTENT (retrieved from master resume):\n"
