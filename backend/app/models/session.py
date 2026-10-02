@@ -111,6 +111,8 @@ class Session(BaseModel):
     phase2_output: AuditOutput | None = None
 
     phase3_status: PhaseStatus = PhaseStatus.pending
+    # Deterministic Phase 3 ingredient brief (schema v1); persisted for replay/debug.
+    tailoring_brief: dict | None = None
     phase3_output: TailoredResumeOutput | None = None
     phase3_versions: list[ResumeVersion] = []
     # Tailored resume that existed when a forced regenerate started; kept so a

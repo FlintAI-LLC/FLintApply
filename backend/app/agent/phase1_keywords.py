@@ -8,6 +8,7 @@ from pathlib import Path
 import structlog
 from pydantic import BaseModel
 
+from app.agent.jd_requirements import extract_jd_requirements, merge_requirement_lists
 from app.agent.keyword_match import atomize_phrase, classify_scoring_tier, string_present
 from app.agent.tone_profile import extract_tone_profile
 from app.llm.base import LLMClient, LLMMessage
@@ -137,6 +138,7 @@ def _heuristic_keywords_from_jd(jd_text: str, resume_text: str) -> KeywordExtrac
     return KeywordExtractionOutput(
         must_have_keywords=must_kw,
         nice_to_have_keywords=nice_kw,
+        requirements=extract_jd_requirements(jd_text),
         boolean_search_terms=[k.term for k in must_kw[:10]],
     )
 
@@ -252,6 +254,7 @@ async def run(
     # the profile is a stylistic fingerprint used by Phase 3 wording guidance
     # and Phase 4's tone-alignment axis.
     output.tone_profile = extract_tone_profile(jd_text)
+    output.requirements = merge_requirement_lists(output.requirements, jd_text)
 
     await event_queue.put({"event": "partial", "phase": 1, "data": json.loads(output.model_dump_json())})
     log.info(

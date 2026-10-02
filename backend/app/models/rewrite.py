@@ -63,6 +63,8 @@ class TailoredResumeOutput(BaseModel):
     selected_chunks: list[dict[str, Any]] = Field(default_factory=list)
     skipped_chunks: list[dict[str, Any]] = Field(default_factory=list)
     retrieval_meta: dict[str, Any] = Field(default_factory=dict)
+    # Master-resume chunk ids (bricks) that sourced tailored bullets after postprocess.
+    source_brick_ids: list[str] = Field(default_factory=list)
 
 
 class ResumeVersion(BaseModel):
