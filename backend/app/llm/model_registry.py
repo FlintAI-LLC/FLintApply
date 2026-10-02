@@ -32,6 +32,9 @@ ModelRoute = tuple[str, str]
 # Step→model pins (verified 2026-08-27, ai.google.dev/gemini-api/docs/pricing).
 # One quality bar: tiers differ by volume, not output model.
 # Use gemini-3.5-* — gemini-2.5-* returns 404 on many API keys.
+# Multi-pass Phase 3 (parallel section draft + coherence polish). Default OFF.
+ENABLE_MULTIPASS_COMPOSITION: bool = False
+
 STEP_DEFAULTS: dict[PipelineStep, ModelRoute] = {
     "resume_structure": ("gemini", "gemini-3.5-flash-lite"),
     "phase1_keywords": ("gemini", "gemini-3.5-flash-lite"),

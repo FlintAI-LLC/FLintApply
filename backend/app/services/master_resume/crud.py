@@ -16,18 +16,22 @@ Soft-delete contract:
 
 from __future__ import annotations
 
+import math
+import re
+import string
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Iterable, Sequence
 
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import distinct, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.master_resume import (
     MasterResume,
     MasterResumeChunk,
     MasterResumeSectionType,
+    MasterResumeSourceDoc,
 )
 from app.services.master_resume.chunking import (
     Chunk,
@@ -43,9 +47,175 @@ from app.services.master_resume.embedding import (
 
 log = structlog.get_logger("master_resume.crud")
 
+MAX_SOURCE_RESUMES = 5
+_COSINE_DEDUP_THRESHOLD = 0.92
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _normalize_chunk_text(text: str) -> str:
+    lowered = (text or "").lower()
+    stripped = lowered.translate(str.maketrans("", "", string.punctuation))
+    return " ".join(stripped.split())
+
+
+def _cosine_vectors(a: Sequence[float], b: Sequence[float]) -> float:
+    if not a or not b:
+        return 0.0
+    dot = 0.0
+    na = 0.0
+    nb = 0.0
+    for x, y in zip(a, b, strict=False):
+        x = float(x)
+        y = float(y)
+        dot += x * y
+        na += x * x
+        nb += y * y
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (math.sqrt(na) * math.sqrt(nb))
+
+
+async def count_live_source_docs(db: AsyncSession, *, user_id: uuid.UUID) -> int:
+    row = (
+        await db.execute(
+            select(func.count(distinct(MasterResumeChunk.source_doc_id))).where(
+                MasterResumeChunk.user_id == user_id,
+                MasterResumeChunk.deleted_at.is_(None),
+                MasterResumeChunk.source_doc_id.is_not(None),
+            )
+        )
+    ).scalar_one()
+    return int(row or 0)
+
+
+def _detect_role_conflicts(
+    parsed_sections: dict[str, Any],
+    existing_chunks: list[MasterResumeChunk],
+) -> list[dict[str, str]]:
+    """Report company/title mismatches (non-blocking)."""
+    new_roles: list[tuple[str, str]] = []
+    for entry in parsed_sections.get("experience") or []:
+        if not isinstance(entry, dict):
+            continue
+        company = str(entry.get("company") or "").strip()
+        title = str(entry.get("title") or "").strip()
+        if company and title:
+            new_roles.append((company.lower(), title))
+
+    conflicts: list[dict[str, str]] = []
+    for chunk in existing_chunks:
+        if chunk.section_type != MasterResumeSectionType.experience:
+            continue
+        meta = chunk.chunk_metadata or {}
+        company = str(meta.get("company") or "").strip()
+        title = str(meta.get("title") or "").strip()
+        if not company or not title:
+            continue
+        for new_company, new_title in new_roles:
+            if new_company == company.lower() and new_title.lower() != title.lower():
+                conflicts.append(
+                    {
+                        "company": company,
+                        "existing": title,
+                        "new": new_title,
+                    }
+                )
+    return conflicts
+
+
+async def merge_upload_chunks(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    raw_text: str,
+    parsed_sections: dict[str, Any] | None,
+    filename: str | None = None,
+) -> tuple[MasterResume, list[MasterResumeChunk], list[dict[str, str]]]:
+    """Merge a new upload into existing live chunks (dedup + source doc)."""
+    if await count_live_source_docs(db, user_id=user_id) >= MAX_SOURCE_RESUMES:
+        raise ValueError("upload_limit_reached")
+
+    if parsed_sections:
+        chunks = chunk_parsed_sections(parsed_sections)
+    else:
+        chunks = chunk_raw_text(raw_text)
+
+    resume = await _upsert_master_resume(
+        db,
+        user_id=user_id,
+        raw_text=raw_text,
+        parsed_sections=parsed_sections or {},
+    )
+
+    existing = await get_chunks_for_user(db, user_id=user_id)
+    normalized_existing = {
+        _normalize_chunk_text(c.content)
+        for c in existing
+        if c.content
+    }
+
+    to_insert: list[Chunk] = []
+    section_vectors: dict[MasterResumeSectionType, list[tuple[MasterResumeChunk, list[float]]]] = {}
+    for row in existing:
+        if row.embedding is None:
+            continue
+        section_vectors.setdefault(row.section_type, []).append(
+            (row, list(row.embedding))
+        )
+
+    pending_vectors: list[list[float]] = []
+    pending_chunks: list[Chunk] = []
+    if chunks:
+        try:
+            pending_vectors = await embed_texts([c.content for c in chunks])
+        except (EmbeddingConfigurationError, EmbeddingProviderError):
+            from app.models.master_resume import EMBEDDING_DIM
+
+            pending_vectors = [[0.0] * EMBEDDING_DIM for _ in chunks]
+
+    for chunk, vector in zip(chunks, pending_vectors, strict=False):
+        norm = _normalize_chunk_text(chunk.content)
+        if norm in normalized_existing:
+            continue
+        best = 0.0
+        for _row, existing_vec in section_vectors.get(chunk.section_type, []):
+            sim = _cosine_vectors(vector, existing_vec)
+            best = max(best, sim)
+        if best > _COSINE_DEDUP_THRESHOLD:
+            continue
+        to_insert.append(chunk)
+        normalized_existing.add(norm)
+
+    source_doc_id: uuid.UUID | None = None
+    if to_insert:
+        source_doc = MasterResumeSourceDoc(
+            id=uuid.uuid4(),
+            user_id=user_id,
+            filename=(filename or "")[:512] or None,
+            chunk_count=len(to_insert),
+        )
+        db.add(source_doc)
+        await db.flush()
+        source_doc_id = source_doc.id
+
+    inserted = await _insert_chunks(
+        db,
+        resume=resume,
+        user_id=user_id,
+        chunks=to_insert,
+        source_doc_id=source_doc_id,
+    )
+    resume.chunk_count = len(existing) + len(inserted)
+    if inserted:
+        resume.last_embedded_at = _utcnow()
+    resume.updated_at = _utcnow()
+    await db.flush()
+
+    conflicts = _detect_role_conflicts(parsed_sections or {}, existing)
+    return resume, inserted, conflicts
 
 
 # ---------------------------------------------------------------------------
@@ -201,12 +371,50 @@ async def replace_all_chunks(
     return resume, rows
 
 
+async def create_chunk(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    section_type: MasterResumeSectionType,
+    content: str,
+    source_doc_id: uuid.UUID | None = None,
+) -> MasterResumeChunk:
+    """Insert one live chunk with embedding (brick CRUD POST)."""
+    resume = await get_raw_resume(db, user_id=user_id)
+    if resume is None:
+        raise ValueError("master resume not found")
+
+    cleaned = (content or "").strip()
+    if not cleaned:
+        raise ValueError("content must not be empty")
+
+    chunk = Chunk(
+        section_type=section_type,
+        content=cleaned,
+        token_count=count_tokens(cleaned),
+        metadata={},
+    )
+    rows = await _insert_chunks(
+        db,
+        resume=resume,
+        user_id=user_id,
+        chunks=[chunk],
+        source_doc_id=source_doc_id,
+    )
+    resume.chunk_count += len(rows)
+    resume.last_embedded_at = _utcnow()
+    resume.updated_at = _utcnow()
+    await db.flush()
+    return rows[0]
+
+
 async def _insert_chunks(
     db: AsyncSession,
     *,
     resume: MasterResume,
     user_id: uuid.UUID,
     chunks: Sequence[Chunk],
+    source_doc_id: uuid.UUID | None = None,
 ) -> list[MasterResumeChunk]:
     """Embed and insert ``chunks``; returns the inserted ORM rows.
 
@@ -240,6 +448,7 @@ async def _insert_chunks(
             token_count=chunk.token_count,
             embedding=vector,
             chunk_metadata=dict(chunk.metadata or {}),
+            source_doc_id=source_doc_id,
             created_at=now,
             updated_at=now,
         )
@@ -384,6 +593,7 @@ def iter_chunk_summaries(
                 "section_type": r.section_type.value,
                 "content": r.content,
                 "token_count": r.token_count,
+                "source_doc_id": str(r.source_doc_id) if r.source_doc_id else None,
                 "metadata": r.chunk_metadata,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
                 "updated_at": r.updated_at.isoformat() if r.updated_at else None,
@@ -393,14 +603,31 @@ def iter_chunk_summaries(
     return out
 
 
+def brick_summary(row: MasterResumeChunk) -> dict[str, Any]:
+    """Shape for GET/POST/PATCH /api/profile/bricks."""
+    return {
+        "id": str(row.id),
+        "section_type": row.section_type.value,
+        "content": row.content,
+        "token_count": row.token_count,
+        "source_doc_id": str(row.source_doc_id) if row.source_doc_id else None,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
 __all__ = [
+    "MAX_SOURCE_RESUMES",
     "add_chunks",
+    "brick_summary",
+    "count_live_source_docs",
+    "create_chunk",
     "delete_chunk",
     "get_chunk",
     "get_chunks_for_user",
     "get_raw_resume",
     "has_any_live_chunk",
     "iter_chunk_summaries",
+    "merge_upload_chunks",
     "replace_all_chunks",
     "update_chunk_content",
 ]
