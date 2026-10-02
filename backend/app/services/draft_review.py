@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from typing import Any
 
@@ -12,6 +14,14 @@ from app.services.master_resume.embedding import embed_texts
 
 _CHARS_PER_PAGE = 3000
 _DUPLICATE_THRESHOLD = 0.85
+
+# Per-process cache: (session_id, phase3_hash) -> bullet embedding vectors.
+_embed_cache: dict[tuple[str, str], list[list[float]]] = {}
+
+
+def _phase3_output_hash(output: TailoredResumeOutput) -> str:
+    payload = json.dumps(output.model_dump(mode="json"), sort_keys=True)
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -57,9 +67,28 @@ def _collect_bullets(output: TailoredResumeOutput) -> list[dict[str, Any]]:
     return bullets
 
 
+async def _embed_bullets_for_review(
+    session_id: str | None,
+    output: TailoredResumeOutput,
+    texts: list[str],
+) -> list[list[float]]:
+    if len(texts) < 2:
+        return []
+    if session_id:
+        key = (session_id, _phase3_output_hash(output))
+        cached = _embed_cache.get(key)
+        if cached is not None and len(cached) == len(texts):
+            return cached
+        vectors = await embed_texts(texts)
+        _embed_cache[key] = vectors
+        return vectors
+    return await embed_texts(texts)
+
+
 async def build_draft_review(
     output: TailoredResumeOutput,
     *,
+    session_id: str | None = None,
     jd_text: str,
     must_have: list[str],
     target_pages: float = 1.0,
@@ -81,9 +110,8 @@ async def build_draft_review(
         if notes_blob:
             b["rewrite_notes"] = notes_blob[:500]
 
-    vectors: list[list[float]] = []
-    if len(bullets) >= 2:
-        vectors = await embed_texts([b["text"] for b in bullets])
+    texts = [b["text"] for b in bullets]
+    vectors = await _embed_bullets_for_review(session_id, output, texts)
 
     duplicates: list[dict[str, Any]] = []
     for i in range(len(vectors)):

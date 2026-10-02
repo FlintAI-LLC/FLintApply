@@ -32,8 +32,7 @@ def run_lint_suite() -> tuple[int, int]:
         issues = lint_bullets(case.bullets, case.skills, case.jd)
         rules = {i.rule for i in issues}
         if case.expect_clean:
-            blocking = rules & BLOCKING_RULES
-            ok = blocking == set() and not (case.expected_rules - rules)
+            ok = len(issues) == 0
         else:
             ok = case.expected_rules <= rules
         if ok:

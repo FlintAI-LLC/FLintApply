@@ -225,6 +225,7 @@ async def get_draft_review(
     )
     return await build_draft_review(
         session.phase3_output,
+        session_id=session_id,
         jd_text=session.jd_raw or "",
         must_have=must_have,
     )
@@ -260,6 +261,7 @@ async def delete_draft_bullet(
     )
     return await build_draft_review(
         session.phase3_output,
+        session_id=session_id,
         jd_text=session.jd_raw or "",
         must_have=must_have,
     )

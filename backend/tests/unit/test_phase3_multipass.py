@@ -14,7 +14,7 @@ from app.agent.phase3_multipass import (
     bullet_id_for,
     run_section_composition,
 )
-from app.llm.model_registry import ENABLE_MULTIPASS_COMPOSITION
+from app.config import settings
 from app.models.rewrite import TailoredExperienceEntry, TailoredResumeOutput
 
 
@@ -72,7 +72,64 @@ def test_merge_discards_unknown_bullet_id() -> None:
 
 
 def test_enable_multipass_flag_default_off() -> None:
-    assert ENABLE_MULTIPASS_COMPOSITION is False
+    assert settings.ENABLE_MULTIPASS_COMPOSITION is False
+
+
+@pytest.mark.asyncio
+async def test_run_skips_multipass_when_flag_disabled(monkeypatch) -> None:
+    import asyncio
+    from unittest.mock import Mock
+
+    from app.agent.phase3_rewrite import run
+    from app.models.audit import AuditOutput, KeywordCoverage
+    from app.models.keywords import KeywordExtractionOutput
+    from app.models.session import PhaseStatus
+    from app.services.session_store import create_session, update_session
+
+    multipass_calls = 0
+
+    async def forbidden_multipass(*_args, **_kwargs):
+        multipass_calls += 1
+        return TailoredResumeOutput(summary="multipass")
+
+    complete_calls = 0
+
+    async def fake_phase3_llm(*_args, **_kwargs):
+        nonlocal complete_calls
+        complete_calls += 1
+        return TailoredResumeOutput(summary="monolithic")
+
+    monkeypatch.setattr(
+        "app.agent.phase3_multipass.run_multipass_composition",
+        forbidden_multipass,
+    )
+    monkeypatch.setattr(
+        "app.agent.phase3_rewrite._complete_phase3_llm",
+        fake_phase3_llm,
+    )
+    monkeypatch.setattr(
+        "app.agent.phase3_rewrite._ensure_company_intel",
+        AsyncMock(return_value=None),
+    )
+    llm = Mock(model_name="gpt-4o", provider_name="openai")
+
+    session = await create_session()
+    session.phase1_output = KeywordExtractionOutput()
+    session.phase2_output = AuditOutput(
+        keyword_coverage=KeywordCoverage(present=["Python"]),
+        overall_score=70,
+        summary="Audit ok",
+    )
+    session.phase1_status = PhaseStatus.done
+    session.phase2_status = PhaseStatus.done
+    session.jd_raw = "Python backend role"
+    session.resume_raw = "Jane Doe\nPython engineer with eight years of experience."
+    await update_session(session)
+
+    monkeypatch.setattr(settings, "ENABLE_MULTIPASS_COMPOSITION", False)
+    await run(session, llm, asyncio.Queue())
+    assert multipass_calls == 0
+    assert complete_calls >= 1
 
 
 @pytest.mark.asyncio

@@ -76,6 +76,9 @@ class Settings(BaseSettings):
     MAX_JD_CHARS: int = 10_000
     MAX_UPLOAD_BYTES: int = 5 * 1024 * 1024  # 5 MB
 
+    # Phase 3 multi-pass composition (parallel section draft). Default OFF in all envs.
+    ENABLE_MULTIPASS_COMPOSITION: bool = False
+
     # Database (PostgreSQL + pgvector)
     # Required for all environments except pure in-memory local dev.
     # Set via DATABASE_URL env var or .env file.

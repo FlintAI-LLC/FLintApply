@@ -25,19 +25,27 @@ export function DraftReviewPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [noDraftYet, setNoDraftYet] = useState(false);
 
   const load = useCallback(async () => {
     if (!enabled) return;
     setLoading(true);
     setError(null);
+    setNoDraftYet(false);
     try {
       const review = await getDraftReview(sessionId);
       setData(review);
     } catch (e) {
-      const msg =
-        e instanceof ApiError ? e.message : "Could not load draft review.";
-      setError(msg);
-      setData(null);
+      if (e instanceof ApiError && e.status === 404) {
+        setNoDraftYet(true);
+        setError(null);
+        setData(null);
+      } else {
+        const msg =
+          e instanceof ApiError ? e.message : "Could not load draft review.";
+        setError(msg);
+        setData(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -67,16 +75,33 @@ export function DraftReviewPanel({
 
   if (loading && !data) {
     return (
-      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 py-4">
+      <div
+        data-testid="draft-review-loading"
+        className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 py-4"
+      >
         <Loader2 className="w-4 h-4 animate-spin" />
         Loading draft review…
       </div>
     );
   }
 
+  if (noDraftYet) {
+    return (
+      <p
+        data-testid="draft-review-empty"
+        className="text-sm text-slate-600 dark:text-slate-400 border border-dashed border-slate-300 dark:border-slate-600 rounded-lg px-3 py-3 mb-6"
+      >
+        Draft review will appear after you run tailored rewrite (Phase 3).
+      </p>
+    );
+  }
+
   if (error && !data) {
     return (
-      <p className="text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+      <p
+        data-testid="draft-review-error"
+        className="text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2"
+      >
         {error}
       </p>
     );
@@ -89,6 +114,7 @@ export function DraftReviewPanel({
 
   return (
     <section
+      data-testid="draft-review-panel"
       className="mb-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40 p-4 space-y-4"
       aria-label="Draft review"
     >

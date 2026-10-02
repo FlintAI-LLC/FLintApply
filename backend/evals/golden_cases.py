@@ -57,4 +57,11 @@ GOLDEN_CASES: tuple[GoldenLintCase, ...] = (
         jd=JD,
         expected_rules={"bullet_too_short"},
     ),
+    GoldenLintCase(
+        name="skill_is_sentence",
+        bullets=[],
+        skills=["Led platform migrations and mentored junior developers on the team."],
+        jd=JD,
+        expected_rules={"skill_is_sentence"},
+    ),
 )
