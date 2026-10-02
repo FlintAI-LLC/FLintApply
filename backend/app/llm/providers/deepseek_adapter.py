@@ -25,7 +25,11 @@ class DeepSeekAdapter(LLMClient):
 
     @property
     def supports_structured_output(self) -> bool:
-        return True
+        # DeepSeek's chat API is OpenAI-compatible but does not implement
+        # OpenAI's strict json_schema mode -- only {"type": "json_object"}.
+        # Rely on prompt-injected schema instructions instead (see
+        # app/llm/structured.py), same as the OpenRouter/Ollama adapters.
+        return False
 
     @property
     def provider_name(self) -> str:
@@ -50,14 +54,7 @@ class DeepSeekAdapter(LLMClient):
             "temperature": temperature,
         }
         if response_schema:
-            kwargs["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "output",
-                    "strict": False,
-                    "schema": response_schema,
-                },
-            }
+            kwargs["response_format"] = {"type": "json_object"}
 
         resp = await self._client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
