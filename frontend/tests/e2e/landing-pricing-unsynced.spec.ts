@@ -2,6 +2,8 @@ import { test, expect } from "@playwright/test"
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/")
+  await page.waitForLoadState("networkidle")
+  await page.locator("#pricing").waitFor({ state: "attached", timeout: 10000 })
   await page.locator("#pricing").scrollIntoViewIfNeeded()
 })
 

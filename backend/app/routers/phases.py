@@ -914,6 +914,26 @@ async def patch_tailored_resume(
         )
         output.skills = normalize_skills_to_categories(output.skills, must_have)
 
+    from app.agent.output_linter import TailoredLintValidationError, ensure_tailored_passes_blocking_lint
+
+    try:
+        ensure_tailored_passes_blocking_lint(output, session.jd_raw or "")
+    except TailoredLintValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Resume contains invalid bullets or skills",
+                "field_errors": [
+                    {
+                        "field": f"{issue.field}[{issue.index}]",
+                        "rule": issue.rule,
+                        "original": issue.original[:200],
+                    }
+                    for issue in exc.issues
+                ],
+            },
+        ) from exc
+
     version = _append_version_snapshot(session, label=label, output=output)
     session.phase3_output = output
     now = datetime.now(timezone.utc)

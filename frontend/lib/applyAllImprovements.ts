@@ -16,7 +16,7 @@ import { isPatchPlaceable } from "@/lib/suggestionHighlight";
 export const MAX_CHAT_TARGET_ISSUES = 8;
 
 /** Batch apply-all rounds allowed per ATS score (resets after manual Recalculate ATS). */
-export const MAX_APPLY_ALL_ROUNDS = 3;
+export const MAX_APPLY_ALL_ROUNDS = 1;
 
 export function applyAllRoundsRemaining(roundsUsed: number): number {
   return Math.max(0, MAX_APPLY_ALL_ROUNDS - roundsUsed);

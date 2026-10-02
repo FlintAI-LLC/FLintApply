@@ -64,6 +64,29 @@ function keywordInText(text: string, keyword: string): boolean {
   return text.toLowerCase().includes(keyword.toLowerCase());
 }
 
+const SKILL_FUNCTION_WORD_RE =
+  /\b(with|of|in|the|a|to|that|which|for|and|or|by|from|as|at)\b/i;
+
+const TERMINAL_PUNCT = new Set([".", ",", ";", ":", "!", "?"]);
+
+/** Reject JD sentences and prose masquerading as skill tags. */
+export function isValidSkillKeyword(term: string, jdText = ""): boolean {
+  const candidate = term.trim();
+  if (!candidate || candidate.length > 40) return false;
+  const last = candidate[candidate.length - 1];
+  if (last && TERMINAL_PUNCT.has(last)) return false;
+  if (SKILL_FUNCTION_WORD_RE.test(candidate)) return false;
+  const lowered = candidate.toLowerCase();
+  if (jdText && lowered.split(/\s+/).length >= 5 && jdText.toLowerCase().includes(lowered)) {
+    return false;
+  }
+  return true;
+}
+
+function textHasEmDashChain(text: string): boolean {
+  return /\s[—–]\s/.test(text);
+}
+
 function keywordAlreadyInSkills(tailored: TailoredResumeOutput, keyword: string): boolean {
   const flat = new Set(
     flattenSkillTerms(tailored.skills ?? []).map((t) => t.toLowerCase()),
@@ -98,9 +121,11 @@ export function resolveEmployerTargets(
 export function applyKeywordToSkills(
   tailored: TailoredResumeOutput,
   keyword: string,
+  jdText = "",
 ): TailoredResumeOutput | null {
   const term = keyword.trim();
   if (!term) return null;
+  if (!isValidSkillKeyword(term, jdText)) return null;
   if (keywordAlreadyInSkills(tailored, term)) return null;
 
   const skills = [...(tailored.skills ?? [])];
@@ -136,6 +161,7 @@ export function applyKeywordToSummary(
   if (!term) return null;
   const summary = (tailored.summary ?? "").trim();
   if (keywordInText(summary, term)) return null;
+  if (textHasEmDashChain(summary)) return null;
   const addition = summary
     ? `${summary.replace(/\.$/, "")} — includes ${term}.`
     : `Experienced with ${term}.`;
@@ -157,10 +183,14 @@ export function applyKeywordToExperienceAt(
   if (bullets.length === 0) {
     return null;
   }
-  if (keywordInText(bullets[0]!, term)) {
+  const bullet0 = bullets[0]!;
+  if (keywordInText(bullet0, term)) {
     return null;
   }
-  bullets[0] = `${bullets[0]!.replace(/\.$/, "")} — ${term}.`;
+  if (textHasEmDashChain(bullet0)) {
+    return null;
+  }
+  bullets[0] = `${bullet0.replace(/\.$/, "")} — ${term}.`;
   entry.bullets = bullets;
   experience[experienceIndex] = entry;
   return { ...tailored, experience };
@@ -217,7 +247,11 @@ export function tryApplyMechanicalReinforceAt(
 function previewSkillsAdd(
   tailored: TailoredResumeOutput,
   keyword: string,
+  jdText = "",
 ): MechanicalFixPreview {
+  if (!isValidSkillKeyword(keyword, jdText)) {
+    return { changes: [], unmet: [] };
+  }
   if (keywordAlreadyInSkills(tailored, keyword)) {
     return { changes: [], unmet: ["already in skills"] };
   }
@@ -274,12 +308,13 @@ function previewReinforcement(
 function applySkillsAdd(
   tailored: TailoredResumeOutput,
   keyword: string,
+  jdText = "",
 ): MechanicalFixResult | null {
-  const preview = previewSkillsAdd(tailored, keyword);
+  const preview = previewSkillsAdd(tailored, keyword, jdText);
   if (preview.changes.length === 0) {
     return preview.unmet.length > 0 ? { resume: tailored, ...preview } : null;
   }
-  const updated = applyKeywordToSkills(tailored, keyword);
+  const updated = applyKeywordToSkills(tailored, keyword, jdText);
   if (!updated) {
     return { resume: tailored, changes: [], unmet: ["already in skills"] };
   }
@@ -316,10 +351,11 @@ function applyReinforcement(
 export function previewMechanicalQuickWin(
   tailored: TailoredResumeOutput,
   issue: BlockingIssue,
+  jdText = "",
 ): MechanicalFixPreview | null {
   const missing = extractMissingKeyword(issue);
   if (missing) {
-    return previewSkillsAdd(tailored, missing);
+    return previewSkillsAdd(tailored, missing, jdText);
   }
 
   const reinforce = extractReinforceKeyword(issue);
@@ -333,10 +369,11 @@ export function previewMechanicalQuickWin(
 export function tryApplyMechanicalQuickWin(
   tailored: TailoredResumeOutput,
   issue: BlockingIssue,
+  jdText = "",
 ): MechanicalFixResult | null {
   const missing = extractMissingKeyword(issue);
   if (missing) {
-    return applySkillsAdd(tailored, missing);
+    return applySkillsAdd(tailored, missing, jdText);
   }
 
   const reinforce = extractReinforceKeyword(issue);
@@ -350,7 +387,8 @@ export function tryApplyMechanicalQuickWin(
 export function canApplyMechanicalQuickWin(
   tailored: TailoredResumeOutput,
   issue: BlockingIssue,
+  jdText = "",
 ): boolean {
-  const preview = previewMechanicalQuickWin(tailored, issue);
+  const preview = previewMechanicalQuickWin(tailored, issue, jdText);
   return preview !== null && preview.changes.length > 0;
 }

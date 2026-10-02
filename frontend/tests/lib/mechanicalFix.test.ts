@@ -5,6 +5,7 @@ import type { BlockingIssue, TailoredResumeOutput } from "@/lib/api"
 import {
   applyKeywordToExperienceAt,
   applyKeywordToSkills,
+  isValidSkillKeyword,
   canApplyMechanicalQuickWin,
   shouldOfferRolePicker,
   extractMissingKeyword,
@@ -74,6 +75,18 @@ test("applyKeywordToSkills appends to matching category line", () => {
   const updated = applyKeywordToSkills(tailored, "cloud infrastructure")
   assert.ok(updated)
   assert.match(updated.skills[1]!, /cloud infrastructure/i)
+})
+
+test("applyKeywordToExperienceAt skips second em-dash keyword append", () => {
+  const once = applyKeywordToExperienceAt(tailored, "SIEM", 0)
+  assert.ok(once)
+  const twice = applyKeywordToExperienceAt(once, "SOC", 0)
+  assert.equal(twice, null)
+})
+
+test("isValidSkillKeyword rejects prose skill suggestions", () => {
+  assert.equal(isValidSkillKeyword("Experience with Kubernetes deployments."), false)
+  assert.equal(isValidSkillKeyword("Kubernetes"), true)
 })
 
 test("previewMechanicalQuickWin shows skills-only change for add-to-skills issue", () => {

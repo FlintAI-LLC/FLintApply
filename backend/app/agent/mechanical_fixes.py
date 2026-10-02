@@ -11,6 +11,29 @@ _KEYWORD_RE = re.compile(
     re.IGNORECASE,
 )
 
+_SKILL_FUNCTION_WORDS = re.compile(
+    r"\b(with|of|in|the|a|to|that|which|for|and|or|by|from|as|at)\b",
+    re.IGNORECASE,
+)
+
+_TERMINAL_PUNCT = frozenset(". ,;:!?")
+
+
+def is_valid_skill_keyword(term: str, jd_text: str = "") -> bool:
+    """Reject JD sentences and prose masquerading as skill tags."""
+    candidate = term.strip()
+    if not candidate or len(candidate) > 40:
+        return False
+    if candidate[-1] in _TERMINAL_PUNCT:
+        return False
+    if _SKILL_FUNCTION_WORDS.search(candidate):
+        return False
+    if jd_text:
+        lowered = candidate.lower()
+        if len(lowered.split()) >= 5 and lowered in jd_text.lower():
+            return False
+    return True
+
 
 def extract_missing_keyword(issue: BlockingIssue) -> str | None:
     if issue.category != "keyword" or issue.fix_effort != "one_click":
@@ -21,9 +44,15 @@ def extract_missing_keyword(issue: BlockingIssue) -> str | None:
     return match.group(1).strip()
 
 
-def apply_keyword_to_skills(tailored: TailoredResumeOutput, keyword: str) -> TailoredResumeOutput | None:
+def apply_keyword_to_skills(
+    tailored: TailoredResumeOutput,
+    keyword: str,
+    jd_text: str = "",
+) -> TailoredResumeOutput | None:
     term = keyword.strip()
     if not term:
+        return None
+    if not is_valid_skill_keyword(term, jd_text):
         return None
     flat = {t.lower() for t in flatten_skill_terms(tailored.skills or [])}
     if term.lower() in flat:
