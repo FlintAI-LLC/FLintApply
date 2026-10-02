@@ -30,6 +30,7 @@ import { KeywordDashboard } from "@/components/session/KeywordDashboard";
 import { AuditPanel } from "@/components/session/AuditPanel";
 import { MetricsGate } from "@/components/session/MetricsGate";
 import { ResumeDiff } from "@/components/session/ResumeDiff";
+import { DraftReviewPanel } from "@/components/session/DraftReviewPanel";
 import { QAChecklist } from "@/components/session/QAChecklist";
 import { ATSGuidancePanel, issueKey } from "@/components/session/ATSGuidancePanel";
 import {
@@ -491,6 +492,12 @@ function SessionContent() {
     if (s.bullet_fixes?.length) setSessionBulletFixes(s.bullet_fixes);
     if (s.approved_metrics?.length) setSessionApprovedMetrics(s.approved_metrics);
   }, [applyPhaseOutputByNumber]);
+
+  const refreshTailoredFromServer = useCallback(async () => {
+    const snapshot = await checkSession(sessionId);
+    hydrateFromSession(snapshot);
+    setStale(snapshot.stale ?? { "3": null, "4": null });
+  }, [sessionId, hydrateFromSession]);
 
   const persistTailoredBeforeExport = useCallback(async () => {
     if (!tailored) return;
@@ -1954,6 +1961,13 @@ function SessionContent() {
                     onRestore={restoreVersionSnapshot}
                   />
                 </div>
+              )}
+              {tailored && authSession?.backendAccessToken && (
+                <DraftReviewPanel
+                  sessionId={sessionId}
+                  enabled={!!tailored}
+                  onSessionDraftChanged={() => void refreshTailoredFromServer()}
+                />
               )}
               <ResizableSplit
                 storageKey="smart-resume:tailoring-sidebar-width"

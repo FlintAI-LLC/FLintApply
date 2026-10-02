@@ -1362,3 +1362,53 @@ export async function chatWithResume(
     body: JSON.stringify(payload),
   });
 }
+
+// ── Draft review (P4 review gate) ─────────────────────────────────────────
+
+export interface DraftReviewLintIssue {
+  rule: string;
+  original?: string;
+}
+
+export interface DraftReviewBullet {
+  id: string;
+  section: string;
+  text: string;
+  source_brick_ids: string[];
+  rewrite_notes: string;
+  lint_issues: DraftReviewLintIssue[];
+}
+
+export interface DraftReviewPayload {
+  bullets: DraftReviewBullet[];
+  skills: string[];
+  duplicate_candidates: {
+    bullet_id_a: string;
+    bullet_id_b: string;
+    similarity: number;
+  }[];
+  keyword_coverage: {
+    must_have: string[];
+    covered: string[];
+    missing: string[];
+  };
+  length_estimate: {
+    pages: number;
+    within_target: boolean;
+  };
+}
+
+export async function getDraftReview(
+  sessionId: string,
+): Promise<DraftReviewPayload> {
+  return request(`/api/sessions/${sessionId}/draft-review`);
+}
+
+export async function deleteDraftBullet(
+  sessionId: string,
+  bulletId: string,
+): Promise<DraftReviewPayload> {
+  return request(`/api/sessions/${sessionId}/draft/bullets/${bulletId}`, {
+    method: "DELETE",
+  });
+}
