@@ -132,6 +132,16 @@ class BulkChunkInsert(BaseModel):
     chunks: list[BulkChunkItem] = Field(..., min_length=1, max_length=20)
 
 
+class BrickCreate(BaseModel):
+    section_type: str = Field(..., min_length=1, max_length=64)
+    content: str = Field(..., min_length=1, max_length=20_000)
+    source_doc_id: uuid.UUID | None = None
+
+
+class BrickPatch(BaseModel):
+    content: str = Field(..., min_length=1, max_length=20_000)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -370,12 +380,31 @@ async def transcribe_resume_audio(
 
 @router.post("/resume", status_code=201)
 @limiter.limit("30/minute")
-async def create_or_replace_resume(
+async def create_resume_upload(
     request: Request,
     user: VerifiedUser,
     db: Annotated[AsyncSession, Depends(get_db)],
     file: UploadFile | None = File(default=None),
     text: str | None = Form(default=None),
+):
+    return await ingest_master_resume(
+        request=request,
+        user=user,
+        db=db,
+        file=file,
+        text=text,
+        merge=True,
+    )
+
+
+async def ingest_master_resume(
+    request: Request,
+    user: VerifiedUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: UploadFile | None = File(default=None),
+    text: str | None = Form(default=None),
+    *,
+    merge: bool = False,
 ):
     """Upload or paste the master resume — chunks + embeds the entire payload.
 
@@ -397,12 +426,34 @@ async def create_or_replace_resume(
         user_id=str(user.id),
         plan_code=plan_code,
     )
-    resume, chunks = await master_crud.replace_all_chunks(
-        db,
-        user_id=user.id,
-        raw_text=raw,
-        parsed_sections=parsed_sections,
-    )
+    conflicts: list[dict[str, str]] = []
+    upload_name = file.filename if file is not None else None
+    if merge:
+        try:
+            resume, chunks, conflicts = await master_crud.merge_upload_chunks(
+                db,
+                user_id=user.id,
+                raw_text=raw,
+                parsed_sections=parsed_sections,
+                filename=upload_name,
+            )
+        except ValueError as exc:
+            if str(exc) == "upload_limit_reached":
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": "upload_limit_reached",
+                        "message": "Maximum 5 source resumes.",
+                    },
+                ) from None
+            raise
+    else:
+        resume, chunks = await master_crud.replace_all_chunks(
+            db,
+            user_id=user.id,
+            raw_text=raw,
+            parsed_sections=parsed_sections,
+        )
     embedding_ok = resume.last_embedded_at is not None
     log.info(
         "profile.resume.replaced",
@@ -411,7 +462,7 @@ async def create_or_replace_resume(
         had_parsed_sections=bool(parsed_sections),
         embedding_ok=embedding_ok,
     )
-    return {
+    body = {
         **_resume_to_response(resume),
         "chunks": master_crud.iter_chunk_summaries(chunks),
         "embedding_warning": (
@@ -420,6 +471,9 @@ async def create_or_replace_resume(
                  "Semantic similarity features won't work until OPENAI_EMBEDDING_KEY is configured."
         ),
     }
+    if merge and conflicts:
+        body["conflicts"] = conflicts
+    return body
 
 
 @router.put("/resume", status_code=200)
@@ -432,13 +486,117 @@ async def replace_resume(
     text: str | None = Form(default=None),
 ):
     """Full replace: same shape as POST but always re-embeds every chunk."""
-    return await create_or_replace_resume(
+    return await ingest_master_resume(
         request=request,
         user=user,
         db=db,
         file=file,
         text=text,
+        merge=False,
     )
+
+
+@router.get("/bricks", status_code=200)
+@limiter.limit("120/minute")
+async def list_bricks(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    section_type: str | None = Query(default=None),
+):
+    """List live master-resume bricks (chunks) for the current user."""
+    section_enum: MasterResumeSectionType | None = None
+    if section_type is not None:
+        try:
+            section_enum = MasterResumeSectionType(section_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=422, detail=f"Invalid section_type: {section_type}"
+            ) from None
+
+    chunks = await master_crud.get_chunks_for_user(
+        db, user_id=user.id, section_type=section_enum
+    )
+    return [master_crud.brick_summary(c) for c in chunks]
+
+
+@router.post("/bricks", status_code=201)
+@limiter.limit("30/minute")
+async def create_brick(
+    request: Request,
+    body: BrickCreate,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        section_enum = MasterResumeSectionType(body.section_type)
+    except ValueError:
+        raise HTTPException(
+            status_code=422, detail=f"Invalid section_type: {body.section_type}"
+        ) from None
+
+    try:
+        row = await master_crud.create_chunk(
+            db,
+            user_id=user.id,
+            section_type=section_enum,
+            content=body.content,
+            source_doc_id=body.source_doc_id,
+        )
+    except ValueError as exc:
+        if "not found" in str(exc):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "master_resume_required"},
+            ) from None
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    return master_crud.brick_summary(row)
+
+
+@router.patch("/bricks/{chunk_id}", status_code=200)
+@limiter.limit("30/minute")
+async def patch_brick(
+    request: Request,
+    chunk_id: str,
+    body: BrickPatch,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        chunk_uuid = uuid.UUID(chunk_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chunk id.") from None
+
+    updated = await master_crud.update_chunk_content(
+        db,
+        user_id=user.id,
+        chunk_id=chunk_uuid,
+        new_content=body.content,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Chunk not found.")
+    return master_crud.brick_summary(updated)
+
+
+@router.delete("/bricks/{chunk_id}", status_code=204)
+@limiter.limit("30/minute")
+async def delete_brick(
+    request: Request,
+    chunk_id: str,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        chunk_uuid = uuid.UUID(chunk_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chunk id.") from None
+
+    deleted = await master_crud.delete_chunk(
+        db, user_id=user.id, chunk_id=chunk_uuid
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Chunk not found.")
 
 
 @router.get("/resume/chunks", status_code=200)

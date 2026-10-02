@@ -85,6 +85,32 @@ def _utcnow() -> datetime:
 # ---------------------------------------------------------------------------
 
 
+class MasterResumeSourceDoc(Base):
+    """One uploaded resume file / paste event (multi-source ingest)."""
+
+    __tablename__ = "master_resume_source_docs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    filename: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utcnow,
+        server_default=text("now()"),
+    )
+    chunk_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+
 class MasterResume(Base):
     """Per-user profile document.
 
@@ -194,6 +220,12 @@ class MasterResumeChunk(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
+    source_doc_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("master_resume_source_docs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -236,4 +268,5 @@ __all__ = [
     "MasterResume",
     "MasterResumeChunk",
     "MasterResumeSectionType",
+    "MasterResumeSourceDoc",
 ]

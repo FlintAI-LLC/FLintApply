@@ -382,6 +382,7 @@ def postprocess_tailored_output(
     truthfulness: TruthfulnessContext | None = None,
     place_keywords: bool = True,
     provenance_chunks: list[SelectedChunk] | None = None,
+    touched_ids: set[str] | None = None,
 ) -> TailoredResumeOutput:
     """Apply deterministic structure rules after LLM generation.
 
@@ -415,8 +416,9 @@ def postprocess_tailored_output(
 
     if truthfulness is not None:
         interim = apply_truthfulness_guards(interim, truthfulness)
-        interim = _apply_invariants(interim, truthfulness, must_have_keywords)
-        if place_keywords:
+        if not touched_ids:
+            interim = _apply_invariants(interim, truthfulness, must_have_keywords)
+        if place_keywords and not touched_ids:
             # Deferred import: the placer builds on this module's skill helpers.
             from app.agent.phase3_keyword_placement import place_evidenced_keywords
 

@@ -40,6 +40,8 @@ from app.services.retrieval.retrieval_service import (
     assert_prompt_fits,
     retrieve_for_jd,
 )
+from app.llm.model_registry import ENABLE_MULTIPASS_COMPOSITION
+from app.llm.factory import get_llm_client_for_step
 
 log = structlog.get_logger()
 
@@ -601,13 +603,38 @@ async def run(
         else None
     )
 
-    output = await _complete_phase3_llm(
-        llm,
-        messages,
-        event_queue,
-        source=None if scoped else session.resume_parsed,
-        jd_text=jd_text,
-    )
+    output: TailoredResumeOutput
+    used_multipass = False
+    if (
+        ENABLE_MULTIPASS_COMPOSITION
+        and not scoped
+        and tailoring_brief is not None
+        and tailoring_brief.sections
+    ):
+        from app.agent.phase3_multipass import run_multipass_composition
+
+        target_role = session.user_info.target_role if session.user_info else "role"
+        shared_context = (
+            f"Applying for {target_role}; tailoring against the provided job description."
+        )
+        section_llm = get_llm_client_for_step("phase3_rewrite", plan_code="free")
+        output = await run_multipass_composition(
+            brief=tailoring_brief,
+            jd_text=jd_text,
+            shared_context=shared_context,
+            section_llm=section_llm,
+            polish_llm=section_llm,
+            contact=(session.resume_parsed.contact.model_dump() if session.resume_parsed else {}),
+        )
+        used_multipass = True
+    else:
+        output = await _complete_phase3_llm(
+            llm,
+            messages,
+            event_queue,
+            source=None if scoped else session.resume_parsed,
+            jd_text=jd_text,
+        )
 
     llm_delivery_failed = not scoped and phase3_is_hollow(
         output, source=session.resume_parsed
@@ -658,6 +685,29 @@ async def run(
         provenance_chunks=retrieval_result.selected if retrieval_result else None,
     )
     output = annotate_postprocess_lint(output, jd_text)
+
+    if used_multipass and must_have:
+        from app.agent.phase3_multipass import (
+            apply_anchored_edits,
+            build_protected_tokens,
+            run_coherence_polish,
+        )
+
+        protected = build_protected_tokens(output, must_have)
+        polish_llm = get_llm_client_for_step("polish", plan_code="free")
+        edits = await run_coherence_polish(output, jd_text, protected, polish_llm)
+        output, modified_ids = apply_anchored_edits(output, edits, protected)
+        if modified_ids:
+            output = postprocess_tailored_output(
+                output,
+                must_have,
+                tone_profile=tone_profile,
+                truthfulness=truth_ctx,
+                place_keywords=False,
+                provenance_chunks=retrieval_result.selected if retrieval_result else None,
+                touched_ids=modified_ids,
+            )
+            output = annotate_postprocess_lint(output, jd_text)
 
     account_email = await resolve_account_email(session.user_id)
     output = apply_authoritative_contact(

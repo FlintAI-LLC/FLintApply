@@ -34,6 +34,32 @@ class EducationEntry(BaseModel):
     notes: str | None = None
 
 
+class AwardEntry(BaseModel):
+    title: str
+    issuer: str | None = None
+    date: str | None = None
+    description: str | None = None
+
+
+class VolunteerEntry(BaseModel):
+    organization: str
+    role: str
+    dates: str | None = None
+    description: str | None = None
+
+
+class LanguageEntry(BaseModel):
+    language: str
+    proficiency: str | None = None
+
+
+class PublicationEntry(BaseModel):
+    title: str
+    publisher: str | None = None
+    date: str | None = None
+    url: str | None = None
+
+
 class ParsedResume(BaseModel):
     contact: ContactInfo = ContactInfo()
     summary: str | None = None
@@ -42,3 +68,7 @@ class ParsedResume(BaseModel):
     projects: list[ProjectEntry] = []
     education: list[EducationEntry] = []
     certifications: list[str] = []
+    awards: list[AwardEntry] = []
+    volunteer: list[VolunteerEntry] = []
+    languages: list[LanguageEntry] = []
+    publications: list[PublicationEntry] = []

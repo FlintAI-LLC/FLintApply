@@ -200,6 +200,71 @@ async def save_approved_metrics(session_id: str, body: ApprovedMetricsRequest):
     return {"ok": True, "count": len(body.approved_metrics)}
 
 
+@router.get("/{session_id}/draft-review")
+@limiter.limit("20/minute")
+async def get_draft_review(
+    request: Request,
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    session = await _load_session_for_check(session_id, authorization, db)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id and session.user_id != str(user.id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.phase3_output is None:
+        raise HTTPException(status_code=404, detail="No draft resume for session")
+    from app.services.draft_review import build_draft_review
+
+    must_have = (
+        [k.term for k in session.phase1_output.must_have_keywords]
+        if session.phase1_output
+        else []
+    )
+    return await build_draft_review(
+        session.phase3_output,
+        jd_text=session.jd_raw or "",
+        must_have=must_have,
+    )
+
+
+@router.delete("/{session_id}/draft/bullets/{bullet_id}")
+@limiter.limit("20/minute")
+async def delete_draft_bullet(
+    request: Request,
+    session_id: str,
+    bullet_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    session = await _load_session_for_check(session_id, authorization, db)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id and session.user_id != str(user.id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.phase3_output is None:
+        raise HTTPException(status_code=404, detail="No draft resume for session")
+    from app.services.draft_review import build_draft_review, remove_bullet_from_output
+
+    session.phase3_output = remove_bullet_from_output(
+        session.phase3_output, bullet_id
+    )
+    await update_session(session)
+    must_have = (
+        [k.term for k in session.phase1_output.must_have_keywords]
+        if session.phase1_output
+        else []
+    )
+    return await build_draft_review(
+        session.phase3_output,
+        jd_text=session.jd_raw or "",
+        must_have=must_have,
+    )
+
+
 @router.patch("/{session_id}/tailored")
 async def save_tailored_edits(
     session_id: str,
