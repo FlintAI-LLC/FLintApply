@@ -297,14 +297,14 @@ describe("applyAllImprovements wiring", () => {
   }
 
   it("apply-all round cap helpers", () => {
-    assert.equal(MAX_APPLY_ALL_ROUNDS, 3);
-    assert.equal(applyAllRoundsRemaining(0), 3);
-    assert.equal(applyAllRoundsRemaining(2), 1);
+    assert.equal(MAX_APPLY_ALL_ROUNDS, 1);
+    assert.equal(applyAllRoundsRemaining(0), 1);
+    assert.equal(applyAllRoundsRemaining(2), 0);
     assert.equal(applyAllRoundsRemaining(3), 0);
     assert.equal(applyAllRoundsRemaining(5), 0);
     assert.equal(isApplyAllRoundLimitReached(0), false);
-    assert.equal(isApplyAllRoundLimitReached(2), false);
-    assert.equal(isApplyAllRoundLimitReached(3), true);
+    assert.equal(isApplyAllRoundLimitReached(1), true);
+    assert.equal(isApplyAllRoundLimitReached(2), true);
   });
 
   it("apply-all enforces the cap before counting a round", () => {

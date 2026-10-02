@@ -215,6 +215,25 @@ async def save_tailored_edits(
         new_output = TailoredResumeOutput.model_validate(body.tailored_output)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Invalid tailored output: {exc}") from exc
+    from app.agent.output_linter import TailoredLintValidationError, ensure_tailored_passes_blocking_lint
+
+    try:
+        ensure_tailored_passes_blocking_lint(new_output, session.jd_raw or "")
+    except TailoredLintValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Resume contains invalid bullets or skills",
+                "field_errors": [
+                    {
+                        "field": f"{issue.field}[{issue.index}]",
+                        "rule": issue.rule,
+                        "original": issue.original[:200],
+                    }
+                    for issue in exc.issues
+                ],
+            },
+        ) from exc
     prior_output = session.phase3_output
     session.phase3_output = new_output
     if session.phase4_output is not None:

@@ -20,6 +20,10 @@ from app.models.session import ApprovedMetric, BulletFix
 from app.models.resume import ParsedResume
 
 _METRIC_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\d+(?:\.\d+)?\s*[-–—]\s*\d+(?:\.\d+)?(?:\s*%|\s*x|\s*X)?",
+        re.I,
+    ),
     re.compile(r"\d+(?:\.\d+)?%"),
     re.compile(r"\$\d+(?:\.\d+)?[KMB]?", re.I),
     re.compile(r"\d+x\b", re.I),
@@ -129,7 +133,7 @@ def _strip_metric_from_bullet(bullet: str, metric: str) -> str:
     cleaned = re.sub(r"\s+([,.;])", r"\1", cleaned)
     cleaned = re.sub(r"(,\s*)+,", ",", cleaned)
     cleaned = re.sub(r"\(\s*\)", "", cleaned)
-    return cleaned.strip(" ,.;-")
+    return cleaned.strip(" ,.;:–—-")
 
 
 def validate_bullet_metrics(

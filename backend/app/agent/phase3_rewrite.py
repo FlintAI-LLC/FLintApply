@@ -14,7 +14,8 @@ from app.llm.base import LLMClient, LLMMessage
 from app.llm.pricing import estimate_cost, format_cost
 from app.llm.structured import LLMParseError, complete_structured
 from app.agent.phase3_experience_fallback import apply_experience_fallback
-from app.agent.phase3_hollow import make_hollow_rejector, phase3_is_hollow
+from app.agent.output_linter import annotate_postprocess_lint, make_phase3_accept_result
+from app.agent.phase3_hollow import phase3_is_hollow
 from app.models.resume import ParsedResume
 from app.agent.phase3_postprocess import (
     flatten_skill_terms,
@@ -116,6 +117,7 @@ async def _complete_phase3_llm(
     event_queue: asyncio.Queue,
     *,
     source: ParsedResume | None = None,
+    jd_text: str = "",
 ) -> TailoredResumeOutput:
     """Run the Phase 3 structured LLM call with heartbeats and a hard timeout.
 
@@ -144,7 +146,7 @@ async def _complete_phase3_llm(
                 messages,
                 TailoredResumeOutput,
                 max_tokens=6000,
-                accept_result=make_hollow_rejector(source),
+                accept_result=make_phase3_accept_result(jd_text, source),
             ),
             timeout=settings.PHASE3_LLM_TIMEOUT_SECONDS,
         )
@@ -563,6 +565,7 @@ async def run(
         messages,
         event_queue,
         source=None if scoped else session.resume_parsed,
+        jd_text=jd_text,
     )
 
     llm_delivery_failed = not scoped and phase3_is_hollow(
@@ -612,6 +615,7 @@ async def run(
         truthfulness=truth_ctx,
         place_keywords=not scoped,
     )
+    output = annotate_postprocess_lint(output, jd_text)
 
     account_email = await resolve_account_email(session.user_id)
     output = apply_authoritative_contact(
