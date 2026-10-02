@@ -8,6 +8,7 @@ Instructions:
 - Identify role-specific ACTION VERBS the JD itself uses (e.g. "architected", "led", "scaled").
 - Identify SENIORITY SIGNALS: phrases like "5+ years", "led a team", "cross-functional ownership", "staff-level".
 - Extract BOOLEAN SEARCH TERMS: tools, languages, frameworks a recruiter would search for literally.
+- Extract REQUIREMENTS: full requirement clauses from Required Qualifications, Responsibilities, and numbered/bulleted lists (verbatim JD phrasing — not atomic keyword tokens).
 - Determine the ROLE CONTEXT: inferred career level and whether ML-framing is needed.
 
 Setting present_in_resume — CRITICAL RULES:

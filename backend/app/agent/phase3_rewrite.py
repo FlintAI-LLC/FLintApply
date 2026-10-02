@@ -408,6 +408,23 @@ async def run(
                 "message": "Selecting relevant master-resume chunks against this JD…",
             })
             retrieval_result = await _run_retrieval(user_uuid, jd_text)
+            if (
+                retrieval_result.selected
+                and session.phase1_output
+                and session.phase1_output.requirements
+            ):
+                from app.services.retrieval import config as retrieval_cfg
+                from app.services.retrieval.requirement_scoring import apply_requirement_scoring
+
+                embed_model = str(
+                    retrieval_result.meta.get("embedding_model")
+                    or retrieval_cfg.RETRIEVAL_EMBEDDING_MODEL
+                )
+                retrieval_result = await apply_requirement_scoring(
+                    retrieval_result,
+                    session.phase1_output.requirements,
+                    embedding_model=embed_model,
+                )
             await event_queue.put({
                 "event": "retrieval",
                 "phase": 3,
@@ -638,6 +655,7 @@ async def run(
         tone_profile=tone_profile,
         truthfulness=truth_ctx,
         place_keywords=not scoped,
+        provenance_chunks=retrieval_result.selected if retrieval_result else None,
     )
     output = annotate_postprocess_lint(output, jd_text)
 

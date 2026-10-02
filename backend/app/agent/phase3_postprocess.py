@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 from app.agent.phase3_invariants import enforce_resume_invariants
 from app.agent.tone_lint import annotate_tone_alignment
 from app.agent.tone_profile import JDToneProfile
 from app.agent.phase3_truthfulness import TruthfulnessContext, apply_truthfulness_guards
 from app.models.rewrite import TailoredExperienceEntry, TailoredResumeOutput
+
+if TYPE_CHECKING:
+    from app.services.retrieval.retrieval_service import SelectedChunk
 
 _CATEGORY_LINE_RE = re.compile(r"^([^:]+):\s*(.+)$")
 
@@ -311,6 +315,45 @@ def enforce_project_bullet_limits(projects: list[dict]) -> list[dict]:
     return updated
 
 
+def _token_set(text: str) -> set[str]:
+    return {m.group(0).lower() for m in re.finditer(r"[a-z0-9]{3,}", (text or "").lower())}
+
+
+def _best_brick_for_bullet(bullet: str, chunks: list[SelectedChunk]) -> str | None:
+    bullet_tokens = _token_set(bullet)
+    if not bullet_tokens:
+        return None
+    best: tuple[int, float, str] | None = None
+    for chunk in chunks:
+        overlap = len(bullet_tokens & _token_set(chunk.content))
+        if overlap <= 0:
+            continue
+        candidate = (overlap, chunk.score, chunk.chunk_id)
+        if best is None or candidate > best:
+            best = candidate
+    return best[2] if best else None
+
+
+def attach_source_brick_provenance(
+    output: TailoredResumeOutput,
+    chunks: list[SelectedChunk] | None,
+) -> TailoredResumeOutput:
+    """Map tailored bullets to master-resume chunk ids (bricks) when content overlaps."""
+    if not chunks:
+        return output
+    brick_ids: list[str] = []
+    seen: set[str] = set()
+    for entry in output.experience:
+        for bullet in entry.bullets:
+            brick = _best_brick_for_bullet(bullet, chunks)
+            if brick and brick not in seen:
+                seen.add(brick)
+                brick_ids.append(brick)
+    if not brick_ids:
+        return output
+    return output.model_copy(update={"source_brick_ids": brick_ids})
+
+
 def _apply_invariants(
     output: TailoredResumeOutput,
     truthfulness: TruthfulnessContext,
@@ -338,6 +381,7 @@ def postprocess_tailored_output(
     tone_profile: JDToneProfile | None = None,
     truthfulness: TruthfulnessContext | None = None,
     place_keywords: bool = True,
+    provenance_chunks: list[SelectedChunk] | None = None,
 ) -> TailoredResumeOutput:
     """Apply deterministic structure rules after LLM generation.
 
@@ -378,6 +422,7 @@ def postprocess_tailored_output(
 
             interim = place_evidenced_keywords(interim, must_have_keywords, truthfulness)
 
+    interim = attach_source_brick_provenance(interim, provenance_chunks)
     return interim
 
 
@@ -387,6 +432,7 @@ __all__ = [
     "flatten_skill_terms",
     "is_category_skill_line",
     "normalize_skills_to_categories",
+    "attach_source_brick_provenance",
     "postprocess_tailored_output",
     "skills_are_categorized",
 ]

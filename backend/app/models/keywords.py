@@ -25,6 +25,8 @@ class RoleContext(BaseModel):
 class KeywordExtractionOutput(BaseModel):
     must_have_keywords: list[Keyword] = []
     nice_to_have_keywords: list[Keyword] = []
+    # Verbatim JD requirement clauses (bullets / qualification sentences), not atomic keywords.
+    requirements: list[str] = []
     action_verbs: list[str] = []
     seniority_signals: list[str] = []
     boolean_search_terms: list[str] = []

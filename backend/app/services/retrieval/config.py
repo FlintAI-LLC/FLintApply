@@ -76,6 +76,11 @@ RETRIEVAL_FALLBACK_MAX_PER_CRITICAL_SECTION: Final[int] = 3
 # budget check (see §6a "Determinism and prompt budget contract").
 PROMPT_OUTPUT_RESERVE_TOKENS: Final[int] = 1024
 
+# Phase 1b — per-requirement similarity overlay on retrieved chunks (P1 slice 4).
+REQUIREMENT_EXACT_TERM_BOOST: Final[float] = 0.08
+REQUIREMENT_SCORE_BLEND: Final[float] = 0.35
+MAX_REQUIREMENTS_FOR_EMBEDDING: Final[int] = 25
+
 
 def section_cap(section: str) -> int:
     """Return the cap for ``section`` falling back to the ``other`` bucket.
@@ -95,6 +100,9 @@ __all__ = [
     "CRITICAL_SECTIONS",
     "NON_CRITICAL_SECTIONS",
     "PROMPT_OUTPUT_RESERVE_TOKENS",
+    "MAX_REQUIREMENTS_FOR_EMBEDDING",
+    "REQUIREMENT_EXACT_TERM_BOOST",
+    "REQUIREMENT_SCORE_BLEND",
     "RETRIEVAL_CAPS",
     "RETRIEVAL_EMBEDDING_MODEL",
     "RETRIEVAL_FALLBACK_MAX_PER_CRITICAL_SECTION",
