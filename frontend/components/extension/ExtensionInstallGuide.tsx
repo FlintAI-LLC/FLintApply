@@ -4,10 +4,11 @@ import Link from "next/link";
 import { Download, ExternalLink, Plug, Sparkles } from "lucide-react";
 import { PRODUCT_NAME } from "@/lib/brand";
 import {
+  chromeWebStoreExtensionVersion,
   chromeWebStoreUrl,
   extensionBetaDownloadUrl,
   extensionBetaSupportLine,
-  extensionInstallMode,
+  extensionBetaVersion,
 } from "@/lib/extensionInstall";
 
 const UNPACKED_STEPS = [
@@ -19,9 +20,12 @@ const UNPACKED_STEPS = [
 ] as const;
 
 export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }) {
-  const mode = extensionInstallMode();
   const storeUrl = chromeWebStoreUrl();
   const downloadUrl = extensionBetaDownloadUrl();
+  const storeVersion = chromeWebStoreExtensionVersion();
+  const betaVersion = extensionBetaVersion();
+  const showBeta = Boolean(downloadUrl);
+  const showStore = Boolean(storeUrl);
 
   return (
     <div className={compact ? "space-y-4" : "space-y-8"}>
@@ -42,42 +46,32 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
             )}
           </div>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          {mode === "store" && storeUrl && (
-            <a
-              href={storeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl text-sm"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Add to Chrome
-            </a>
-          )}
-          {mode === "download" && downloadUrl && (
-            <a
-              href={downloadUrl}
-              download
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl text-sm"
-            >
-              <Download className="w-4 h-4" />
-              Download extension (zip)
-            </a>
-          )}
-          {mode === "beta-manual" && (
-            <p className="text-sm text-slate-700 dark:text-slate-300 bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3">
-              {extensionBetaSupportLine()}
-            </p>
-          )}
-        </div>
       </div>
 
-      {(mode === "download" || mode === "beta-manual") && (
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-5 space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
-            Install in Chrome (private beta)
-          </h2>
+      {showBeta && (
+        <div className="rounded-2xl border border-emerald-500/35 bg-emerald-50/80 dark:bg-emerald-950/25 p-5 space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+              Recommended — private beta
+            </p>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white mt-1">
+              Latest build
+              {betaVersion ? ` (v${betaVersion})` : ""}
+            </h2>
+            <p className="text-sm text-slate-700 dark:text-slate-300 mt-2 leading-relaxed">
+              For the newest capture and autofill fixes, install the beta zip in Chrome Developer
+              mode. The Chrome Web Store build updates automatically but may lag by a release or
+              two{storeVersion ? ` (Store is v${storeVersion} today)` : ""}.
+            </p>
+          </div>
+          <a
+            href={downloadUrl!}
+            download
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm"
+          >
+            <Download className="w-4 h-4" />
+            Download beta extension (zip)
+          </a>
           <ol className="list-decimal list-inside space-y-2 text-sm text-slate-700 dark:text-slate-300">
             {UNPACKED_STEPS.map((step) => (
               <li key={step} className="leading-relaxed">
@@ -86,6 +80,39 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
             ))}
           </ol>
         </div>
+      )}
+
+      {showStore && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-5 space-y-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Easiest install
+            </p>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white mt-1">
+              Chrome Web Store
+              {storeVersion ? ` (v${storeVersion})` : ""}
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
+              One-click install with automatic updates. Use this if you prefer not to use Developer
+              mode. When you need the newest features, switch to the beta zip above.
+            </p>
+          </div>
+          <a
+            href={storeUrl!}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl text-sm"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Add to Chrome
+          </a>
+        </div>
+      )}
+
+      {!showBeta && !showStore && (
+        <p className="text-sm text-slate-700 dark:text-slate-300 bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3">
+          {extensionBetaSupportLine()}
+        </p>
       )}
 
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 p-5 space-y-3">

@@ -8,6 +8,7 @@ Six routes from the "Profile And Master Resume" table:
     PATCH  /api/profile/resume/chunks/{id}      — edit a single chunk; re-embed just that one
     DELETE /api/profile/resume/chunks/{id}      — soft delete
     GET    /api/profile/resume/chunks           — list; ?jd_session_id= returns similarity scores
+    POST   /api/profile/resume/dedupe           — remove duplicate project/education/skills chunks
 
 Auth: every route requires a verified access JWT via ``get_current_user``.
 Chunks are scoped by ``user_id`` so cross-tenant reads are impossible.
@@ -624,6 +625,17 @@ async def list_chunks(
         await _attach_similarity_scores(summaries, chunks, jd_session_id)
 
     return {"chunks": summaries}
+
+
+@router.post("/resume/dedupe", status_code=200)
+@limiter.limit("10/minute", key_func=authenticated_user_rate_limit_key)
+async def dedupe_master_resume(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Remove duplicate project/education chunks and near-duplicate skills (keeps richest row)."""
+    return await master_crud.dedupe_live_chunks(db, user_id=user.id)
 
 
 async def _attach_similarity_scores(

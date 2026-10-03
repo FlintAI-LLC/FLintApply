@@ -576,6 +576,132 @@ async def update_chunk_content(
     return chunk
 
 
+def _chunk_keep_score(chunk: MasterResumeChunk) -> tuple[int, int, float]:
+    """Sort key — higher richness wins when deduping duplicates."""
+    content = chunk.content or ""
+    richness = len(content)
+    if "\n" in content:
+        richness += 50
+    meta = chunk.chunk_metadata or {}
+    for key in ("dates", "start_date", "end_date", "graduation_date", "year"):
+        if meta.get(key):
+            richness += 100
+            break
+    updated = chunk.updated_at or chunk.created_at or _utcnow()
+    return (richness, chunk.token_count or 0, updated.timestamp())
+
+
+def plan_master_resume_dedupe_ids(
+    chunks: Sequence[MasterResumeChunk],
+) -> list[uuid.UUID]:
+    """Return chunk IDs to soft-delete: duplicate projects, education, and skills."""
+    live = [c for c in chunks if c.deleted_at is None]
+    to_delete: set[uuid.UUID] = set()
+
+    by_fingerprint: dict[str, list[MasterResumeChunk]] = {}
+    for chunk in live:
+        if chunk.section_type not in (
+            MasterResumeSectionType.project,
+            MasterResumeSectionType.education,
+        ):
+            continue
+        fp = _merge_fingerprint(
+            chunk.section_type, chunk.content, chunk.chunk_metadata
+        )
+        if not fp:
+            norm = _normalize_chunk_text(chunk.content)
+            if not norm:
+                continue
+            fp = f"{chunk.section_type.value}:norm:{norm[:120]}"
+        by_fingerprint.setdefault(fp, []).append(chunk)
+
+    for group in by_fingerprint.values():
+        if len(group) < 2:
+            continue
+        ordered = sorted(group, key=_chunk_keep_score, reverse=True)
+        for loser in ordered[1:]:
+            to_delete.add(loser.id)
+
+    skills = [
+        c
+        for c in live
+        if c.section_type == MasterResumeSectionType.skills and c.id not in to_delete
+    ]
+    by_norm: dict[str, list[MasterResumeChunk]] = {}
+    for chunk in skills:
+        norm = _normalize_chunk_text(chunk.content)
+        if not norm:
+            continue
+        by_norm.setdefault(norm, []).append(chunk)
+    for group in by_norm.values():
+        if len(group) < 2:
+            continue
+        ordered = sorted(group, key=_chunk_keep_score, reverse=True)
+        for loser in ordered[1:]:
+            to_delete.add(loser.id)
+
+    skills_remaining = [c for c in skills if c.id not in to_delete]
+    keepers: list[MasterResumeChunk] = []
+    for chunk in sorted(skills_remaining, key=_chunk_keep_score, reverse=True):
+        vec = list(chunk.embedding) if chunk.embedding is not None else None
+        if vec is None:
+            keepers.append(chunk)
+            continue
+        is_dup = False
+        for keeper in keepers:
+            kvec = list(keeper.embedding) if keeper.embedding is not None else None
+            if kvec is None:
+                continue
+            if _cosine_vectors(vec, kvec) > _COSINE_DEDUP_THRESHOLD:
+                is_dup = True
+                break
+        if is_dup:
+            to_delete.add(chunk.id)
+        else:
+            keepers.append(chunk)
+
+    return list(to_delete)
+
+
+async def dedupe_live_chunks(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+) -> dict[str, Any]:
+    """Soft-delete duplicate project, education, and near-duplicate skill chunks."""
+    chunks = await get_chunks_for_user(db, user_id=user_id)
+    doomed = plan_master_resume_dedupe_ids(chunks)
+    if not doomed:
+        return {
+            "deleted_count": 0,
+            "deleted_by_section": {},
+            "live_chunk_count": len(chunks),
+        }
+
+    by_section: dict[str, int] = {}
+    id_set = set(doomed)
+    for chunk in chunks:
+        if chunk.id not in id_set:
+            continue
+        by_section[chunk.section_type.value] = (
+            by_section.get(chunk.section_type.value, 0) + 1
+        )
+        await delete_chunk(db, user_id=user_id, chunk_id=chunk.id)
+
+    remaining = len(chunks) - len(doomed)
+    log.info(
+        "master_resume.dedupe",
+        user_id=str(user_id),
+        deleted=len(doomed),
+        by_section=by_section,
+    )
+    return {
+        "deleted_count": len(doomed),
+        "deleted_by_section": by_section,
+        "live_chunk_count": remaining,
+    }
+
+
 async def delete_chunk(
     db: AsyncSession,
     *,
@@ -664,8 +790,10 @@ __all__ = [
     "brick_summary",
     "count_live_source_docs",
     "create_chunk",
+    "dedupe_live_chunks",
     "delete_chunk",
     "get_chunk",
+    "plan_master_resume_dedupe_ids",
     "get_chunks_for_user",
     "get_raw_resume",
     "has_any_live_chunk",

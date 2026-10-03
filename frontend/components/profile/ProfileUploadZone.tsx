@@ -16,7 +16,7 @@ interface Props {
   token: string
   loading: boolean
   compact?: boolean
-  /** Live chunks already on profile — upload/paste replaces them entirely. */
+  /** Live chunks already on profile (upload/paste merges in; story save replaces all). */
   existingChunkCount?: number
   /** Distinct merge uploads (POST /resume), max {MAX_MASTER_SOURCE_UPLOADS}. */
   sourceUploadCount?: number
@@ -169,7 +169,12 @@ export function ProfileUploadZone({
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Master resume</h2>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Tell your story, upload a file, or paste text — we'll chunk and embed it automatically.
+            Build one master library for tailoring: tell your story, upload a file, or paste text. We
+            chunk and embed each piece so future job-specific resumes can pull the best bullets.
+            Upload or paste again later to add missing roles or projects (up to{" "}
+            {MAX_MASTER_SOURCE_UPLOADS} merges; duplicates skipped). Saving from{" "}
+            <strong className="font-medium text-slate-700 dark:text-slate-300">Tell your story</strong>{" "}
+            replaces the whole library.
           </p>
         </div>
       )}

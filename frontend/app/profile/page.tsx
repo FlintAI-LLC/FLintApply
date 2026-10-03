@@ -10,6 +10,7 @@ import { liveBackendAccessToken } from "@/lib/auth/accessToken"
 import { patchOnboarding } from "@/lib/auth/api"
 import { needsOnboarding, postAuthLandingPath, postOnboardingDestination } from "@/lib/auth/onboarding"
 import { ChunkCard } from "@/components/profile/ChunkCard"
+import { MasterResumeDedupeDialog } from "@/components/profile/MasterResumeDedupeDialog"
 import { ProfileUploadZone } from "@/components/profile/ProfileUploadZone"
 import { TailoredUsagePanel } from "@/components/profile/TailoredUsagePanel"
 import {
@@ -23,7 +24,9 @@ import {
   SECTION_ORDER,
   uploadProfileResume,
   countDistinctSourceDocs,
+  dedupeMasterResumeChunks,
   dedupeResumeRoleConflicts,
+  MAX_MASTER_SOURCE_UPLOADS,
   type ProfileChunk,
   type ProfileResume,
   type ResumeRoleConflict,
@@ -59,6 +62,9 @@ function ProfilePageContent() {
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [reembedding, setReembedding] = useState(false)
+  const [dedupeDialogOpen, setDedupeDialogOpen] = useState(false)
+  const [deduping, setDeduping] = useState(false)
+  const [dedupeMessage, setDedupeMessage] = useState<string | null>(null)
   const [editedChunkIds, setEditedChunkIds] = useState<Set<string>>(new Set())
   const [panelCollapsed, setPanelCollapsed] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -152,6 +158,40 @@ function ProfilePageContent() {
     }
   }
 
+  async function handleDedupeConfirm() {
+    if (!token) return
+    setDeduping(true)
+    setError(null)
+    setDedupeMessage(null)
+    try {
+      const result = await dedupeMasterResumeChunks(token)
+      const chunkRows = await getProfileChunks(token)
+      setChunks(chunkRows)
+      setEditedChunkIds(new Set())
+      if (profile) {
+        setProfile({
+          ...profile,
+          chunk_count: result.live_chunk_count,
+        })
+      }
+      setDedupeDialogOpen(false)
+      if (result.deleted_count === 0) {
+        setDedupeMessage("No duplicate project, education, or skill chunks found.")
+      } else {
+        const parts = Object.entries(result.deleted_by_section)
+          .map(([section, n]) => `${n} ${section}`)
+          .join(", ")
+        setDedupeMessage(
+          `Removed ${result.deleted_count} duplicate chunk${result.deleted_count === 1 ? "" : "s"} (${parts}). ${result.live_chunk_count} remain.`,
+        )
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Dedupe failed")
+    } finally {
+      setDeduping(false)
+    }
+  }
+
   async function handleReembedAll() {
     if (!token || !profile?.raw_text) return
     setReembedding(true)
@@ -226,9 +266,11 @@ function ProfilePageContent() {
               Master resume profile
             </h1>
             <p className="text-slate-600 dark:text-slate-400 text-sm max-w-xl">
-              Your full career inventory — include everything; we pick the strongest
-              matches for each job description. Chunked, embedded history powers every
-              tailor session.
+              Your full career inventory — include everything; we pick the strongest matches for
+              each job description. Start with one resume or interview, then add up to{" "}
+              {MAX_MASTER_SOURCE_UPLOADS} more file or paste uploads to enrich chunks (older
+              versions, role-specific resumes, extra projects). Every tailor session reuses this
+              library; edit or delete chunks below anytime.
             </p>
           </header>
 
@@ -236,6 +278,12 @@ function ProfilePageContent() {
             <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm px-4 py-3 rounded-xl flex items-center gap-2">
               <XCircle className="w-4 h-4 shrink-0" />
               {error}
+            </div>
+          )}
+
+          {dedupeMessage && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-100 text-sm px-4 py-3 rounded-xl">
+              {dedupeMessage}
             </div>
           )}
 
@@ -306,6 +354,13 @@ function ProfilePageContent() {
                       {formatTimestamp(profile?.last_embedded_at ?? null)}
                     </span>
                   </p>
+                  {sourceDocCount < MAX_MASTER_SOURCE_UPLOADS && (
+                    <p className="text-xs text-slate-500 dark:text-slate-500 max-w-md">
+                      Missing a role or side project? Upload or paste another resume above — we merge
+                      new chunks into this library for every future tailor (
+                      {sourceDocCount}/{MAX_MASTER_SOURCE_UPLOADS} source uploads used).
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -330,11 +385,29 @@ function ProfilePageContent() {
                     </button>
                   )}
 
+                  {liveCount > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDedupeMessage(null)
+                        setDedupeDialogOpen(true)
+                      }}
+                      disabled={deduping || uploading || reembedding}
+                      className={clsx(
+                        "flex items-center gap-2 text-sm px-4 py-2 rounded-xl border transition-colors",
+                        "border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800",
+                        "disabled:opacity-50",
+                      )}
+                    >
+                      Remove duplicates
+                    </button>
+                  )}
+
                   {showReembed && (
                   <button
                     type="button"
                     onClick={() => void handleReembedAll()}
-                    disabled={reembedding || uploading}
+                    disabled={reembedding || uploading || deduping}
                     className={clsx(
                       "flex items-center gap-2 text-sm px-4 py-2 rounded-xl border transition-colors",
                       "border-amber-400/40 text-amber-700 dark:text-amber-400 hover:bg-amber-400/10",
@@ -351,6 +424,14 @@ function ProfilePageContent() {
                   )}
                 </div>
               </div>
+
+              <MasterResumeDedupeDialog
+                open={dedupeDialogOpen}
+                busy={deduping}
+                liveChunkCount={liveCount}
+                onClose={() => setDedupeDialogOpen(false)}
+                onConfirm={() => void handleDedupeConfirm()}
+              />
 
               {showContinue && onboardingIncomplete && fromOnboarding && (
                 <p className="text-sm text-slate-600 dark:text-slate-400">

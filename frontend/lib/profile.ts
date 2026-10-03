@@ -253,6 +253,23 @@ export async function patchProfileChunk(
   return body.chunk
 }
 
+export interface MasterResumeDedupeResult {
+  deleted_count: number
+  deleted_by_section: Record<string, number>
+  live_chunk_count: number
+}
+
+export async function dedupeMasterResumeChunks(
+  token: string,
+): Promise<MasterResumeDedupeResult> {
+  const res = await fetch(`${BASE}/api/profile/resume/dedupe`, {
+    method: "POST",
+    headers: authHeaders(token),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<MasterResumeDedupeResult>
+}
+
 export async function deleteProfileChunk(
   token: string,
   chunkId: string,

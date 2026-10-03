@@ -122,7 +122,8 @@ const STEPS = [
   },
   {
     title: "Build your master resume",
-    subtitle: "Generate it by speaking, or upload an existing file.",
+    subtitle:
+      "Start with one resume or interview — you can add more uploads later on Profile to enrich your chunks for tailoring.",
     icon: Mic,
     bodyKey: "master" as const,
     cta: "Continue",
@@ -428,7 +429,7 @@ function OnboardingPageContent() {
             <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-2 text-left max-w-md mx-auto">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400 shrink-0 mt-0.5" />
-                One master resume — tailored versions per job
+                One master library — add more resumes over time; tailored PDF per job
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400 shrink-0 mt-0.5" />
