@@ -159,7 +159,9 @@ function OnboardingPageContent() {
   const stepRef = useRef(step)
   const updateRef = useRef(update)
   const sessionRef = useRef(session)
-  sessionRef.current = session
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
   const initialHydrateDoneRef = useRef(false)
   const urlStepAtMountRef = useRef<string | null>(searchParams.get("step"))
   useEffect(() => {

@@ -47,7 +47,6 @@ import { dispatchCreditsExhausted } from "@/lib/offerPopup";
 
 const BASE_QUESTIONS = 15;
 const EXTRA_QUESTION_BLOCK = 5;
-const MAX_QUESTIONS_CAP = BASE_QUESTIONS + EXTRA_QUESTION_BLOCK;
 
 interface Props {
   token: string;
