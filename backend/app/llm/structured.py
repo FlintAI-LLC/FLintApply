@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 from collections.abc import Callable
 from typing import Any
 
+import structlog
 from pydantic import BaseModel, ValidationError
 
 from app.llm.base import LLMClient, LLMMessage
+from app.llm.pricing import estimate_cost
+
+log = structlog.get_logger("llm.structured")
 
 
 class LLMParseError(Exception):
@@ -119,6 +124,42 @@ def _append_parse_error(messages: list[LLMMessage], error: str) -> list[LLMMessa
     return list(messages) + [LLMMessage(role="user", content=instruction)]
 
 
+def _emit_step_complete(
+    *,
+    step: str | None,
+    session_id: str | None,
+    client: LLMClient,
+    latency_ms: float,
+    retries: int,
+    tokens_in: int,
+    tokens_out: int,
+    accepted: bool,
+    level: str = "info",
+) -> None:
+    fields: dict[str, Any] = {
+        "step": step or "unknown",
+        "provider": client.provider_name,
+        "model": client.model_name,
+        "latency_ms": round(latency_ms, 2),
+        "retries": retries,
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "accepted": accepted,
+        "estimated_cost_usd": estimate_cost(
+            tokens_in,
+            tokens_out,
+            client.provider_name,
+            client.model_name,
+        ),
+    }
+    if session_id is not None:
+        fields["session_id"] = session_id
+    if level == "warning":
+        log.warning("llm_step_complete", **fields)
+    else:
+        log.info("llm_step_complete", **fields)
+
+
 async def complete_structured(
     client: LLMClient,
     messages: list[LLMMessage],
@@ -127,6 +168,9 @@ async def complete_structured(
     max_tokens: int = 4096,
     temperature: float = 0.2,
     accept_result: Callable[[BaseModel], str | None] | None = None,
+    *,
+    step: str | None = None,
+    session_id: str | None = None,
 ) -> BaseModel:
     """
     Call the LLM and parse the result into a Pydantic model.
@@ -144,6 +188,9 @@ async def complete_structured(
         active_messages = _inject_schema_instruction(active_messages, schema)
 
     last_error: Exception | None = None
+    started = time.perf_counter()
+    last_tokens_in = 0
+    last_tokens_out = 0
 
     for attempt in range(max_retries):
         response = await client.complete(
@@ -152,6 +199,8 @@ async def complete_structured(
             max_tokens=max_tokens,
             temperature=temperature,
         )
+        last_tokens_in = response.input_tokens
+        last_tokens_out = response.output_tokens
 
         try:
             # Strip markdown code fences if present
@@ -168,10 +217,41 @@ async def complete_structured(
                 rejection = accept_result(parsed)
                 if rejection:
                     raise ValueError(rejection)
+            latency_ms = (time.perf_counter() - started) * 1000
+            _emit_step_complete(
+                step=step,
+                session_id=session_id,
+                client=client,
+                latency_ms=latency_ms,
+                retries=attempt,
+                tokens_in=last_tokens_in,
+                tokens_out=last_tokens_out,
+                accepted=True,
+            )
             return parsed
         except (ValidationError, ValueError, json.JSONDecodeError) as e:
             last_error = e
             if attempt < max_retries - 1:
                 active_messages = _append_parse_error(active_messages, str(e))
 
+    latency_ms = (time.perf_counter() - started) * 1000
+    _emit_step_complete(
+        step=step,
+        session_id=session_id,
+        client=client,
+        latency_ms=latency_ms,
+        retries=max_retries - 1,
+        tokens_in=last_tokens_in,
+        tokens_out=last_tokens_out,
+        accepted=False,
+        level="warning",
+    )
+    log.warning(
+        "llm_step_exhausted_retries",
+        step=step or "unknown",
+        provider=client.provider_name,
+        model=client.model_name,
+        reason=str(last_error),
+        retries=max_retries - 1,
+    )
     raise LLMParseError(f"Failed to parse LLM output after {max_retries} attempts: {last_error}")

@@ -26,6 +26,7 @@ from typing import Any
 
 from app.llm.base import LLMClient, LLMMessage
 from app.llm.pricing import estimate_cost, format_cost
+from app.llm.token_accounting import llm_accounting_context
 from app.models.company_profile import CompanyIntelOutput
 
 log = structlog.get_logger("company_intel.extractor")
@@ -217,12 +218,12 @@ async def extract_from_jd(
 
     try:
         with llm_accounting_context(step="company_intel", user_id=user_id):
-            raw = await llm.complete(messages, max_tokens=400, temperature=0.0)
+            llm_response = await llm.complete(messages, max_tokens=400, temperature=0.0)
     except Exception as exc:
         log.warning("company_intel_llm_error", company_name=company_name, error=str(exc))
         return None
 
-    data = _parse_json_from_response(raw)
+    data = _parse_json_from_response(llm_response.content)
     if data is None or not _EXPECTED_KEYS.intersection(data.keys()):
         # raw_preview intentionally omitted — it could echo fragments of the user JD.
         log.warning(

@@ -272,6 +272,14 @@ function ProfilePageContent() {
               versions, role-specific resumes, extra projects). Every tailor session reuses this
               library; edit or delete chunks below anytime.
             </p>
+            <p className="text-sm pt-2">
+              <Link
+                href="/profile/bricks"
+                className="text-amber-800 dark:text-amber-400 font-semibold hover:underline"
+              >
+                Manage bricks by section
+              </Link>
+            </p>
           </header>
 
           {error && (

@@ -672,7 +672,10 @@ export function ATSGuidancePanel({
         </div>
       )}
 
-      {onApplyAllImprovements && openImprovementCount > 0 && applyAllRoundLimitReached && (
+      {onApplyAllImprovements &&
+        openImprovementCount > 0 &&
+        applyAllRoundLimitReached &&
+        !applyAllImprovementsRunning && (
         <div className="px-3 py-3 rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-600">
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
             No more batch improvements this score

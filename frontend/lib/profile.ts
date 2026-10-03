@@ -302,6 +302,63 @@ export async function bulkInsertProfileChunks(
 }
 
 /** Placeholder until GET /api/resumes?has_master_resume=true ships (Step 27). */
+export interface ProfileBrick {
+  id: string
+  section_type: string
+  content: string
+  token_count: number
+  source_doc_id: string | null
+  created_at: string | null
+}
+
+export async function listProfileBricks(
+  token: string,
+  sectionType: string,
+): Promise<ProfileBrick[]> {
+  const params = new URLSearchParams({ section_type: sectionType })
+  const res = await fetch(`${BASE}/api/profile/bricks?${params}`, {
+    headers: authHeaders(token),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<ProfileBrick[]>
+}
+
+export async function createProfileBrick(
+  token: string,
+  sectionType: string,
+  content: string,
+): Promise<ProfileBrick> {
+  const res = await fetch(`${BASE}/api/profile/bricks`, {
+    method: "POST",
+    headers: authHeaders(token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ section_type: sectionType, content }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<ProfileBrick>
+}
+
+export async function patchProfileBrick(
+  token: string,
+  brickId: string,
+  content: string,
+): Promise<ProfileBrick> {
+  const res = await fetch(`${BASE}/api/profile/bricks/${brickId}`, {
+    method: "PATCH",
+    headers: authHeaders(token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ content }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json() as Promise<ProfileBrick>
+}
+
+export async function deleteProfileBrick(token: string, brickId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/profile/bricks/${brickId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+}
+
 export async function fetchTailoredResumeCount(token: string): Promise<number | null> {
   try {
     const res = await fetch(

@@ -39,6 +39,7 @@ from app.services.master_resume.chunking import (
     chunk_raw_text,
     count_tokens,
 )
+from app.services.retrieval.config import RETRIEVAL_EMBEDDING_MODEL
 from app.services.master_resume.embedding import (
     EmbeddingConfigurationError,
     EmbeddingProviderError,
@@ -490,6 +491,7 @@ async def _insert_chunks(
             content=chunk.content,
             token_count=chunk.token_count,
             embedding=vector,
+            embedding_model=RETRIEVAL_EMBEDDING_MODEL,
             chunk_metadata=dict(chunk.metadata or {}),
             source_doc_id=source_doc_id,
             created_at=now,
@@ -565,6 +567,7 @@ async def update_chunk_content(
     # Re-embed just this chunk (single-element batch).
     [vector] = await embed_texts([cleaned])
     chunk.embedding = vector
+    chunk.embedding_model = RETRIEVAL_EMBEDDING_MODEL
 
     # Mirror the parent's bookkeeping.
     resume = await db.get(MasterResume, chunk.master_resume_id)

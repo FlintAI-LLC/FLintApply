@@ -315,7 +315,21 @@ describe("applyAllImprovements wiring", () => {
     );
     const guard = slice.indexOf("isApplyAllRoundLimitReached(applyAllRoundsUsed)");
     const increment = slice.indexOf("setApplyAllRoundsUsed((n) => n + 1)");
-    assert.ok(guard >= 0 && increment > guard);
+    const tryStart = slice.indexOf("try {");
+    assert.ok(guard >= 0 && tryStart > guard);
+    assert.ok(increment > tryStart, "round counter must run only after successful try body");
+    const rescore = slice.indexOf("rescoreFree({ resume: current })");
+    assert.ok(rescore >= 0 && increment > rescore);
+  });
+
+  it("apply-all does not increment rounds inside the try opener", () => {
+    const slice = sliceBetween(
+      pageSource,
+      "try {",
+      "} catch (err)",
+    );
+    const tryBody = sliceBetween(slice, "try {", "setApplyAllRoundsUsed");
+    assert.doesNotMatch(tryBody.slice(0, 120), /setApplyAllRoundsUsed/);
   });
 
   it("rescoreFree calls only the free endpoint", () => {
@@ -389,6 +403,10 @@ describe("applyAllImprovements wiring", () => {
   it("ATS panel swaps the banner for the limit notice", () => {
     assert.match(panelSource, /applyAllRoundLimitReached/);
     assert.match(panelSource, /No more batch improvements/);
+    assert.match(
+      panelSource,
+      /applyAllRoundLimitReached[\s\S]*!applyAllImprovementsRunning/,
+    );
   });
 
   it("ATS panel exposes Apply all improvements handler", () => {

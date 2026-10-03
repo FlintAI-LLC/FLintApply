@@ -324,6 +324,11 @@ jobs:
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
+      # Ignored advisories live in frontend/package.json under
+      # pnpm.auditConfig.ignoreGhsas. Only add an entry when upstream has no
+      # patched release; re-check on every eslint-config-next bump.
+      #   GHSA-vfj7-8cjw-p6xm (braces <=3.0.3) — no patched version published;
+      #   dev-only path: eslint-config-next > fast-glob > micromatch > braces.
       - name: npm audit (frontend, pnpm)
         working-directory: frontend
         run: |

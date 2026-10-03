@@ -1017,7 +1017,6 @@ function SessionContent() {
     const catalog = [...(qa.blocking_issues ?? []), ...(qa.quick_wins ?? [])];
 
     try {
-      setApplyAllRoundsUsed((n) => n + 1);
       const { mechanical, chat } = partitionMechanicalAndChatIssues(tailored, issues);
       const mechanicalResult = applyMechanicalQuickWins(tailored, mechanical);
       let current = mechanicalResult.resume;
@@ -1083,6 +1082,8 @@ function SessionContent() {
         // Deterministic refresh: shows the real gain from this batch with no AI cost.
         await rescoreFree({ resume: current });
       }
+
+      setApplyAllRoundsUsed((n) => n + 1);
     } catch (err) {
       const errorCode = err instanceof ApiError ? err.code : undefined;
       setRunErrorCode(errorCode ?? null);

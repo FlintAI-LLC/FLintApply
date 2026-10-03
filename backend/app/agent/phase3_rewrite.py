@@ -14,7 +14,13 @@ from app.llm.base import LLMClient, LLMMessage
 from app.llm.pricing import estimate_cost, format_cost
 from app.llm.structured import LLMParseError, complete_structured
 from app.agent.phase3_experience_fallback import apply_experience_fallback
-from app.agent.output_linter import annotate_postprocess_lint, make_phase3_accept_result
+from app.agent.output_linter import (
+    annotate_postprocess_lint,
+    collect_tailored_bullets,
+    count_by_rule,
+    lint_bullets,
+    make_phase3_accept_result,
+)
 from app.agent.phase3_hollow import phase3_is_hollow
 from app.models.resume import ParsedResume
 from app.agent.phase3_postprocess import (
@@ -66,6 +72,17 @@ _BRIEF_COMPOSER_INSTRUCTION = (
 )
 
 _RETRIEVAL_INSTRUCTION = _BRIEF_COMPOSER_INSTRUCTION
+
+
+def _log_lint_rejections(output: TailoredResumeOutput, jd_text: str) -> None:
+    issues = lint_bullets(
+        collect_tailored_bullets(output),
+        list(output.skills or []),
+        jd_text,
+    )
+    counts = count_by_rule(issues)
+    if counts:
+        log.warning("lint_rejections", counts=counts, step="phase3")
 
 _SCOPED_INSTRUCTION = (
     "\n\nSCOPED REGENERATION — regenerate ONLY the requested section or bullet. "
@@ -685,6 +702,7 @@ async def run(
         provenance_chunks=retrieval_result.selected if retrieval_result else None,
     )
     output = annotate_postprocess_lint(output, jd_text)
+    _log_lint_rejections(output, jd_text)
 
     if used_multipass and must_have:
         from app.agent.phase3_multipass import (
@@ -708,6 +726,7 @@ async def run(
                 touched_ids=modified_ids,
             )
             output = annotate_postprocess_lint(output, jd_text)
+            _log_lint_rejections(output, jd_text)
 
     account_email = await resolve_account_email(session.user_id)
     output = apply_authoritative_contact(
