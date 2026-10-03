@@ -104,6 +104,10 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
 
   const questionCount = history.filter((m) => m.role === "interviewer").length;
   const atLimit = questionCount >= MAX_QUESTIONS;
+  const lastTurn = history.length > 0 ? history[history.length - 1] : null;
+  /** User answered but the next interviewer turn never arrived (failed fetch or refresh cleared error). */
+  const awaitingInterviewerReply =
+    phase === "interviewing" && !isStreaming && lastTurn?.role === "user";
 
   // Voice recorder
   const {
@@ -198,6 +202,11 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
     },
     [token, atLimit, scrollBottom],
   );
+
+  const resumeInterviewerQuestion = useCallback(() => {
+    setError(null);
+    void fireNextQuestion(history);
+  }, [history, fireNextQuestion]);
 
   // Start the interview on mount (or after credit accepted)
   useEffect(() => {
@@ -509,22 +518,30 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
       {/* Input area — shown during interview */}
       {phase === "interviewing" && !atLimit && (
         <div className="space-y-2">
-          {error && (
-            <div className="rounded-xl border border-red-500/30 bg-red-50 dark:bg-red-950/20 px-3 py-3 space-y-2">
-              <p className="text-red-700 dark:text-red-400 text-sm">{error}</p>
-              {!isStreaming && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    void fireNextQuestion(history);
-                  }}
-                  className="inline-flex items-center justify-center gap-2 w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 transition-colors"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Try again
-                </button>
+          {(error || awaitingInterviewerReply) && !isStreaming && (
+            <div
+              className={cn(
+                "rounded-xl px-3 py-3 space-y-2 border",
+                error
+                  ? "border-red-500/30 bg-red-50 dark:bg-red-950/20"
+                  : "border-amber-500/30 bg-amber-50 dark:bg-amber-950/20",
               )}
+            >
+              {error ? (
+                <p className="text-red-700 dark:text-red-400 text-sm">{error}</p>
+              ) : (
+                <p className="text-amber-900 dark:text-amber-200 text-sm">
+                  Your last answer was saved. Tap below to get the interviewer&apos;s next question.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={resumeInterviewerQuestion}
+                className="inline-flex items-center justify-center gap-2 w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                {error ? "Try again" : "Ask next question"}
+              </button>
             </div>
           )}
           <div className="flex gap-2 items-end">
