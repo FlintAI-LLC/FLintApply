@@ -1,3 +1,5 @@
+import { sanitizeInterviewHistory } from "@/lib/interviewHistory";
+
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export interface PolishResumeResponse {
@@ -365,6 +367,8 @@ export async function submitInterview(
   token: string,
   options: { whisperPath?: boolean } = {},
 ): Promise<StoryPreviewResponse> {
+  const cleaned = sanitizeInterviewHistory(history);
+
   const res = await fetch(`${BASE}/api/profile/story/interview/submit`, {
     method: "POST",
     headers: {
@@ -372,16 +376,24 @@ export async function submitInterview(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      history,
+      history: cleaned,
       whisper_path: options.whisperPath ?? false,
     }),
   });
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { detail?: { message?: string } | string };
-    const msg = typeof body.detail === "object"
-      ? (body.detail?.message ?? "Interview submission failed")
-      : (body.detail ?? "Interview submission failed");
+    const body = await res.json().catch(() => ({})) as {
+      detail?: { message?: string; code?: string } | string | Array<{ msg?: string }>;
+    };
+    let msg = "Interview submission failed";
+    const detail = body.detail;
+    if (Array.isArray(detail)) {
+      msg = detail.map((e) => e.msg).filter(Boolean).join("; ") || msg;
+    } else if (typeof detail === "object" && detail?.message) {
+      msg = detail.message;
+    } else if (typeof detail === "string") {
+      msg = detail;
+    }
     throw new Error(msg);
   }
 

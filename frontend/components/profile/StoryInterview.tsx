@@ -44,6 +44,11 @@ import { StorySaveConfirmDialog } from "./StorySaveConfirmDialog";
 import { StoryVerifyPanel } from "./StoryVerifyPanel";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { dispatchCreditsExhausted } from "@/lib/offerPopup";
+import {
+  isInterviewCompleteSentinel,
+  isResumeLikeInterviewerLeak,
+  sanitizeInterviewHistory,
+} from "@/lib/interviewHistory";
 
 const BASE_QUESTIONS = 15;
 const EXTRA_QUESTION_BLOCK = 5;
@@ -77,7 +82,6 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   const [extraQuestionBlocks, setExtraQuestionBlocks] = useState(0);
   const [editingAnswerIndex, setEditingAnswerIndex] = useState<number | null>(null);
   const [editAnswerDraft, setEditAnswerDraft] = useState("");
-  const [answersChangedAfterGenerate, setAnswersChangedAfterGenerate] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -86,7 +90,7 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   useEffect(() => {
     const draft = loadStoryDraft();
     if (draft?.interviewHistory.length) {
-      setHistory(draft.interviewHistory);
+      setHistory(sanitizeInterviewHistory(draft.interviewHistory));
       const interviewerTurns = draft.interviewHistory.filter((m) => m.role === "interviewer").length;
       if (interviewerTurns > BASE_QUESTIONS) {
         setExtraQuestionBlocks(1);
@@ -107,7 +111,7 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   useEffect(() => {
     if (!draftReady) return;
     patchStoryDraft({
-      interviewHistory: history,
+      interviewHistory: sanitizeInterviewHistory(history),
       interviewPhase: phase === "generating" ? "complete" : phase === "credit-disclosure" ? null : phase,
       interviewReviewText: reviewText,
     });
@@ -191,19 +195,27 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
           );
         }
 
+        setStreamingText("");
+
+        if (
+          result.complete ||
+          isInterviewCompleteSentinel(questionText) ||
+          isResumeLikeInterviewerLeak(questionText)
+        ) {
+          setPhase("complete");
+          return;
+        }
+
         const nextHistory: InterviewMessage[] = [
           ...currentHistory,
           { role: "interviewer", text: questionText },
         ];
         setHistory(nextHistory);
-        setStreamingText("");
 
         const interviewerAfter = nextHistory.filter((m) => m.role === "interviewer").length;
         const capAfter =
           BASE_QUESTIONS + extraQuestionBlocks * EXTRA_QUESTION_BLOCK;
-        if (result.complete) {
-          setPhase("complete");
-        } else if (interviewerAfter >= capAfter) {
+        if (interviewerAfter >= capAfter) {
           if (extraQuestionBlocks === 0 && interviewerAfter >= BASE_QUESTIONS) {
             // Pause for +5 choice instead of auto-completing at 15.
           } else {
@@ -293,7 +305,8 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   );
 
   const answersEditable =
-    !isStreaming && phase !== "generating" && phase !== "credit-disclosure";
+    !isStreaming &&
+    (phase === "interviewing" || phase === "complete");
 
   const beginEditAnswer = useCallback(
     (index: number) => {
@@ -315,7 +328,6 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
       next[editingAnswerIndex] = { role: "user", text: trimmed };
       return next;
     });
-    if (phase === "done") setAnswersChangedAfterGenerate(true);
     setEditingAnswerIndex(null);
     setEditAnswerDraft("");
   }, [editAnswerDraft, editingAnswerIndex, phase]);
@@ -328,7 +340,6 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   const handleGenerate = useCallback(async () => {
     setPhase("generating");
     setError(null);
-    setAnswersChangedAfterGenerate(false);
     try {
       const result = await submitInterview(history, token);
       const text = result.resume_text ?? "";
@@ -448,32 +459,24 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
         />
         <details className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40 px-4 py-3 text-sm">
           <summary className="cursor-pointer font-medium text-slate-700 dark:text-slate-300">
-            Your interview answers (editable)
+            View interview Q&amp;A (
+            {history.filter((m) => m.role === "user").length} answers)
           </summary>
           <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-            Fix a typo or add detail here. Regenerate the resume draft below if you change answers.
+            Edit the resume text below if you need changes — no second AI pass required.
           </p>
           <div className="mt-3 space-y-3 max-h-64 overflow-y-auto pr-1">
             <InterviewHistoryList
               history={history}
-              editable={answersEditable}
-              editingAnswerIndex={editingAnswerIndex}
-              editAnswerDraft={editAnswerDraft}
-              onBeginEdit={beginEditAnswer}
-              onEditDraftChange={setEditAnswerDraft}
-              onCommitEdit={commitEditAnswer}
-              onCancelEdit={cancelEditAnswer}
+              editable={false}
+              editingAnswerIndex={null}
+              editAnswerDraft=""
+              onBeginEdit={() => undefined}
+              onEditDraftChange={() => undefined}
+              onCommitEdit={() => undefined}
+              onCancelEdit={() => undefined}
             />
           </div>
-          {answersChangedAfterGenerate && (
-            <button
-              type="button"
-              onClick={() => void handleGenerate()}
-              className="mt-3 w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 transition-colors"
-            >
-              Regenerate resume from updated answers
-            </button>
-          )}
         </details>
         <textarea
           value={reviewText}
@@ -592,8 +595,14 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
       {phase === "complete" && !isStreaming && (
         <div className="space-y-3">
           <p className="text-xs text-slate-600 dark:text-slate-400 px-1">
-            Scroll up to edit any answer before you generate.
+            Scroll up and use <span className="font-medium">Edit answer</span> on any response,
+            then generate once — you will not be asked to edit again after.
           </p>
+          {error && (
+            <p className="text-red-700 dark:text-red-400 text-sm bg-red-50 dark:bg-red-950/20 border border-red-500/20 rounded-xl px-4 py-3">
+              {error}
+            </p>
+          )}
           <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 text-sm font-medium bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-500/20 rounded-xl px-4 py-3">
             <CheckCircle className="w-4 h-4 shrink-0" />
             All questions answered — ready to generate your resume!
@@ -608,7 +617,10 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
           </button>
           <button
             type="button"
-            onClick={() => setPhase("interviewing")}
+            onClick={() => {
+              setError(null);
+              setPhase("interviewing");
+            }}
             className="w-full text-xs text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-300 transition-colors py-1"
           >
             Continue answering (add more detail)
@@ -761,11 +773,15 @@ function InterviewHistoryList({
   onCommitEdit,
   onCancelEdit,
 }: InterviewHistoryListProps) {
+  let userAnswerOrdinal = 0;
+
   return (
     <>
-      {history.map((msg, i) => (
+      {history.map((msg, i) => {
+        const answerNumber = msg.role === "user" ? ++userAnswerOrdinal : null;
+        return (
         <div
-          key={i}
+          key={`${msg.role}-${i}-${msg.text.slice(0, 24)}`}
           className={cn(
             "rounded-xl px-4 py-3 text-sm leading-relaxed",
             msg.role === "interviewer"
@@ -805,22 +821,28 @@ function InterviewHistoryList({
               </div>
             </div>
           ) : (
-            <>
-              {msg.text}
+            <div className="space-y-2">
+              <p className="whitespace-pre-wrap break-words">{msg.text}</p>
               {msg.role === "user" && editable && (
                 <button
                   type="button"
-                  onClick={() => onBeginEdit(i)}
-                  className="mt-2 flex items-center gap-1 text-xs text-indigo-800 dark:text-indigo-300 hover:text-indigo-950 dark:hover:text-indigo-100 font-medium"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onBeginEdit(i);
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 text-xs text-indigo-800 dark:text-indigo-300 hover:text-indigo-950 dark:hover:text-indigo-100 font-medium"
                 >
                   <Pencil className="w-3 h-3" />
-                  Edit answer
+                  Edit answer{answerNumber != null ? ` #${answerNumber}` : ""}
                 </button>
               )}
-            </>
+            </div>
           )}
         </div>
-      ))}
+        );
+      })}
     </>
   );
 }

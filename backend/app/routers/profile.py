@@ -1171,7 +1171,19 @@ async def story_interview_submit(
     """
     plan_code = await resolve_plan_code_for_llm(session, user)
 
-    history_dicts = [{"role": m.role, "text": m.text} for m in body.history]
+    from app.agent.story_interview import sanitize_interview_history
+
+    history_dicts = sanitize_interview_history(
+        [{"role": m.role, "text": m.text} for m in body.history]
+    )
+    if not any(m["role"] == "user" for m in history_dicts):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "interview_empty",
+                "message": "No valid interview answers to compile. Edit your answers and try again.",
+            },
+        )
     narrative = compile_answers_to_narrative(history_dicts)
 
     log.info(
@@ -1198,7 +1210,9 @@ async def story_interview_submit(
                 detail={"code": "interview_generation_failed", "message": str(exc)},
             ) from exc
 
-    user_segments = [m.text for m in body.history if m.role == "user" and m.text.strip()]
+    user_segments = [
+        m["text"] for m in history_dicts if m["role"] == "user" and m["text"].strip()
+    ]
     verify_items = [item.to_dict() for item in build_verify_items(user_segments, draft_text)]
     review_count = sum(1 for item in verify_items if item["status"] == "review")
 

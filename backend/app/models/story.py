@@ -34,10 +34,14 @@ class CoachRequest(BaseModel):
         return self
 
 
+# Long voice/typed answers (skills lists, project catalogs) must fit one turn.
+_INTERVIEW_TURN_MAX_CHARS = 20_000
+
+
 class InterviewMessage(BaseModel):
     """One turn in a coached interview session."""
     role: Literal["interviewer", "user"]
-    text: str = Field(..., min_length=1, max_length=3000)
+    text: str = Field(..., min_length=1, max_length=_INTERVIEW_TURN_MAX_CHARS)
 
 
 class InterviewNextRequest(BaseModel):

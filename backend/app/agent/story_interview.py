@@ -101,7 +101,44 @@ async def next_interview_question(
 
 def is_interview_complete(text: str) -> bool:
     """Return True if the LLM signalled the interview is finished."""
-    return text.strip() == _COMPLETE_SENTINEL
+    stripped = text.strip()
+    if stripped == _COMPLETE_SENTINEL:
+        return True
+    return stripped.startswith(f"{_COMPLETE_SENTINEL}\n") or stripped.startswith(
+        f"{_COMPLETE_SENTINEL} "
+    )
+
+
+def _is_resume_like_interviewer_leak(text: str) -> bool:
+    sample = text.strip()[:400].upper()
+    if "PROFESSIONAL SUMMARY" in sample:
+        return True
+    if sample.startswith("SKILLS") and "EXPERIENCE" in sample:
+        return True
+    return "EXPERIENCE" in sample and "EDUCATION" in sample
+
+
+def sanitize_interview_history(
+    history: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Remove sentinel rows and resume text accidentally streamed as questions."""
+    cleaned: list[dict[str, str]] = []
+    for msg in history:
+        role = msg.get("role")
+        text = (msg.get("text") or "").strip()
+        if not text:
+            continue
+        if role == "interviewer":
+            if text == _COMPLETE_SENTINEL:
+                continue
+            if text.startswith(_COMPLETE_SENTINEL):
+                text = text[len(_COMPLETE_SENTINEL) :].strip()
+                if not text:
+                    continue
+            if _is_resume_like_interviewer_leak(text):
+                continue
+        cleaned.append({"role": role, "text": text})
+    return cleaned
 
 
 def compile_answers_to_narrative(history: list[dict[str, str]]) -> str:
@@ -113,7 +150,7 @@ def compile_answers_to_narrative(history: list[dict[str, str]]) -> str:
     pairs: list[str] = []
     buffer_q: str | None = None
 
-    for msg in history:
+    for msg in sanitize_interview_history(history):
         role = msg.get("role")
         text = msg.get("text", "").strip()
         if role == "interviewer":
