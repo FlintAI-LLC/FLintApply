@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.billing import CreditKind, Subscription, SubscriptionStatus
 from app.models.user import User, CreditTransaction
 from app.services.admin.feature_unlocks import user_has_feature_unlock
-from app.services.billing.credits import consume_credit, record_quota_audit
+from app.services.billing.credits import consume_credit, get_balance, record_quota_audit
 from app.services.billing.exceptions import (
     AccountSuspendedError,
     InsufficientCreditsError,
@@ -453,6 +453,46 @@ async def check_quota_for_story(
         whisper_path=whisper_path,
         session_id=session_id,
     )
+
+
+async def has_active_subscription(session: AsyncSession, *, user: User) -> bool:
+    """True when the user has a non-paused subscription in the current period."""
+    now = datetime.now(timezone.utc)
+    sub = await _active_subscription_for(session, user_id=user.id)
+    return (
+        sub is not None
+        and _within_period(sub, now=now)
+        and sub.status != SubscriptionStatus.paused
+    )
+
+
+async def story_coach_should_charge_credit(
+    session: AsyncSession,
+    *,
+    user: User,
+    session_id: str | None,
+    history_len: int,
+    coach_mode: str,
+) -> bool:
+    """Whether a successful coach response should consume the per-build credit."""
+    if await has_active_subscription(session, user=user):
+        return False
+    if coach_mode == "segment" and history_len > 0:
+        return False
+    if session_id and await _story_coach_build_already_charged(
+        session, user_id=user.id, story_session_id=session_id
+    ):
+        return False
+    return True
+
+
+async def assert_story_coach_credit_affordable(session: AsyncSession, *, user: User) -> None:
+    """Pre-flight balance check without consuming a credit."""
+    balance = await get_balance(
+        session, user_id=user.id, credit_kind=CreditKind.free, for_share=True
+    )
+    if balance < 1:
+        raise InsufficientCreditsError(CreditKind.free.value, balance)
 
 
 async def _story_coach_build_already_charged(

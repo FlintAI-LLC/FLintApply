@@ -231,13 +231,17 @@ function consumeSseDataLine(
     return { done: false, complete: false };
   }
   if (evt.error) {
-    const err = new Error(
-      evt.error === "free_tier_ai_cap_reached"
-        ? "You've used up the free-plan AI allowance. Upgrade to keep using the coach."
-        : label === "Coach"
-          ? "The coach could not respond. Please retry in a moment."
-          : "The interview could not start. Please retry in a moment.",
-    ) as Error & { code?: string };
+    let message: string;
+    if (evt.error === "free_tier_ai_cap_reached") {
+      message = "You've used up the free-plan AI allowance. Upgrade to keep using the coach.";
+    } else if (evt.error === "coach_empty") {
+      message = "The coach returned an empty response. Please try again.";
+    } else if (label === "Coach") {
+      message = "The coach could not respond. Please retry in a moment.";
+    } else {
+      message = "The interview could not start. Please retry in a moment.";
+    }
+    const err = new Error(message) as Error & { code?: string };
     err.code = evt.error;
     throw err;
   }
@@ -277,13 +281,20 @@ async function readSseStream(
   return { complete: isComplete };
 }
 
+export type StoryCoachMode = "segment" | "whole_story";
+
 export async function streamCoach(
   segmentText: string,
   history: CoachMessage[],
   token: string,
   onDelta: (delta: string) => void,
-  options: { sessionId?: string } = {},
+  options: {
+    sessionId?: string;
+    coachMode?: StoryCoachMode;
+    segments?: string[];
+  } = {},
 ): Promise<{ complete: boolean }> {
+  const coachMode = options.coachMode ?? "segment";
   const res = await fetch(`${BASE}/api/profile/story/coach`, {
     method: "POST",
     headers: {
@@ -291,8 +302,10 @@ export async function streamCoach(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      segment_text: segmentText,
-      history,
+      coach_mode: coachMode,
+      segment_text: coachMode === "segment" ? segmentText : "",
+      segments: coachMode === "whole_story" ? (options.segments ?? []) : [],
+      history: coachMode === "whole_story" ? [] : history,
       session_id: options.sessionId ?? null,
     }),
   });

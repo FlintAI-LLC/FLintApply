@@ -9,6 +9,7 @@ interface Props {
   isRecording: boolean;
   disabled: boolean;
   coachOpen: boolean;
+  showCoachButton: boolean;
   onChange: (text: string) => void;
   onReRecord: () => void;
   onDelete: () => void;
@@ -21,6 +22,7 @@ export function StorySegment({
   isRecording,
   disabled,
   coachOpen,
+  showCoachButton,
   onChange,
   onReRecord,
   onDelete,
@@ -39,7 +41,7 @@ export function StorySegment({
         </span>
         <div className="flex items-center gap-1.5">
           {/* Coach me button — only visible when segment has content */}
-          {text.trim().length > 10 && !isRecording && (
+          {showCoachButton && text.trim().length > 10 && !isRecording && (
             <button
               type="button"
               onClick={onCoach}

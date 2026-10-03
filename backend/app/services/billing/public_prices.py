@@ -50,7 +50,7 @@ _CYCLE_BY_CODE: dict[str, str] = {
 }
 
 _FEATURES_BY_CODE: dict[str, list[str]] = {
-    "weekly": ["resume_tailor", "cover_letter", "fit_analysis", "job_search"],
+    "weekly": ["resume_tailor", "cover_letter", "fit_analysis", "job_search", "story_segment_coach"],
     "monthly_pro": [
         "resume_tailor",
         "cover_letter",
@@ -58,6 +58,7 @@ _FEATURES_BY_CODE: dict[str, list[str]] = {
         "job_search",
         "master_resume",
         "ats_guidance",
+        "story_segment_coach",
     ],
     "monthly_plus": [
         "resume_tailor",
@@ -66,6 +67,7 @@ _FEATURES_BY_CODE: dict[str, list[str]] = {
         "job_search",
         "master_resume",
         "ats_guidance",
+        "story_segment_coach",
     ],
     "monthly_premium": [
         "resume_tailor",
@@ -74,6 +76,7 @@ _FEATURES_BY_CODE: dict[str, list[str]] = {
         "job_search",
         "master_resume",
         "ats_guidance",
+        "story_segment_coach",
     ],
     "yearly_pro": [
         "resume_tailor",
@@ -82,6 +85,7 @@ _FEATURES_BY_CODE: dict[str, list[str]] = {
         "job_search",
         "master_resume",
         "ats_guidance",
+        "story_segment_coach",
     ],
     "yearly_plus": [
         "resume_tailor",
@@ -90,6 +94,7 @@ _FEATURES_BY_CODE: dict[str, list[str]] = {
         "job_search",
         "master_resume",
         "ats_guidance",
+        "story_segment_coach",
     ],
     "yearly_premium": [
         "resume_tailor",
@@ -98,6 +103,7 @@ _FEATURES_BY_CODE: dict[str, list[str]] = {
         "job_search",
         "master_resume",
         "ats_guidance",
+        "story_segment_coach",
     ],
 }
 

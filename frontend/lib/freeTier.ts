@@ -17,6 +17,7 @@ export const FREE_TIER_CREDIT_ACTIONS = [
   { action: "Tailored rewrite", cost: "1 credit" },
   { action: "Score & export (ATS score)", cost: "1 credit (re-score after edits is free)" },
   { action: "Cover letter generation", cost: "1 credit" },
+  { action: "Story coach feedback (whole story)", cost: "1 credit / build" },
   { action: "Coached story interview", cost: "1 credit / session" },
   { action: "Story resume regenerate", cost: "First free; then 1" },
   { action: "Story resume save", cost: "First free; then 1" },

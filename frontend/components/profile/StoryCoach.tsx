@@ -125,15 +125,21 @@ export function StoryCoach({
           },
           {
             sessionId: storyBuildSessionId,
+            coachMode: "segment",
           },
         );
+
+        const coachText = accumulated.trim();
+        if (!coachText) {
+          setError("The coach returned an empty response. Please try again.");
+          setStreamingText("");
+          return;
+        }
 
         if (history.length === 0 && isFreeUser && !coachSessionUnlocked) {
           onCoachSessionUnlocked();
         }
 
-        // Commit streamed text as a coach message
-        const coachText = accumulated.trim();
         setMessages((prev) => [...prev, { role: "coach", text: coachText }]);
         setStreamingText("");
 
@@ -142,6 +148,13 @@ export function StoryCoach({
         }
       } catch (err: unknown) {
         const e = err as Error & { code?: string };
+        if (e.code === "coach_empty") {
+          setErrorCode("coach_empty");
+          setError("The coach returned an empty response. Please try again.");
+          setStreamingText("");
+          setShowExhaustionPaywall(false);
+          return;
+        }
         if (e.code === "insufficient_credits") {
           setErrorCode(null);
           setError("You need at least 1 credit to start a coaching session.");
@@ -217,9 +230,7 @@ export function StoryCoach({
         </div>
         <p className="text-slate-700 dark:text-slate-300">
           The coach asks follow-up questions (up to {MAX_EXCHANGES} per segment) to help you add
-          missing metrics and outcomes.{" "}
-          <span className="text-amber-700 dark:text-amber-400 font-medium">1 credit</span> unlocks coaching for this
-          entire resume build — all segments included.
+          missing metrics and outcomes. Included with your subscription.
         </p>
         <div className="flex gap-2">
           <button
@@ -306,9 +317,18 @@ export function StoryCoach({
         <EmailVerificationCallout />
       )}
       {error && (
-        <p className="text-red-700 dark:text-red-400 text-xs rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-500/20 px-3 py-2">
-          {error}
-        </p>
+        <div className="text-red-700 dark:text-red-400 text-xs rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-500/20 px-3 py-2 space-y-2">
+          <p>{error}</p>
+          {(errorCode === "coach_empty" || error.includes("empty response")) && !isStreaming && (
+            <button
+              type="button"
+              onClick={() => void fireCoachQuestion(messages)}
+              className="text-indigo-700 dark:text-indigo-300 font-semibold hover:underline"
+            >
+              Retry coach question
+            </button>
+          )}
+        </div>
       )}
 
       {showExhaustionPaywall && (

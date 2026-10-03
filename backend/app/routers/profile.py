@@ -43,7 +43,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.polish import polish_resume
 from app.agent.story import story_to_resume
 from app.agent.story_verify import build_verify_items
-from app.agent.story_coach import MAX_EXCHANGES, coach_segment, is_complete_response
+from app.agent.story_coach import (
+    MAX_EXCHANGES,
+    coach_segment,
+    coach_whole_story,
+    is_complete_response,
+)
 from app.agent.story_interview import (
     resolve_interview_question_cap,
     compile_answers_to_narrative,
@@ -76,7 +81,10 @@ from app.parsers.pdf_parser import extract_text_from_pdf
 from app.parsers.text_parser import extract_text_from_txt
 from app.services.auth.dependencies import VerifiedUser, get_current_user
 from app.services.billing.quota import (
+    assert_story_coach_credit_affordable,
     check_quota_for_story_coach,
+    has_active_subscription,
+    story_coach_should_charge_credit,
     check_quota_for_story_generate,
     check_quota_for_story_interview,
     check_quota_for_story_save,
@@ -994,45 +1002,65 @@ async def story_coach_endpoint(
     user: VerifiedUser,
     session: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
-    """Stream one follow-up question from the interview coach (§22).
+    """Stream story coach output (per-segment Q&A or whole-story feedback).
 
-    - Subscribers: 0 credits.
-    - Free users: 1 credit per story build session (deducted on the first
-      coached segment when history is empty).  Further segments in the same
-      session_id reuse that credit.  Requires session_id for free platform users.
-    - Max {MAX_EXCHANGES} exchanges per segment enforced here.
+    - Subscribers: segment coach included; whole-story mode is blocked.
+    - Free / credit-only: whole-story feedback; segment coach blocked.
+    - Free users: 1 credit per story build session, charged only after non-empty LLM output.
 
     Returns: SSE stream of {"delta": str} events, finished by {"done": true}.
     """
-    # Rate-limit abuse: cap exchanges server-side as well as client-side
-    prior_coach_msgs = [m for m in body.history if m.role == "coach"]
-    if len(prior_coach_msgs) >= MAX_EXCHANGES:
+    subscribed = await has_active_subscription(session, user=user)
+
+    if body.coach_mode == "segment" and not subscribed:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "segment_coach_requires_subscription",
+                "message": "Per-segment coaching is included with an active subscription.",
+            },
+        )
+    if body.coach_mode == "whole_story" and subscribed:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "whole_story_coach_free_tier_only",
+                "message": "Use per-segment coaching on your plan instead of whole-story feedback.",
+            },
+        )
+
+    if body.coach_mode == "segment":
+        prior_coach_msgs = [m for m in body.history if m.role == "coach"]
+        if len(prior_coach_msgs) >= MAX_EXCHANGES:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "coach_limit_reached",
+                    "message": f"Maximum {MAX_EXCHANGES} coaching exchanges per segment.",
+                },
+            )
+
+    if not body.session_id:
         raise HTTPException(
             status_code=400,
             detail={
-                "code": "coach_limit_reached",
-                "message": f"Maximum {MAX_EXCHANGES} coaching exchanges per segment.",
+                "code": "session_id_required",
+                "message": "Story build session ID is required for coaching.",
             },
         )
 
     plan_code = await resolve_plan_code_for_llm(session, user)
 
-    # Charge 1 credit on the first coached segment of a story build session.
-    if not body.history:
-        if not body.session_id:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "code": "session_id_required",
-                    "message": "Story build session ID is required for coaching.",
-                },
-            )
+    should_charge = await story_coach_should_charge_credit(
+        session,
+        user=user,
+        session_id=body.session_id,
+        history_len=len(body.history),
+        coach_mode=body.coach_mode,
+    )
+    if should_charge:
         try:
-            await check_quota_for_story_coach(
-                session,
-                user=user,
-                session_id=body.session_id,
-            )
+            await assert_story_coach_credit_affordable(session, user=user)
         except AccountSuspendedError:
             raise HTTPException(status_code=403, detail={"code": "account_suspended"})
         except CreditsLockedUntilVerificationError as exc:
@@ -1048,7 +1076,6 @@ async def story_coach_endpoint(
                     "message": "You need at least 1 credit to start a coaching session.",
                 },
             )
-        await session.commit()
 
     with llm_accounting_context(step="story_coach", user_id=str(user.id)):
         llm_client = get_llm_client_for_step("story_coach", plan_code=plan_code)
@@ -1060,11 +1087,15 @@ async def story_coach_endpoint(
         async def _generate():
             buffer = ""
             try:
-                async for delta in coach_segment(
-                    segment_text=body.segment_text,
-                    history=history_dicts,
-                    llm_client=llm_client,
-                ):
+                if body.coach_mode == "whole_story":
+                    stream = coach_whole_story(body.segments, llm_client)
+                else:
+                    stream = coach_segment(
+                        segment_text=body.segment_text,
+                        history=history_dicts,
+                        llm_client=llm_client,
+                    )
+                async for delta in stream:
                     buffer += delta
                     yield f"data: {json.dumps({'delta': delta})}\n\n"
             except FreeTierAiBudgetExceededError:
@@ -1074,6 +1105,25 @@ async def story_coach_endpoint(
                 log.error("story_coach.stream_error", error=str(exc))
                 yield 'data: {"error": "coach_failed"}\n\n'
                 return
+
+            if not buffer.strip():
+                yield 'data: {"error": "coach_empty"}\n\n'
+                return
+
+            if should_charge:
+                try:
+                    await check_quota_for_story_coach(
+                        session,
+                        user=user,
+                        session_id=body.session_id,
+                    )
+                    await session.commit()
+                except InsufficientCreditsError:
+                    yield 'data: {"error": "insufficient_credits"}\n\n'
+                    return
+                except AccountSuspendedError:
+                    yield 'data: {"error": "account_suspended"}\n\n'
+                    return
 
             complete = is_complete_response(buffer)
             yield f"data: {json.dumps({'done': True, 'complete': complete})}\n\n"

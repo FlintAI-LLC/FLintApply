@@ -18,6 +18,7 @@ import { CheckCircle, Clock, Loader2, Mic, RotateCcw, Send, Sparkles, Wand2 } fr
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useEntitlement } from "@/hooks/useEntitlement";
 import { StoryCoach } from "./StoryCoach";
+import { StoryWholeReview } from "./StoryWholeReview";
 import { StoryInterview } from "./StoryInterview";
 import { type StoryMode, StoryModeSelector } from "./StoryModeSelector";
 import { StorySegment } from "./StorySegment";
@@ -81,7 +82,8 @@ interface Props {
 type RecordingState = "idle" | "recording" | "re-recording";
 
 export function StoryRecorder({ token, onSaved }: Props) {
-  const { isFreeUser } = useEntitlement();
+  const { isFreeUser, isSubscribed } = useEntitlement();
+  const showSegmentCoach = isSubscribed === true;
   const [draftReady, setDraftReady] = useState(false);
   const [storyMode, setStoryMode] = useState<StoryMode | null>(null);
   const [segments, setSegments] = useState<string[]>([]);
@@ -765,8 +767,18 @@ export function StoryRecorder({ token, onSaved }: Props) {
             <li>Talk naturally — jobs, skills, accomplishments, education</li>
             <li>Edit any segment after recording</li>
             <li>
-              <span className="text-indigo-700 dark:text-indigo-400 font-medium">Optionally tap "Coach me ✨"</span> on
-              any segment — the AI asks one follow-up question to add missing metrics or outcomes
+              {showSegmentCoach ? (
+                <>
+                  <span className="text-indigo-700 dark:text-indigo-400 font-medium">Optionally tap &quot;Coach me ✨&quot;</span> on
+                  any segment — up to 3 follow-up questions per segment (included in your plan)
+                </>
+              ) : (
+                <>
+                  After you finish recording, use{" "}
+                  <span className="text-indigo-700 dark:text-indigo-400 font-medium">story coach feedback</span> for
+                  bullets on what to add (1 credit per resume build)
+                </>
+              )}
             </li>
             <li>Click &ldquo;Generate resume from story&rdquo; when done</li>
           </ol>
@@ -847,12 +859,13 @@ export function StoryRecorder({ token, onSaved }: Props) {
                 isRecording={recordingState === "re-recording" && reRecordingIndex === i}
                 disabled={isRecordingAnything || submitting}
                 coachOpen={openCoachIndex === i}
+                showCoachButton={showSegmentCoach}
                 onChange={(newText) => setSegments((prev) => persistSegments(prev.map((s, j) => j === i ? newText : s), storyMode ?? "free"))}
                 onReRecord={() => void startReRecord(i)}
                 onDelete={() => deleteSegment(i)}
                 onCoach={() => setOpenCoachIndex((prev) => prev === i ? null : i)}
               />
-              {openCoachIndex === i && storyBuildSessionId && (
+              {showSegmentCoach && openCoachIndex === i && storyBuildSessionId && (
                 <StoryCoach
                   segmentText={text}
                   token={token}
@@ -917,6 +930,17 @@ export function StoryRecorder({ token, onSaved }: Props) {
           back to add more and generate again, that costs{" "}
           <strong>{isFreeUser ? "1 credit" : "another generate on your plan"}</strong>.
         </div>
+      )}
+
+      {isFreeUser && segments.length >= 1 && openCoachIndex === null && !isRecordingAnything && storyBuildSessionId && (
+        <StoryWholeReview
+          segments={segments}
+          token={token}
+          storyBuildSessionId={storyBuildSessionId}
+          coachSessionUnlocked={coachSessionUnlocked}
+          onCoachSessionUnlocked={markCoachSessionUnlocked}
+          disabled={submitting}
+        />
       )}
 
       <div className="flex items-center gap-3 pt-2">

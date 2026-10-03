@@ -13,6 +13,7 @@ describe("FREE_TIER_CREDIT_ACTIONS", () => {
       "Tailored rewrite",
       "Score & export (ATS score)",
       "Cover letter generation",
+      "Story coach feedback (whole story)",
       "Coached story interview",
       "Story resume regenerate",
       "Story resume save",
