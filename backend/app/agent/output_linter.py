@@ -45,6 +45,13 @@ class LintIssue:
     original: str
 
 
+def count_by_rule(issues: list[LintIssue]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for issue in issues:
+        counts[issue.rule] = counts.get(issue.rule, 0) + 1
+    return counts
+
+
 def lint_bullets(
     bullets: list[str],
     skills: list[str],

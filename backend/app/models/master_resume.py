@@ -213,6 +213,7 @@ class MasterResumeChunk(Base):
     embedding: Mapped[Optional[list[float]]] = mapped_column(
         Vector(EMBEDDING_DIM), nullable=True
     )
+    embedding_model: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     chunk_metadata: Mapped[dict[str, Any]] = mapped_column(
         "metadata",
         JSONB,
