@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle, Loader2, Mic, MicOff, Send, Sparkles, X } from "lucide-react";
+import { liveVoiceTranscript } from "@/lib/voice/liveTranscript";
 import { cn } from "@/lib/utils";
 import { dispatchCreditsExhausted } from "@/lib/offerPopup";
 import { ExhaustionPaywall } from "@/components/billing/ExhaustionPaywall";
@@ -75,11 +76,15 @@ export function StoryCoach({
   const {
     voiceState,
     finalText: micFinalText,
+    interimText: micInterimText,
     start: startRecording,
     stop: stopRecording,
     reset: resetMic,
   } = useVoiceRecorder();
   const isRecording = voiceState === "speaking" || voiceState === "recording";
+  const answerDraft = isRecording
+    ? liveVoiceTranscript(input, micFinalText, micInterimText)
+    : input;
   const prevVoiceStateRef = useRef(voiceState);
 
   // Commit mic transcript when recording stops (user tap), not on each speech pause.
@@ -339,11 +344,16 @@ export function StoryCoach({
           <textarea
             ref={inputRef}
             rows={2}
-            value={input}
+            value={answerDraft}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isStreaming}
-            placeholder="Type your answer… (Enter to send)"
+            readOnly={isRecording}
+            placeholder={
+              isRecording
+                ? "Listening… words appear here as you speak"
+                : "Type your answer… (Enter to send)"
+            }
             className={cn(
               "flex-1 resize-none rounded-lg border bg-white/60 dark:bg-slate-900/60 px-3 py-2 text-sm",
               "text-slate-800 dark:text-slate-200 placeholder:text-slate-500 dark:placeholder:text-slate-600",
@@ -354,7 +364,7 @@ export function StoryCoach({
           {/* Mic button */}
           <button
             type="button"
-            onClick={isRecording ? stopRecording : startRecording}
+            onClick={() => void (isRecording ? stopRecording() : startRecording())}
             disabled={isStreaming}
             aria-label={isRecording ? "Stop recording" : "Record answer"}
             className={cn(
@@ -370,7 +380,7 @@ export function StoryCoach({
           <button
             type="button"
             onClick={handleSend}
-            disabled={!input.trim() || isStreaming}
+            disabled={!answerDraft.trim() || isStreaming || isRecording}
             aria-label="Send answer"
             className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white p-2 transition-colors"
           >

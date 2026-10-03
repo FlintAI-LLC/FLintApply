@@ -21,9 +21,11 @@ import {
   MessageSquare,
   Mic,
   MicOff,
+  RefreshCw,
   Send,
   Sparkles,
 } from "lucide-react";
+import { liveVoiceTranscript } from "@/lib/voice/liveTranscript";
 import { cn } from "@/lib/utils";
 import { ExhaustionPaywall } from "@/components/billing/ExhaustionPaywall";
 import {
@@ -104,9 +106,18 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   const atLimit = questionCount >= MAX_QUESTIONS;
 
   // Voice recorder
-  const { voiceState, finalText: micFinalText, start: startMic, stop: stopMic, reset: resetMic } =
-    useVoiceRecorder();
+  const {
+    voiceState,
+    finalText: micFinalText,
+    interimText: micInterimText,
+    start: startMic,
+    stop: stopMic,
+    reset: resetMic,
+  } = useVoiceRecorder();
   const isRecording = voiceState === "speaking" || voiceState === "recording";
+  const answerDraft = isRecording
+    ? liveVoiceTranscript(input, micFinalText, micInterimText)
+    : input;
   const prevVoiceStateRef = useRef(voiceState);
 
   // Commit mic transcript only when the user stops (preview), not on each
@@ -462,27 +473,6 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="space-y-2">
-          <p className="text-red-700 dark:text-red-400 text-xs rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-500/20 px-3 py-2">
-            {error}
-          </p>
-          {phase === "interviewing" && !isStreaming && (
-            <button
-              type="button"
-              onClick={() => {
-                setError(null);
-                void fireNextQuestion(history);
-              }}
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-sm py-2 hover:border-indigo-400 transition-colors"
-            >
-              Retry last question
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Complete state */}
       {phase === "complete" && !isStreaming && (
         <div className="space-y-3">
@@ -519,26 +509,50 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
       {/* Input area — shown during interview */}
       {phase === "interviewing" && !atLimit && (
         <div className="space-y-2">
+          {error && (
+            <div className="rounded-xl border border-red-500/30 bg-red-50 dark:bg-red-950/20 px-3 py-3 space-y-2">
+              <p className="text-red-700 dark:text-red-400 text-sm">{error}</p>
+              {!isStreaming && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    void fireNextQuestion(history);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 transition-colors"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Try again
+                </button>
+              )}
+            </div>
+          )}
           <div className="flex gap-2 items-end">
             <textarea
               ref={inputRef}
               rows={3}
-              value={input}
+              value={answerDraft}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isStreaming}
-              placeholder="Type your answer… (Enter to send, Shift+Enter for new line)"
+              readOnly={isRecording}
+              placeholder={
+                isRecording
+                  ? "Listening… words appear here as you speak"
+                  : "Type your answer… (Enter to send, Shift+Enter for new line)"
+              }
               className={cn(
                 "flex-1 resize-none rounded-xl border bg-white/60 dark:bg-slate-900/60 px-4 py-3 text-sm",
                 "text-slate-800 dark:text-slate-200 placeholder:text-slate-500 dark:placeholder:text-slate-600",
                 "border-slate-300 dark:border-slate-700 focus:border-indigo-500 focus:outline-none transition-colors",
+                isRecording && "border-red-400/50 ring-1 ring-red-400/30",
                 "disabled:opacity-50",
               )}
             />
             <div className="flex flex-col gap-2">
               <button
                 type="button"
-                onClick={isRecording ? stopMic : startMic}
+                onClick={() => void (isRecording ? stopMic() : startMic())}
                 disabled={isStreaming}
                 aria-label={isRecording ? "Stop recording" : "Record answer"}
                 className={cn(
@@ -553,7 +567,7 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={!input.trim() || isStreaming}
+                disabled={!answerDraft.trim() || isStreaming || isRecording}
                 aria-label="Send answer"
                 className="rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white p-2.5 transition-colors"
               >
