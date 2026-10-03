@@ -142,7 +142,7 @@ export function useVoiceRecorder({ onBlob }: UseVoiceRecorderOptions = {}) {
             recognitionRef.current = null;
             setVoiceState((s) => (s === "speaking" ? "preview" : s));
           }
-        }, 0);
+        }, 150);
         return;
       }
       stopTimer();

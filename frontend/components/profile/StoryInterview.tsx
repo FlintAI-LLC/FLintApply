@@ -107,13 +107,22 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   const { voiceState, finalText: micFinalText, start: startMic, stop: stopMic, reset: resetMic } =
     useVoiceRecorder();
   const isRecording = voiceState === "speaking" || voiceState === "recording";
+  const prevVoiceStateRef = useRef(voiceState);
 
+  // Commit mic transcript only when the user stops (preview), not on each
+  // browser-finalized phrase while still recording — that was ending the session early.
   useEffect(() => {
-    if (micFinalText) {
-      setInput((prev) => (prev ? `${prev} ${micFinalText}` : micFinalText));
-      resetMic();
+    const prev = prevVoiceStateRef.current;
+    prevVoiceStateRef.current = voiceState;
+    const wasRecording = prev === "speaking" || prev === "recording";
+    if (!wasRecording || voiceState !== "preview") return;
+
+    const chunk = micFinalText.trim();
+    if (chunk) {
+      setInput((prevInput) => (prevInput ? `${prevInput} ${chunk}` : chunk));
     }
-  }, [micFinalText, resetMic]);
+    resetMic();
+  }, [voiceState, micFinalText, resetMic]);
 
   const scrollBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

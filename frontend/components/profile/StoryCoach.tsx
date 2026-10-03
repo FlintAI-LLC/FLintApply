@@ -80,14 +80,21 @@ export function StoryCoach({
     reset: resetMic,
   } = useVoiceRecorder();
   const isRecording = voiceState === "speaking" || voiceState === "recording";
+  const prevVoiceStateRef = useRef(voiceState);
 
-  // When the mic produces a final transcript, append it to the input field
+  // Commit mic transcript when recording stops (user tap), not on each speech pause.
   useEffect(() => {
-    if (micFinalText) {
-      setInput((prev) => (prev ? `${prev} ${micFinalText}` : micFinalText));
-      resetMic();
+    const prev = prevVoiceStateRef.current;
+    prevVoiceStateRef.current = voiceState;
+    const wasRecording = prev === "speaking" || prev === "recording";
+    if (!wasRecording || voiceState !== "preview") return;
+
+    const chunk = micFinalText.trim();
+    if (chunk) {
+      setInput((prevInput) => (prevInput ? `${prevInput} ${chunk}` : chunk));
     }
-  }, [micFinalText, resetMic]);
+    resetMic();
+  }, [voiceState, micFinalText, resetMic]);
 
   const scrollBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
