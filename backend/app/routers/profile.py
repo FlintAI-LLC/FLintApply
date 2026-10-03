@@ -51,7 +51,7 @@ from app.agent.story_interview import (
 )
 from app.config import settings
 from app.db.engine import get_db
-from app.limiter import limiter
+from app.limiter import authenticated_user_rate_limit_key, limiter
 from app.llm.base import LLMMessage
 from app.llm.factory import get_llm_client_for_step
 from app.services.llm.plan_code_for_llm import resolve_plan_code_for_llm
@@ -600,7 +600,7 @@ async def delete_brick(
 
 
 @router.get("/resume/chunks", status_code=200)
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=authenticated_user_rate_limit_key)
 async def list_chunks(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],

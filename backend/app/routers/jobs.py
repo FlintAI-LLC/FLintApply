@@ -662,7 +662,7 @@ async def delete_saved_search(
 
 
 @router.get("/preferences", response_model=JobPreferencesOut)
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=_rate_limit_user_key)
 async def get_preferences(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],

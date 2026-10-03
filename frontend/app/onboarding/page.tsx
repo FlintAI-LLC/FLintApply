@@ -158,6 +158,8 @@ function OnboardingPageContent() {
   const [uploadingMaster, setUploadingMaster] = useState(false)
   const stepRef = useRef(step)
   const updateRef = useRef(update)
+  const sessionRef = useRef(session)
+  sessionRef.current = session
   const initialHydrateDoneRef = useRef(false)
   const urlStepAtMountRef = useRef<string | null>(searchParams.get("step"))
   useEffect(() => {
@@ -197,12 +199,13 @@ function OnboardingPageContent() {
   }, [searchParams])
 
   useEffect(() => {
-    if (status === "loading" || !session) return
+    const activeSession = sessionRef.current
+    if (status === "loading" || !activeSession) return
     if (initialHydrateDoneRef.current) return
 
-    if (status === "authenticated" && !session.backendAccessToken) {
+    if (status === "authenticated" && !activeSession.backendAccessToken) {
       setError(
-        friendlyAuthError(session.error ?? "missing_api_token"),
+        friendlyAuthError(activeSession.error ?? "missing_api_token"),
       )
       initialHydrateDoneRef.current = true
       setHydrated(true)
@@ -219,7 +222,7 @@ function OnboardingPageContent() {
     void (async () => {
       let signedOut = false
       try {
-        const cachedUser = session.backendUser
+        const cachedUser = activeSession.backendUser
         const userPromise =
           cachedUser && needsOnboarding(cachedUser)
             ? Promise.resolve(cachedUser)
@@ -273,7 +276,7 @@ function OnboardingPageContent() {
     return () => {
       cancelled = true
     }
-  }, [status, token, router, session])
+  }, [status, token, router])
 
   useEffect(() => {
     if (!hydrated) return
