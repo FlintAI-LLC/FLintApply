@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import hashlib
+
 from fastapi import Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.config import is_production_grade
 from app.services.auth.client_ip import resolve_client_ip
+
+_REFRESH_COOKIE_NAME = "sr_refresh"
 
 
 def rate_limit_key(request: Request) -> str:
@@ -42,6 +46,15 @@ def authenticated_user_rate_limit_key(request: Request) -> str:
                     return f"user:{subject}"
             except Exception:  # noqa: BLE001
                 return f"token:{token[:64]}"
+    return rate_limit_key(request)
+
+
+def refresh_cookie_rate_limit_key(request: Request) -> str:
+    """Bucket ``POST /refresh`` per refresh cookie, not shared proxy IP."""
+    raw = (request.cookies.get(_REFRESH_COOKIE_NAME) or "").strip()
+    if raw:
+        digest = hashlib.sha256(raw.encode()).hexdigest()[:32]
+        return f"refresh:{digest}"
     return rate_limit_key(request)
 
 

@@ -68,6 +68,9 @@ def resolve_client_ip(request: Request) -> str:
 
     forwarded = request.headers.get("x-forwarded-for", "")
     if not forwarded:
+        real_ip = _normalize_ip(request.headers.get("x-real-ip", ""))
+        if real_ip and not _is_trusted_proxy(real_ip, networks):
+            return real_ip
         return peer
 
     hops = [_normalize_ip(part) for part in forwarded.split(",") if part.strip()]

@@ -30,7 +30,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import is_production_grade, settings
 from app.db.engine import get_db
-from app.limiter import authenticated_user_rate_limit_key, limiter
+from app.limiter import (
+    authenticated_user_rate_limit_key,
+    limiter,
+    refresh_cookie_rate_limit_key,
+)
 from app.models.billing import CreditKind
 from app.models.user import (
     AuthAuditEvent,
@@ -1040,7 +1044,7 @@ async def oauth_callback(
 
 # 4. POST /logout ----------------------------------------------------------
 @router.post("/logout")
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=authenticated_user_rate_limit_key)
 async def logout(
     request: Request,
     response: Response,
@@ -1069,7 +1073,7 @@ async def logout(
 
 # 5. POST /logout-all ------------------------------------------------------
 @router.post("/logout-all")
-@limiter.limit("30/minute")
+@limiter.limit("30/minute", key_func=authenticated_user_rate_limit_key)
 async def logout_all(
     request: Request,
     response: Response,
@@ -1094,7 +1098,7 @@ async def logout_all(
 
 # 6. POST /refresh ---------------------------------------------------------
 @router.post("/refresh")
-@limiter.limit("30/minute")
+@limiter.limit("60/minute", key_func=refresh_cookie_rate_limit_key)
 async def refresh(
     request: Request,
     response: Response,
@@ -1258,7 +1262,7 @@ async def bind_refresh_cookie(
 
 # 7. GET /me ---------------------------------------------------------------
 @router.get("/me")
-@limiter.limit("120/minute", key_func=authenticated_user_rate_limit_key)
+@limiter.limit("300/minute", key_func=authenticated_user_rate_limit_key)
 async def me(
     request: Request,
     response: Response,
@@ -1271,7 +1275,7 @@ async def me(
 
 # 7b. PATCH /onboarding ----------------------------------------------------
 @router.patch("/onboarding")
-@limiter.limit("30/minute")
+@limiter.limit("30/minute", key_func=authenticated_user_rate_limit_key)
 async def patch_onboarding(
     request: Request,
     body: OnboardingPatchRequest,
@@ -1298,7 +1302,7 @@ async def patch_onboarding(
 
 # 8. GET /sessions ---------------------------------------------------------
 @router.get("/sessions")
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=authenticated_user_rate_limit_key)
 async def list_sessions(
     request: Request,
     response: Response,
@@ -1337,7 +1341,7 @@ async def list_sessions(
 
 # 9. DELETE /sessions/{id} -------------------------------------------------
 @router.delete("/sessions/{session_id}")
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=authenticated_user_rate_limit_key)
 async def revoke_session(
     request: Request,
     response: Response,
@@ -1502,7 +1506,7 @@ async def password_reset(
 
 # 14. POST /2fa/enroll -----------------------------------------------------
 @router.post("/2fa/enroll")
-@limiter.limit("10/minute")
+@limiter.limit("10/minute", key_func=authenticated_user_rate_limit_key)
 async def tfa_enroll(
     request: Request,
     response: Response,
@@ -1654,7 +1658,7 @@ async def _tfa_verify_enrollment(
 
 # 16. POST /2fa/disable ----------------------------------------------------
 @router.post("/2fa/disable")
-@limiter.limit("10/minute")
+@limiter.limit("10/minute", key_func=authenticated_user_rate_limit_key)
 async def tfa_disable(
     request: Request,
     response: Response,

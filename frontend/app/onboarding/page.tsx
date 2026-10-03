@@ -219,8 +219,13 @@ function OnboardingPageContent() {
     void (async () => {
       let signedOut = false
       try {
+        const cachedUser = session.backendUser
+        const userPromise =
+          cachedUser && needsOnboarding(cachedUser)
+            ? Promise.resolve(cachedUser)
+            : fetchMe(token)
         const [user, chunks, prefs] = await Promise.all([
-          fetchMe(token),
+          userPromise,
           getProfileChunks(token).catch(() => []),
           getJobPreferences(token).catch(() => null),
         ])

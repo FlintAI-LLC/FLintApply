@@ -47,5 +47,8 @@ api.flintapply.com {
 	# JSON API: deny embedding and shrink default fetch surface at the edge.
 	header Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
 	encode gzip
-	reverse_proxy localhost:8000
+	# Caddy sets X-Forwarded-For by default; X-Real-IP is a fallback for backend rate limits.
+	reverse_proxy localhost:8000 {
+		header_up X-Real-IP {remote_host}
+	}
 }
