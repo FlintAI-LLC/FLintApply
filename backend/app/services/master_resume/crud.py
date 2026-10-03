@@ -680,25 +680,26 @@ async def dedupe_live_chunks(
 
     by_section: dict[str, int] = {}
     id_set = set(doomed)
+    deleted_count = 0
     for chunk in chunks:
         if chunk.id not in id_set:
             continue
-        by_section[chunk.section_type.value] = (
-            by_section.get(chunk.section_type.value, 0) + 1
-        )
-        await delete_chunk(db, user_id=user_id, chunk_id=chunk.id)
+        if await delete_chunk(db, user_id=user_id, chunk_id=chunk.id):
+            deleted_count += 1
+            section = chunk.section_type.value
+            by_section[section] = by_section.get(section, 0) + 1
 
-    remaining = len(chunks) - len(doomed)
+    live_after = await get_chunks_for_user(db, user_id=user_id)
     log.info(
         "master_resume.dedupe",
         user_id=str(user_id),
-        deleted=len(doomed),
+        deleted=deleted_count,
         by_section=by_section,
     )
     return {
-        "deleted_count": len(doomed),
+        "deleted_count": deleted_count,
         "deleted_by_section": by_section,
-        "live_chunk_count": remaining,
+        "live_chunk_count": len(live_after),
     }
 
 

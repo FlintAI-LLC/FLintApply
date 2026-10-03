@@ -45,7 +45,8 @@ export function MasterResumeReplaceDialog({
               tailor jobs. You can add up to five source uploads over time.
             </p>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
-              To wipe everything and start over, use a full replace from profile settings later, or save again from Tell your story (that path replaces the whole master resume).
+              To wipe everything and start over, save again from{" "}
+              <strong>Tell your story</strong> — that path replaces the whole master resume.
             </p>
           </div>
         </div>

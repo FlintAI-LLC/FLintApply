@@ -15,6 +15,7 @@ def _chunk(
     content: str,
     metadata: dict | None = None,
     embedding: list[float] | None = None,
+    deleted_at: datetime | None = None,
 ) -> MasterResumeChunk:
     now = datetime.now(timezone.utc)
     return MasterResumeChunk(
@@ -28,7 +29,12 @@ def _chunk(
         embedding=embedding,
         created_at=now,
         updated_at=now,
+        deleted_at=deleted_at,
     )
+
+
+def test_dedupe_empty_chunk_list_is_noop() -> None:
+    assert master_crud.plan_master_resume_dedupe_ids([]) == []
 
 
 def test_dedupe_projects_same_title_keeps_longer() -> None:
@@ -43,6 +49,19 @@ def test_dedupe_projects_same_title_keeps_longer() -> None:
     doomed = master_crud.plan_master_resume_dedupe_ids([short, long])
     assert short.id in doomed
     assert long.id not in doomed
+
+
+def test_dedupe_three_projects_keeps_richest_only() -> None:
+    a = _chunk(section_type=MasterResumeSectionType.project, content="Flint\nshort")
+    b = _chunk(section_type=MasterResumeSectionType.project, content="Flint\nmedium body")
+    c = _chunk(
+        section_type=MasterResumeSectionType.project,
+        content="Flint\nlongest body\nextra",
+    )
+    other = _chunk(section_type=MasterResumeSectionType.project, content="OtherApp\nunique")
+    doomed = set(master_crud.plan_master_resume_dedupe_ids([a, b, c, other]))
+    assert doomed == {a.id, b.id}
+    assert c.id not in doomed and other.id not in doomed
 
 
 def test_dedupe_education_same_school() -> None:
@@ -61,10 +80,36 @@ def test_dedupe_education_same_school() -> None:
 
 
 def test_dedupe_skills_exact_normalized() -> None:
-    a = _chunk(section_type=MasterResumeSectionType.skills, content="Python, FastAPI")
-    b = _chunk(section_type=MasterResumeSectionType.skills, content="python fastapi")
-    doomed = master_crud.plan_master_resume_dedupe_ids([a, b])
-    assert len(doomed) == 1
+    richer = _chunk(section_type=MasterResumeSectionType.skills, content="Python, FastAPI")
+    poorer = _chunk(section_type=MasterResumeSectionType.skills, content="python fastapi")
+    doomed = master_crud.plan_master_resume_dedupe_ids([richer, poorer])
+    assert doomed == [poorer.id]
+
+
+def test_dedupe_skills_without_embeddings_keeps_distinct_lines() -> None:
+    a = _chunk(section_type=MasterResumeSectionType.skills, content="Kubernetes orchestration")
+    b = _chunk(section_type=MasterResumeSectionType.skills, content="PostgreSQL")
+    assert master_crud.plan_master_resume_dedupe_ids([a, b]) == []
+
+
+def test_dedupe_skills_zero_vectors_do_not_cosine_merge() -> None:
+    z = [0.0, 0.0, 0.0]
+    a = _chunk(section_type=MasterResumeSectionType.skills, content="K8s cluster ops", embedding=z)
+    b = _chunk(section_type=MasterResumeSectionType.skills, content="PostgreSQL admin", embedding=z)
+    assert master_crud.plan_master_resume_dedupe_ids([a, b]) == []
+
+
+def test_dedupe_ignores_already_deleted_duplicate() -> None:
+    live = _chunk(section_type=MasterResumeSectionType.project, content="Flint\nshort")
+    gone = _chunk(section_type=MasterResumeSectionType.project, content="Flint\nlong\nextra")
+    gone.deleted_at = datetime.now(timezone.utc)
+    assert master_crud.plan_master_resume_dedupe_ids([live, gone]) == []
+
+
+def test_dedupe_does_not_touch_experience() -> None:
+    a = _chunk(section_type=MasterResumeSectionType.experience, content="Acme\nbullet one")
+    b = _chunk(section_type=MasterResumeSectionType.experience, content="Acme\nbullet two longer")
+    assert master_crud.plan_master_resume_dedupe_ids([a, b]) == []
 
 
 def test_dedupe_skills_near_duplicate_embedding() -> None:

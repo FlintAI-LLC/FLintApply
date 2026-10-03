@@ -7,6 +7,9 @@ import {
   extensionInstallMode,
 } from "@/lib/extensionInstall";
 
+const DEFAULT_STORE =
+  "https://chromewebstore.google.com/detail/flint-apply/lcgioikkofajhechkhgjoidmbmnbniji";
+
 describe("extensionInstall", () => {
   it("uses a stable in-app path", () => {
     assert.equal(EXTENSION_INSTALL_PATH, "/extension");
@@ -16,7 +19,7 @@ describe("extensionInstall", () => {
     const prev = process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL;
     delete process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL;
     try {
-      assert.match(chromeWebStoreUrl() ?? "", /chromewebstore\.google\.com\/detail\/flint-apply\//);
+      assert.equal(chromeWebStoreUrl(), DEFAULT_STORE);
     } finally {
       if (prev !== undefined) process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL = prev;
     }
@@ -38,6 +41,55 @@ describe("extensionInstall", () => {
       else delete process.env.NEXT_PUBLIC_SITE_URL;
       if (prevZip !== undefined) process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL = prevZip;
       else delete process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
+    }
+  });
+
+  it("honors an explicit download URL over SITE_URL", () => {
+    const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
+    const prevZip = process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
+    process.env.NEXT_PUBLIC_SITE_URL = "https://flintapply.com";
+    process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL = "https://cdn.example/ext.zip";
+    try {
+      assert.equal(extensionBetaDownloadUrl(), "https://cdn.example/ext.zip");
+      assert.equal(extensionInstallMode(), "download");
+    } finally {
+      if (prevSite !== undefined) process.env.NEXT_PUBLIC_SITE_URL = prevSite;
+      else delete process.env.NEXT_PUBLIC_SITE_URL;
+      if (prevZip !== undefined) process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL = prevZip;
+      else delete process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
+    }
+  });
+
+  it("strips a trailing slash on SITE_URL", () => {
+    const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
+    const prevZip = process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
+    delete process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
+    process.env.NEXT_PUBLIC_SITE_URL = "https://flintapply.com/";
+    try {
+      assert.equal(
+        extensionBetaDownloadUrl(),
+        "https://flintapply.com/downloads/flintapply-extension-beta.zip",
+      );
+    } finally {
+      if (prevSite !== undefined) process.env.NEXT_PUBLIC_SITE_URL = prevSite;
+      else delete process.env.NEXT_PUBLIC_SITE_URL;
+      if (prevZip !== undefined) process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL = prevZip;
+      else delete process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
+    }
+  });
+
+  it("returns null beta URL and store mode when site origin is unset", () => {
+    const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
+    const prevZip = process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
+    delete process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
+    delete process.env.NEXT_PUBLIC_SITE_URL;
+    try {
+      assert.equal(extensionBetaDownloadUrl(), null);
+      assert.equal(extensionInstallMode(), "store");
+      assert.equal(chromeWebStoreUrl(), DEFAULT_STORE);
+    } finally {
+      if (prevSite !== undefined) process.env.NEXT_PUBLIC_SITE_URL = prevSite;
+      if (prevZip !== undefined) process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL = prevZip;
     }
   });
 });

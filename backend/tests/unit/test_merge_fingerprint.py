@@ -30,3 +30,32 @@ def test_education_fingerprint_uses_institution() -> None:
         {"school": "Portland Community College"},
     )
     assert with_dates == no_dates == "edu:portland community college"
+
+
+def test_fingerprint_none_for_skills_and_empty_project() -> None:
+    assert (
+        _merge_fingerprint(MasterResumeSectionType.skills, "Python", {}) is None
+    )
+    assert _merge_fingerprint(MasterResumeSectionType.project, "", {}) is None
+    assert (
+        _merge_fingerprint(
+            MasterResumeSectionType.experience,
+            "Acme\nbullet",
+            {"title": "Acme"},
+        )
+        is None
+    )
+
+
+def test_distinct_project_titles_do_not_share_fingerprint() -> None:
+    a = _merge_fingerprint(
+        MasterResumeSectionType.project,
+        "Flint\n...",
+        {"title": "Flint"},
+    )
+    b = _merge_fingerprint(
+        MasterResumeSectionType.project,
+        "Other\n...",
+        {"title": "Other"},
+    )
+    assert a != b

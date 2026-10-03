@@ -237,6 +237,64 @@ async def test_get_chunks_with_jd_session_returns_scores(
         assert c["score"] is None or -1.0 <= float(c["score"]) <= 1.0
 
 
+async def test_dedupe_requires_auth(app_client: AsyncClient) -> None:
+    r = await app_client.post("/api/profile/resume/dedupe")
+    assert r.status_code == 401
+
+
+async def test_dedupe_empty_profile_returns_zero(
+    app_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    payload = {**REGISTER_PAYLOAD, "email": "dedupe-empty@example.com"}
+    r = await app_client.post("/api/auth/register", json=payload)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    await verify_user_email(db_session, uuid.UUID(body["user"]["id"]))
+    headers = {"Authorization": f"Bearer {body['access_token']}"}
+
+    r = await app_client.post("/api/profile/resume/dedupe", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json() == {
+        "deleted_count": 0,
+        "deleted_by_section": {},
+        "live_chunk_count": 0,
+    }
+
+
+async def test_dedupe_removes_duplicate_project_chunks(
+    app_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    payload = {**REGISTER_PAYLOAD, "email": "dedupe-projects@example.com"}
+    r = await app_client.post("/api/auth/register", json=payload)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    await verify_user_email(db_session, uuid.UUID(body["user"]["id"]))
+    headers = {"Authorization": f"Bearer {body['access_token']}"}
+
+    r = await app_client.post(
+        "/api/profile/resume",
+        headers=headers,
+        data={"text": SAMPLE_TEXT},
+    )
+    assert r.status_code == 201, r.text
+    live_before = r.json()["chunk_count"]
+
+    for content in ("Flint\nshort", "Flint\nlonger project description"):
+        br = await app_client.post(
+            "/api/profile/bricks",
+            headers=headers,
+            json={"section_type": "project", "content": content},
+        )
+        assert br.status_code == 201, br.text
+
+    r = await app_client.post("/api/profile/resume/dedupe", headers=headers)
+    assert r.status_code == 200, r.text
+    deduped = r.json()
+    assert deduped["deleted_count"] == 1
+    assert deduped["deleted_by_section"].get("project") == 1
+    assert deduped["live_chunk_count"] == live_before + 1
+
+
 async def _load_embeddings_map(db: AsyncSession) -> dict[str, list[float]]:
     """Return ``{chunk_id_str: embedding_list}`` for all live chunks."""
     rows = (
