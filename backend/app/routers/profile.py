@@ -631,7 +631,7 @@ async def list_chunks(
 @limiter.limit("10/minute", key_func=authenticated_user_rate_limit_key)
 async def dedupe_master_resume(
     request: Request,
-    user: Annotated[User, Depends(get_current_user)],
+    user: VerifiedUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Remove duplicate project/education chunks and near-duplicate skills (keeps richest row)."""

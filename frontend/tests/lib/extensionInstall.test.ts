@@ -44,13 +44,14 @@ describe("extensionInstall", () => {
     }
   });
 
-  it("honors an explicit download URL over SITE_URL", () => {
+  it("honors an explicit download URL on the site origin", () => {
     const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
     const prevZip = process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
     process.env.NEXT_PUBLIC_SITE_URL = "https://flintapply.com";
-    process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL = "https://cdn.example/ext.zip";
+    process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL =
+      "https://flintapply.com/downloads/custom-beta.zip";
     try {
-      assert.equal(extensionBetaDownloadUrl(), "https://cdn.example/ext.zip");
+      assert.equal(extensionBetaDownloadUrl(), "https://flintapply.com/downloads/custom-beta.zip");
       assert.equal(extensionInstallMode(), "download");
     } finally {
       if (prevSite !== undefined) process.env.NEXT_PUBLIC_SITE_URL = prevSite;
@@ -65,6 +66,35 @@ describe("extensionInstall", () => {
     const prevZip = process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
     delete process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
     process.env.NEXT_PUBLIC_SITE_URL = "https://flintapply.com/";
+    try {
+      assert.equal(
+        extensionBetaDownloadUrl(),
+        "https://flintapply.com/downloads/flintapply-extension-beta.zip",
+      );
+    } finally {
+      if (prevSite !== undefined) process.env.NEXT_PUBLIC_SITE_URL = prevSite;
+      else delete process.env.NEXT_PUBLIC_SITE_URL;
+      if (prevZip !== undefined) process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL = prevZip;
+      else delete process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
+    }
+  });
+
+  it("rejects a malicious store URL override", () => {
+    const prev = process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL;
+    process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL = "javascript:alert(1)";
+    try {
+      assert.equal(chromeWebStoreUrl(), DEFAULT_STORE);
+    } finally {
+      if (prev !== undefined) process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL = prev;
+      else delete process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL;
+    }
+  });
+
+  it("rejects a beta zip URL on an untrusted host", () => {
+    const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
+    const prevZip = process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
+    process.env.NEXT_PUBLIC_SITE_URL = "https://flintapply.com";
+    process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL = "https://evil.example/malware.zip";
     try {
       assert.equal(
         extensionBetaDownloadUrl(),
