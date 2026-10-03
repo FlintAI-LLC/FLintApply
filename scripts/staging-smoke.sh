@@ -105,7 +105,8 @@ fi
 check "Frontend GET /auth/verify returns 200" test "$(http_status "$FRONTEND_URL/auth/verify")" = "200"
 
 # CSP: scheme-aware — local HTTP must not upgrade; HTTPS must upgrade
-csp_header="$(curl -sI "$FRONTEND_URL/onboarding" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-security-policy"{print $2; exit}')"
+# Split only on the header name colon — CSP values contain "data: blob:" etc.
+csp_header="$(curl -sI "$FRONTEND_URL/onboarding" | tr -d '\r' | sed -n 's/^[Cc]ontent-[Ss]ecurity-[Pp]olicy: //p' | head -1)"
 if [[ -n "$csp_header" ]]; then
   if [[ "$FRONTEND_URL" =~ ^https:// ]]; then
     check "CSP includes upgrade-insecure-requests on HTTPS frontend" \
