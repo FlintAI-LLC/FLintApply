@@ -326,8 +326,9 @@ export async function streamInterviewQuestion(
   history: InterviewMessage[],
   token: string,
   onDelta: (delta: string) => void,
-  options: { sessionId?: string } = {},
+  options: { sessionId?: string; extraQuestionBlocks?: number } = {},
 ): Promise<{ complete: boolean }> {
+  const extraBlocks = options.extraQuestionBlocks === 1 ? 1 : 0;
   const res = await fetch(`${BASE}/api/profile/story/interview/next`, {
     method: "POST",
     headers: {
@@ -337,6 +338,7 @@ export async function streamInterviewQuestion(
     body: JSON.stringify({
       history,
       session_id: options.sessionId ?? null,
+      extra_question_blocks: extraBlocks,
     }),
   });
 

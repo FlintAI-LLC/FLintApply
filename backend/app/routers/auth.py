@@ -1262,7 +1262,7 @@ async def bind_refresh_cookie(
 
 # 7. GET /me ---------------------------------------------------------------
 @router.get("/me")
-@limiter.limit("300/minute", key_func=authenticated_user_rate_limit_key)
+@limiter.limit("600/minute", key_func=authenticated_user_rate_limit_key)
 async def me(
     request: Request,
     response: Response,

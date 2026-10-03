@@ -19,7 +19,18 @@ _COMPLETE_SENTINEL = "INTERVIEW_COMPLETE"
 
 # Soft cap — the endpoint enforces this too, but having it here prevents
 # runaway credit use in the unlikely event of a loop bug.
-MAX_QUESTIONS = 15
+INTERVIEW_QUESTIONS_BASE = 15
+INTERVIEW_QUESTIONS_EXTRA_BLOCK = 5
+INTERVIEW_QUESTIONS_MAX_CAP = INTERVIEW_QUESTIONS_BASE + INTERVIEW_QUESTIONS_EXTRA_BLOCK
+
+# Back-compat for imports/tests
+MAX_QUESTIONS = INTERVIEW_QUESTIONS_MAX_CAP
+
+
+def resolve_interview_question_cap(extra_blocks: int = 0) -> int:
+    """Per-session cap: 15 default, +5 once when the user requests more."""
+    blocks = max(0, min(1, extra_blocks))
+    return INTERVIEW_QUESTIONS_BASE + blocks * INTERVIEW_QUESTIONS_EXTRA_BLOCK
 
 
 def _load_prompt() -> str:

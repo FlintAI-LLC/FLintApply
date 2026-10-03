@@ -44,7 +44,7 @@ from app.agent.story import story_to_resume
 from app.agent.story_verify import build_verify_items
 from app.agent.story_coach import MAX_EXCHANGES, coach_segment, is_complete_response
 from app.agent.story_interview import (
-    MAX_QUESTIONS,
+    resolve_interview_question_cap,
     compile_answers_to_narrative,
     is_interview_complete,
     next_interview_question,
@@ -260,7 +260,7 @@ def _resume_to_response(resume) -> dict[str, Any]:
 
 
 @router.get("/resume", status_code=200)
-@limiter.limit("120/minute")
+@limiter.limit("300/minute", key_func=authenticated_user_rate_limit_key)
 async def get_resume(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
@@ -497,7 +497,7 @@ async def replace_resume(
 
 
 @router.get("/bricks", status_code=200)
-@limiter.limit("120/minute")
+@limiter.limit("300/minute", key_func=authenticated_user_rate_limit_key)
 async def list_bricks(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
@@ -600,7 +600,7 @@ async def delete_brick(
 
 
 @router.get("/resume/chunks", status_code=200)
-@limiter.limit("120/minute", key_func=authenticated_user_rate_limit_key)
+@limiter.limit("300/minute", key_func=authenticated_user_rate_limit_key)
 async def list_chunks(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
@@ -1070,7 +1070,7 @@ async def story_coach_endpoint(
 
 
 @router.post("/story/interview/next", status_code=200)
-@limiter.limit("20/minute")
+@limiter.limit("60/minute", key_func=authenticated_user_rate_limit_key)
 async def story_interview_next(
     request: Request,
     body: InterviewNextRequest,
@@ -1081,19 +1081,20 @@ async def story_interview_next(
 
     - Subscribers: 0 credits.
     - Free users: 1 credit charged on the very first question (empty history).
-    - Server-side cap: MAX_QUESTIONS per session.
+    - Server-side cap: 15 questions, optional +5 when client sends extra_question_blocks=1.
 
     Returns SSE stream: {"delta": str} events, then {"done": true, "complete": bool}.
     ``complete=true`` means the LLM emitted INTERVIEW_COMPLETE — client should
     stop asking for questions and call POST /story/interview/submit.
     """
+    question_cap = resolve_interview_question_cap(body.extra_question_blocks)
     prior_questions = [m for m in body.history if m.role == "interviewer"]
-    if len(prior_questions) >= MAX_QUESTIONS:
+    if len(prior_questions) >= question_cap:
         raise HTTPException(
             status_code=400,
             detail={
                 "code": "interview_limit_reached",
-                "message": f"Maximum {MAX_QUESTIONS} interview questions reached. Please submit your answers.",
+                "message": f"Maximum {question_cap} interview questions reached. Please submit your answers.",
             },
         )
 

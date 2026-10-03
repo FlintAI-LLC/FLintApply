@@ -37,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.engine import get_db
-from app.limiter import limiter
+from app.limiter import authenticated_user_rate_limit_key, limiter
 from app.models.billing import (
     AdminAuditLog,
     CreditKind,
@@ -367,7 +367,7 @@ async def billing_exhaustion_paywall(
 
 
 @router.get("/api/billing/popup-offers")
-@limiter.limit("120/minute")
+@limiter.limit("300/minute", key_func=authenticated_user_rate_limit_key)
 async def billing_popup_offers(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -379,7 +379,7 @@ async def billing_popup_offers(
 
 
 @router.get("/api/credits/balance")
-@limiter.limit("120/minute")
+@limiter.limit("300/minute", key_func=authenticated_user_rate_limit_key)
 async def credits_balance(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],

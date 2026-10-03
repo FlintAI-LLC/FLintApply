@@ -11,6 +11,7 @@
  *    a "Generate resume" button that calls POST /story/interview/submit.
  *  - Free users: 1 credit charged on first question (backend handles this).
  *  - Supports "Go back" to return to the mode selector.
+ *  - User answers can be edited anytime before save (inline Edit on each bubble).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -21,6 +22,7 @@ import {
   MessageSquare,
   Mic,
   MicOff,
+  Pencil,
   RefreshCw,
   Send,
   Sparkles,
@@ -43,7 +45,9 @@ import { StoryVerifyPanel } from "./StoryVerifyPanel";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { dispatchCreditsExhausted } from "@/lib/offerPopup";
 
-const MAX_QUESTIONS = 15;
+const BASE_QUESTIONS = 15;
+const EXTRA_QUESTION_BLOCK = 5;
+const MAX_QUESTIONS_CAP = BASE_QUESTIONS + EXTRA_QUESTION_BLOCK;
 
 interface Props {
   token: string;
@@ -71,6 +75,10 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   const [attestationChecked, setAttestationChecked] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [extraQuestionBlocks, setExtraQuestionBlocks] = useState(0);
+  const [editingAnswerIndex, setEditingAnswerIndex] = useState<number | null>(null);
+  const [editAnswerDraft, setEditAnswerDraft] = useState("");
+  const [answersChangedAfterGenerate, setAnswersChangedAfterGenerate] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -80,6 +88,10 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
     const draft = loadStoryDraft();
     if (draft?.interviewHistory.length) {
       setHistory(draft.interviewHistory);
+      const interviewerTurns = draft.interviewHistory.filter((m) => m.role === "interviewer").length;
+      if (interviewerTurns > BASE_QUESTIONS) {
+        setExtraQuestionBlocks(1);
+      }
       interviewStartRef.current = true;
       if (draft.interviewReviewText) {
         setReviewText(draft.interviewReviewText);
@@ -103,8 +115,15 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   }, [draftReady, history, phase, reviewText]);
 
   const questionCount = history.filter((m) => m.role === "interviewer").length;
-  const atLimit = questionCount >= MAX_QUESTIONS;
+  const questionCap = BASE_QUESTIONS + extraQuestionBlocks * EXTRA_QUESTION_BLOCK;
+  const atLimit = questionCount >= questionCap;
   const lastTurn = history.length > 0 ? history[history.length - 1] : null;
+  const awaitingExtensionChoice =
+    phase === "interviewing" &&
+    !isStreaming &&
+    extraQuestionBlocks === 0 &&
+    questionCount >= BASE_QUESTIONS &&
+    lastTurn?.role === "user";
   /** User answered but the next interviewer turn never arrived (failed fetch or refresh cleared error). */
   const awaitingInterviewerReply =
     phase === "interviewing" && !isStreaming && lastTurn?.role === "user";
@@ -163,6 +182,7 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
             setStreamingText(accumulated);
             scrollBottom();
           },
+          { extraQuestionBlocks },
         );
 
         const questionText = accumulated.trim();
@@ -179,8 +199,17 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
         setHistory(nextHistory);
         setStreamingText("");
 
-        if (result.complete || atLimit) {
+        const interviewerAfter = nextHistory.filter((m) => m.role === "interviewer").length;
+        const capAfter =
+          BASE_QUESTIONS + extraQuestionBlocks * EXTRA_QUESTION_BLOCK;
+        if (result.complete) {
           setPhase("complete");
+        } else if (interviewerAfter >= capAfter) {
+          if (extraQuestionBlocks === 0 && interviewerAfter >= BASE_QUESTIONS) {
+            // Pause for +5 choice instead of auto-completing at 15.
+          } else {
+            setPhase("complete");
+          }
         }
       } catch (err: unknown) {
         const e = err as Error & { code?: string };
@@ -200,8 +229,14 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
         inputRef.current?.focus();
       }
     },
-    [token, atLimit, scrollBottom],
+    [token, extraQuestionBlocks, scrollBottom],
   );
+
+  const acceptExtraQuestions = useCallback(() => {
+    setExtraQuestionBlocks(1);
+    setError(null);
+    void fireNextQuestion(history);
+  }, [history, fireNextQuestion]);
 
   const resumeInterviewerQuestion = useCallback(() => {
     setError(null);
@@ -225,12 +260,28 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
     setHistory(nextHistory);
     setInput("");
 
-    if (nextHistory.filter((m) => m.role === "interviewer").length < MAX_QUESTIONS) {
+    const interviewerTurns = nextHistory.filter((m) => m.role === "interviewer").length;
+    if (
+      interviewerTurns >= BASE_QUESTIONS &&
+      extraQuestionBlocks === 0 &&
+      interviewerTurns >= questionCap
+    ) {
+      return;
+    }
+    if (interviewerTurns < questionCap) {
       await fireNextQuestion(nextHistory);
     } else {
       setPhase("complete");
     }
-  }, [input, isStreaming, phase, history, fireNextQuestion]);
+  }, [
+    input,
+    isStreaming,
+    phase,
+    history,
+    fireNextQuestion,
+    extraQuestionBlocks,
+    questionCap,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -242,9 +293,43 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
     [handleSend],
   );
 
+  const answersEditable =
+    !isStreaming && phase !== "generating" && phase !== "credit-disclosure";
+
+  const beginEditAnswer = useCallback(
+    (index: number) => {
+      const msg = history[index];
+      if (msg?.role !== "user" || !answersEditable) return;
+      setEditingAnswerIndex(index);
+      setEditAnswerDraft(msg.text);
+    },
+    [history, answersEditable],
+  );
+
+  const commitEditAnswer = useCallback(() => {
+    if (editingAnswerIndex === null) return;
+    const trimmed = editAnswerDraft.trim();
+    if (!trimmed) return;
+    setHistory((prev) => {
+      const next = [...prev];
+      if (next[editingAnswerIndex]?.role !== "user") return prev;
+      next[editingAnswerIndex] = { role: "user", text: trimmed };
+      return next;
+    });
+    if (phase === "done") setAnswersChangedAfterGenerate(true);
+    setEditingAnswerIndex(null);
+    setEditAnswerDraft("");
+  }, [editAnswerDraft, editingAnswerIndex, phase]);
+
+  const cancelEditAnswer = useCallback(() => {
+    setEditingAnswerIndex(null);
+    setEditAnswerDraft("");
+  }, []);
+
   const handleGenerate = useCallback(async () => {
     setPhase("generating");
     setError(null);
+    setAnswersChangedAfterGenerate(false);
     try {
       const result = await submitInterview(history, token);
       const text = result.resume_text ?? "";
@@ -301,7 +386,8 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
           Coached Interview
         </div>
         <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-          The AI will ask you up to {MAX_QUESTIONS} structured career questions and follow up when
+          The AI will ask you up to {BASE_QUESTIONS} structured career questions (you can add{" "}
+          {EXTRA_QUESTION_BLOCK} more later) and follow up when
           answers lack specific metrics. Your answers are compiled into a resume at the end.
         </p>
         <p className="text-slate-700 dark:text-slate-300">
@@ -361,6 +447,35 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
           attestationChecked={attestationChecked}
           onAttestationChange={setAttestationChecked}
         />
+        <details className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40 px-4 py-3 text-sm">
+          <summary className="cursor-pointer font-medium text-slate-700 dark:text-slate-300">
+            Your interview answers (editable)
+          </summary>
+          <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+            Fix a typo or add detail here. Regenerate the resume draft below if you change answers.
+          </p>
+          <div className="mt-3 space-y-3 max-h-64 overflow-y-auto pr-1">
+            <InterviewHistoryList
+              history={history}
+              editable={answersEditable}
+              editingAnswerIndex={editingAnswerIndex}
+              editAnswerDraft={editAnswerDraft}
+              onBeginEdit={beginEditAnswer}
+              onEditDraftChange={setEditAnswerDraft}
+              onCommitEdit={commitEditAnswer}
+              onCancelEdit={cancelEditAnswer}
+            />
+          </div>
+          {answersChangedAfterGenerate && (
+            <button
+              type="button"
+              onClick={() => void handleGenerate()}
+              className="mt-3 w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2.5 transition-colors"
+            >
+              Regenerate resume from updated answers
+            </button>
+          )}
+        </details>
         <textarea
           value={reviewText}
           onChange={(e) => {
@@ -414,7 +529,7 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
           Coached Interview
           {questionCount > 0 && (
             <span className="text-xs text-slate-600 dark:text-slate-400 font-normal ml-1">
-              Question {questionCount} of up to {MAX_QUESTIONS}
+              Question {questionCount} of up to {questionCap}
             </span>
           )}
         </div>
@@ -434,31 +549,23 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
         <div className="h-1 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
           <div
             className="h-full rounded-full bg-indigo-500 transition-all"
-            style={{ width: `${Math.min((questionCount / MAX_QUESTIONS) * 100, 100)}%` }}
+            style={{ width: `${Math.min((questionCount / questionCap) * 100, 100)}%` }}
           />
         </div>
       )}
 
       {/* Conversation thread */}
       <div className="space-y-3 max-h-80 overflow-y-auto pr-1 scroll-smooth">
-        {history.map((msg, i) => (
-          <div
-            key={i}
-            className={cn(
-              "rounded-xl px-4 py-3 text-sm leading-relaxed",
-              msg.role === "interviewer"
-                ? "bg-slate-100/70 dark:bg-slate-800/70 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700/50"
-                : "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-900 dark:text-indigo-100 ml-6 border border-indigo-200 dark:border-indigo-800/30",
-            )}
-          >
-            {msg.role === "interviewer" && (
-              <p className="text-xs text-indigo-700 dark:text-indigo-400 font-medium mb-1 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> Interviewer
-              </p>
-            )}
-            {msg.text}
-          </div>
-        ))}
+        <InterviewHistoryList
+          history={history}
+          editable={answersEditable}
+          editingAnswerIndex={editingAnswerIndex}
+          editAnswerDraft={editAnswerDraft}
+          onBeginEdit={beginEditAnswer}
+          onEditDraftChange={setEditAnswerDraft}
+          onCommitEdit={commitEditAnswer}
+          onCancelEdit={cancelEditAnswer}
+        />
 
         {/* Live streaming question */}
         {isStreaming && (
@@ -485,6 +592,9 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
       {/* Complete state */}
       {phase === "complete" && !isStreaming && (
         <div className="space-y-3">
+          <p className="text-xs text-slate-600 dark:text-slate-400 px-1">
+            Scroll up to edit any answer before you generate.
+          </p>
           <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 text-sm font-medium bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-500/20 rounded-xl px-4 py-3">
             <CheckCircle className="w-4 h-4 shrink-0" />
             All questions answered — ready to generate your resume!
@@ -515,8 +625,31 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
         </div>
       )}
 
+      {awaitingExtensionChoice && (
+        <div className="space-y-3 rounded-xl border border-indigo-500/30 bg-indigo-50 dark:bg-indigo-950/20 px-4 py-4">
+          <p className="text-sm text-slate-800 dark:text-slate-200">
+            You&apos;ve answered {BASE_QUESTIONS} questions. Add {EXTRA_QUESTION_BLOCK} more for
+            extra detail, or generate your resume now.
+          </p>
+          <button
+            type="button"
+            onClick={acceptExtraQuestions}
+            className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2.5 text-sm font-medium transition-colors"
+          >
+            Add {EXTRA_QUESTION_BLOCK} more questions
+          </button>
+          <button
+            type="button"
+            onClick={() => setPhase("complete")}
+            className="w-full text-xs text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-300 transition-colors py-1"
+          >
+            I&apos;m done — generate resume now
+          </button>
+        </div>
+      )}
+
       {/* Input area — shown during interview */}
-      {phase === "interviewing" && !atLimit && (
+      {phase === "interviewing" && !atLimit && !awaitingExtensionChoice && (
         <div className="space-y-2">
           {(error || awaitingInterviewerReply) && !isStreaming && (
             <div
@@ -605,5 +738,90 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+interface InterviewHistoryListProps {
+  history: InterviewMessage[];
+  editable: boolean;
+  editingAnswerIndex: number | null;
+  editAnswerDraft: string;
+  onBeginEdit: (index: number) => void;
+  onEditDraftChange: (text: string) => void;
+  onCommitEdit: () => void;
+  onCancelEdit: () => void;
+}
+
+function InterviewHistoryList({
+  history,
+  editable,
+  editingAnswerIndex,
+  editAnswerDraft,
+  onBeginEdit,
+  onEditDraftChange,
+  onCommitEdit,
+  onCancelEdit,
+}: InterviewHistoryListProps) {
+  return (
+    <>
+      {history.map((msg, i) => (
+        <div
+          key={i}
+          className={cn(
+            "rounded-xl px-4 py-3 text-sm leading-relaxed",
+            msg.role === "interviewer"
+              ? "bg-slate-100/70 dark:bg-slate-800/70 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700/50"
+              : "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-900 dark:text-indigo-100 ml-6 border border-indigo-200 dark:border-indigo-800/30",
+          )}
+        >
+          {msg.role === "interviewer" && (
+            <p className="text-xs text-indigo-700 dark:text-indigo-400 font-medium mb-1 flex items-center gap-1">
+              <Sparkles className="w-3 h-3" /> Interviewer
+            </p>
+          )}
+          {msg.role === "user" && editingAnswerIndex === i ? (
+            <div className="space-y-2">
+              <textarea
+                rows={4}
+                value={editAnswerDraft}
+                onChange={(e) => onEditDraftChange(e.target.value)}
+                className="w-full rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onCommitEdit}
+                  disabled={!editAnswerDraft.trim()}
+                  className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-medium px-3 py-1.5"
+                >
+                  Save answer
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancelEdit}
+                  className="rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-xs px-3 py-1.5"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {msg.text}
+              {msg.role === "user" && editable && (
+                <button
+                  type="button"
+                  onClick={() => onBeginEdit(i)}
+                  className="mt-2 flex items-center gap-1 text-xs text-indigo-800 dark:text-indigo-300 hover:text-indigo-950 dark:hover:text-indigo-100 font-medium"
+                >
+                  <Pencil className="w-3 h-3" />
+                  Edit answer
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      ))}
+    </>
   );
 }

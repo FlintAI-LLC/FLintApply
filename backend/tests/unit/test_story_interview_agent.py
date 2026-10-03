@@ -6,7 +6,7 @@ from typing import AsyncIterator
 
 import pytest
 
-from app.agent.story_interview import next_interview_question
+from app.agent.story_interview import next_interview_question, resolve_interview_question_cap
 from app.llm.base import LLMClient, LLMMessage, LLMResponse
 
 
@@ -63,3 +63,9 @@ async def test_next_interview_question_retries_empty_stream() -> None:
         parts.append(delta)
     assert "".join(parts) == "What metric improved next?"
     assert client._call == 2
+
+
+def test_resolve_interview_question_cap() -> None:
+    assert resolve_interview_question_cap(0) == 15
+    assert resolve_interview_question_cap(1) == 20
+    assert resolve_interview_question_cap(99) == 20

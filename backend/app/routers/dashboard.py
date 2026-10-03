@@ -15,7 +15,7 @@ from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.engine import get_db
-from app.limiter import limiter
+from app.limiter import authenticated_user_rate_limit_key, limiter
 from app.models.billing import CreditKind, Subscription, SubscriptionStatus
 from app.models.dashboard import (
     AtsScoreHistory,
@@ -314,7 +314,7 @@ async def dashboard_summary(
 
 
 @router.get("/api/resumes")
-@limiter.limit("120/minute")
+@limiter.limit("300/minute", key_func=authenticated_user_rate_limit_key)
 async def list_resumes(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],

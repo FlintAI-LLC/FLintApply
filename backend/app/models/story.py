@@ -50,14 +50,22 @@ class InterviewNextRequest(BaseModel):
         default=None,
         description="Optional session ID for audit / credit-dedup.",
     )
+    extra_question_blocks: int = Field(
+        default=0,
+        ge=0,
+        le=1,
+        description="0 = 15-question cap; 1 = user opted into +5 more (20 total).",
+    )
 
     @model_validator(mode="after")
     def validate_question_count(self) -> "InterviewNextRequest":
-        from app.agent.story_interview import MAX_QUESTIONS
+        from app.agent.story_interview import resolve_interview_question_cap
+
+        cap = resolve_interview_question_cap(self.extra_question_blocks)
         interviewer_turns = sum(1 for m in self.history if m.role == "interviewer")
-        if interviewer_turns >= MAX_QUESTIONS:
+        if interviewer_turns >= cap:
             raise ValueError(
-                f"Maximum {MAX_QUESTIONS} interview questions reached. "
+                f"Maximum {cap} interview questions reached. "
                 "Submit your answers to generate the resume."
             )
         return self

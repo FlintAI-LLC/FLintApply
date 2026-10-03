@@ -133,13 +133,28 @@ export async function loginUser(
 
 // ── Me ────────────────────────────────────────────────────────────────────────
 
+let inflightFetchMe: Promise<BackendUser> | null = null
+let inflightFetchMeToken: string | null = null
+
 export async function fetchMe(accessToken: string): Promise<BackendUser> {
-  const res = await fetch(`${BASE}/api/auth/me`, {
-    headers: authHeaders(accessToken),
-    credentials: "include",
-  })
-  if (!res.ok) throw new Error(await parseError(res))
-  return res.json()
+  if (inflightFetchMe && inflightFetchMeToken === accessToken) {
+    return inflightFetchMe
+  }
+  inflightFetchMeToken = accessToken
+  inflightFetchMe = (async () => {
+    const res = await fetch(`${BASE}/api/auth/me`, {
+      headers: authHeaders(accessToken),
+      credentials: "include",
+    })
+    if (!res.ok) throw new Error(await parseError(res))
+    return res.json() as Promise<BackendUser>
+  })()
+  try {
+    return await inflightFetchMe
+  } finally {
+    inflightFetchMe = null
+    inflightFetchMeToken = null
+  }
 }
 
 export interface OnboardingPatchPayload {

@@ -20,7 +20,7 @@ export function EmailVerificationBanner() {
     void fetchMe(token)
       .then((user) => update({ backendUser: user }))
       .catch(() => {
-        syncedRef.current = false
+        // Do not clear syncedRef on 429/transient errors — that caused a /me request storm.
       })
   }, [status, token, update])
 
