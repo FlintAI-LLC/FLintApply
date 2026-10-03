@@ -169,8 +169,21 @@ export function StoryRecorder({ token, onSaved }: Props) {
 
   const finishAndSave = useCallback(() => {
     clearStoryDraft();
+    setStoryMode(null);
+    setSegments([]);
+    setTotalMs(0);
+    setReviewText(null);
+    setVerifyItems([]);
+    setVerifyReviewCount(0);
+    setAttestationChecked(false);
+    setSaveDialogOpen(false);
+    setGenerateConfirmOpen(false);
+    setHasGeneratedOnce(false);
+    setPrevText(null);
+    setOpenCoachIndex(null);
+    clearErrors();
     onSaved();
-  }, [onSaved]);
+  }, [onSaved, clearErrors]);
 
   const markCoachSessionUnlocked = useCallback(() => {
     if (!storyBuildSessionId) return;

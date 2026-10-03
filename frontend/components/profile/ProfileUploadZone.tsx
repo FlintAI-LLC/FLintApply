@@ -43,9 +43,13 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
 
   const finishSubmit = useCallback(() => {
     setPasteText("")
-    setSuccessMessage("Master resume saved. Your chunks below are updated.")
+    setSuccessMessage(
+      existingChunkCount > 0
+        ? "New content merged into your master resume. Check the chunk list below for updates."
+        : "Master resume saved. Your chunks below are updated.",
+    )
     if (fileInputRef.current) fileInputRef.current.value = ""
-  }, [])
+  }, [existingChunkCount])
 
   const runReplace = useCallback(
     async (payload: { file?: File; text?: string }) => {
@@ -167,10 +171,11 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
       </div>
 
       {hasExistingMaster && (
-        <div className="rounded-xl border border-amber-500/35 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
-          You already have a master resume indexed ({existingChunkCount} chunk
-          {existingChunkCount === 1 ? "" : "s"}). Upload, paste, or saving from Tell your story{" "}
-          <strong>replaces</strong> it entirely — nothing merges. Story credits already spent are not refunded.
+        <div className="rounded-xl border border-emerald-500/35 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 text-sm text-emerald-950 dark:text-emerald-100">
+          <strong>{existingChunkCount}</strong> chunk{existingChunkCount === 1 ? "" : "s"} indexed. Use{" "}
+          <strong>Upload file</strong> or <strong>Paste text</strong> to add more career material (merged and
+          deduped). Saving again from <strong>Tell your story</strong> replaces the whole master resume with that
+          draft.
         </div>
       )}
 
@@ -236,7 +241,7 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
               {loading
                 ? "Processing…"
                 : hasExistingMaster
-                  ? "Replace master resume…"
+                  ? "Add to master resume…"
                   : "Save master resume"}
             </button>
           </div>
@@ -267,10 +272,10 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
         </div>
       )}
 
-      {compact && mode === "upload" && !hasExistingMaster && (
+      {compact && mode === "upload" && hasExistingMaster && (
         <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
           <FileText className="w-3.5 h-3.5" />
-          Replacing your master resume re-chunks and re-embeds all sections.
+          Uploads merge into your existing chunks (duplicates skipped).
         </p>
       )}
 

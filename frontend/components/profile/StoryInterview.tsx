@@ -86,6 +86,7 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const interviewStartRef = useRef(false);
+  const skipDraftPersistRef = useRef(false);
 
   useEffect(() => {
     const draft = loadStoryDraft();
@@ -109,7 +110,7 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!draftReady) return;
+    if (!draftReady || skipDraftPersistRef.current) return;
     patchStoryDraft({
       interviewHistory: sanitizeInterviewHistory(history),
       interviewPhase: phase === "generating" ? "complete" : phase === "credit-disclosure" ? null : phase,
@@ -367,6 +368,7 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
         segments: userSegments,
         attestationConfirmed: true,
       });
+      skipDraftPersistRef.current = true;
       clearStoryDraft();
       setSaveDialogOpen(false);
       onSaved();
