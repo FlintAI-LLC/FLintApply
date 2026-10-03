@@ -1,6 +1,7 @@
 "use client"
 
 import { usePathname } from "next/navigation"
+import { HomeAuthRedirect } from "@/components/nav/HomeAuthRedirect"
 import { NavBar } from "@/components/nav/NavBar"
 import { EmailVerificationBanner } from "@/components/nav/EmailVerificationBanner"
 import { SiteFooter } from "@/components/nav/SiteFooter"
@@ -19,6 +20,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     <>
       {showPublicChrome && (
         <>
+          <HomeAuthRedirect />
           <NavBar />
           <EmailVerificationBanner />
         </>

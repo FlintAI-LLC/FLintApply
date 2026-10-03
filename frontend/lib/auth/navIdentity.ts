@@ -1,15 +1,30 @@
+import { needsBackendAccessRefresh } from "@/lib/auth/accessToken"
+
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated"
 
+type NavSession = {
+  backendAccessToken?: string
+  backendExpiresAt?: number
+  backendUser?: unknown
+  error?: string
+} | null | undefined
+
 /**
- * Header identity follows the NextAuth session, not the embedded API token,
- * which is cleared and restored during rotation and must not flip the menu.
- * The session is accepted (and only checked for presence) so callers cannot
- * accidentally couple the menu to its token fields.
+ * App chrome (Dashboard / credits / user menu) requires a FlintApply backend
+ * session — not a bare OAuth NextAuth shell. That prevents marketing `/` from
+ * showing the logged-in nav after sign-out while Google profile data lingers.
+ * During token rotation, ``backendUser`` (and TokenExpired) keep the menu up
+ * while ``backendAccessToken`` is briefly cleared.
  */
 export function shouldShowUserMenu(
   status: AuthStatus,
-  session: object | null | undefined,
+  session: NavSession,
   sessionDead: boolean,
 ): boolean {
-  return status === "authenticated" && session != null && !sessionDead
+  if (status !== "authenticated" || session == null || sessionDead) return false
+  if (session.backendUser != null) return true
+  if (session.backendAccessToken) return true
+  if (session.error === "TokenExpired") return true
+  if (needsBackendAccessRefresh(session)) return true
+  return false
 }

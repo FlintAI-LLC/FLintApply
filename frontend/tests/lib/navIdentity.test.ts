@@ -6,16 +6,24 @@ import { shouldShowUserMenu } from "@/lib/auth/navIdentity"
 
 describe("shouldShowUserMenu", () => {
   it("stays visible while the embedded API token is cleared and restored", () => {
+    const backendUser = { id: "user-1", email: "a@example.com" }
     const rotation = [
-      { backendAccessToken: "old" },
-      { backendAccessToken: undefined, error: "TokenExpired" },
-      { backendAccessToken: undefined },
-      { backendAccessToken: "new" },
+      { backendAccessToken: "old", backendUser },
+      { backendAccessToken: undefined, error: "TokenExpired", backendUser },
+      { backendAccessToken: undefined, backendUser },
+      { backendAccessToken: "new", backendUser },
     ]
 
     for (const session of rotation) {
       assert.equal(shouldShowUserMenu("authenticated", session, false), true)
     }
+  })
+
+  it("hides the menu for OAuth-only session without backend user", () => {
+    assert.equal(
+      shouldShowUserMenu("authenticated", { user: { name: "OAuth" } }, false),
+      false,
+    )
   })
 
   it("hides the menu when signed out, loading, without a session, or dead", () => {

@@ -62,13 +62,13 @@ export default auth(async function proxy(req) {
   }
 
   // NextAuth JSON endpoints must never be redirected to HTML pages.
-  // /api/auth/signout is the one that broke logout during onboarding:
-  // proxy sent it to /onboarding, the client parsed "<!DOCTYPE" as JSON,
-  // and the session cookie stayed put.
-  if (
-    pathname.startsWith("/api/") &&
-    !pathname.startsWith("/api/auth/signin")
-  ) {
+  // Incomplete-onboarding redirects on /api/auth/signin/google made the
+  // client fetch onboarding HTML and throw "Unexpected token '<'".
+  if (pathname.startsWith("/api/auth/")) {
+    return nextWithContentSecurityPolicy(req, nonce)
+  }
+
+  if (pathname.startsWith("/api/")) {
     return nextWithContentSecurityPolicy(req, nonce)
   }
 

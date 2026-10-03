@@ -100,6 +100,7 @@ export function NavBar() {
 
   async function handleLogout() {
     setDropdownOpen(false)
+    setHadUserMenu(false)
     try {
       if (session?.backendAccessToken) {
         await logoutUser(session.backendAccessToken)
