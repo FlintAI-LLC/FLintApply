@@ -106,6 +106,7 @@ def _detect_role_conflicts(
             new_roles.append((company.lower(), title))
 
     conflicts: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
     for chunk in existing_chunks:
         if chunk.section_type != MasterResumeSectionType.experience:
             continue
@@ -116,6 +117,10 @@ def _detect_role_conflicts(
             continue
         for new_company, new_title in new_roles:
             if new_company == company.lower() and new_title.lower() != title.lower():
+                key = (company.lower(), title.lower(), new_title.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
                 conflicts.append(
                     {
                         "company": company,

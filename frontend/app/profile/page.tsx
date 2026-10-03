@@ -23,6 +23,7 @@ import {
   SECTION_ORDER,
   uploadProfileResume,
   countDistinctSourceDocs,
+  dedupeResumeRoleConflicts,
   type ProfileChunk,
   type ProfileResume,
   type ResumeRoleConflict,
@@ -138,7 +139,7 @@ function ProfilePageContent() {
       const result = await uploadProfileResume(token, payload)
       setProfile(result)
       if (result.conflicts?.length) {
-        setUploadConflicts(result.conflicts)
+        setUploadConflicts(dedupeResumeRoleConflicts(result.conflicts))
       }
       const chunkRows = await getProfileChunks(token)
       setChunks(chunkRows)
@@ -244,9 +245,13 @@ function ProfilePageContent() {
               data-testid="profile-upload-conflicts"
             >
               <p className="font-medium mb-1">Title mismatch detected (upload still saved)</p>
+              <p className="text-xs mb-2 opacity-90">
+                FlintApply keeps both versions in your chunks. Tailoring picks relevant bullets — you only
+                need to edit chunks if a title is wrong for job applications.
+              </p>
               <ul className="list-disc pl-5 space-y-0.5">
                 {uploadConflicts.map((c) => (
-                  <li key={`${c.company}-${c.new}`}>
+                  <li key={`${c.company}-${c.existing}-${c.new}`}>
                     {c.company}: existing “{c.existing}” vs new “{c.new}”
                   </li>
                 ))}
@@ -261,6 +266,7 @@ function ProfilePageContent() {
               loading={uploading}
               compact={liveCount > 0}
               existingChunkCount={liveCount}
+              sourceUploadCount={sourceDocCount}
               defaultStory={defaultStory}
               onStoryComplete={() => {
                 if (returnUrl) {

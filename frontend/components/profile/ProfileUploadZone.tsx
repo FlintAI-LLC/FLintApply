@@ -6,6 +6,10 @@ import { cn } from "@/lib/utils"
 import { StoryRecorder } from "@/components/profile/StoryRecorder"
 import { MasterResumeReplaceDialog } from "@/components/profile/MasterResumeReplaceDialog"
 import { hasMeaningfulStoryDraft, loadStoryDraft } from "@/lib/storyDraft"
+import {
+  MASTER_CHUNK_RICH_THRESHOLD,
+  MAX_MASTER_SOURCE_UPLOADS,
+} from "@/lib/profile"
 
 interface Props {
   onSubmit: (payload: { file?: File; text?: string }) => Promise<void>
@@ -14,6 +18,8 @@ interface Props {
   compact?: boolean
   /** Live chunks already on profile — upload/paste replaces them entirely. */
   existingChunkCount?: number
+  /** Distinct merge uploads (POST /resume), max {MAX_MASTER_SOURCE_UPLOADS}. */
+  sourceUploadCount?: number
   defaultStory?: boolean
   onStoryComplete?: () => void
 }
@@ -26,7 +32,16 @@ const TABS: { id: Mode; label: string }[] = [
   { id: "paste",  label: "Paste text" },
 ]
 
-export function ProfileUploadZone({ onSubmit, token, loading, compact = false, existingChunkCount = 0, defaultStory = false, onStoryComplete }: Props) {
+export function ProfileUploadZone({
+  onSubmit,
+  token,
+  loading,
+  compact = false,
+  existingChunkCount = 0,
+  sourceUploadCount = 0,
+  defaultStory = false,
+  onStoryComplete,
+}: Props) {
   const [mode, setMode]       = useState<Mode>(defaultStory ? "story" : "upload")
   const [dragging, setDragging] = useState(false)
   const [error, setError]     = useState<string | null>(null)
@@ -40,6 +55,8 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
   >(null)
 
   const hasExistingMaster = existingChunkCount > 0
+  const atSourceUploadLimit = sourceUploadCount >= MAX_MASTER_SOURCE_UPLOADS
+  const profileIsRich = existingChunkCount >= MASTER_CHUNK_RICH_THRESHOLD
 
   const finishSubmit = useCallback(() => {
     setPasteText("")
@@ -74,6 +91,12 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
   const requestReplace = useCallback(
     (next: { kind: "file"; file: File } | { kind: "paste" }) => {
       if (loading || submitting) return
+      if (atSourceUploadLimit) {
+        setError(
+          `You have reached the limit of ${MAX_MASTER_SOURCE_UPLOADS} merged file/paste uploads. Edit chunks below, or save a new draft from Tell your story to replace everything.`,
+        )
+        return
+      }
       setSuccessMessage(null)
       if (!hasExistingMaster) {
         if (next.kind === "file") void runReplace({ file: next.file })
@@ -83,7 +106,7 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
       setPendingReplace(next)
       setReplaceDialogOpen(true)
     },
-    [hasExistingMaster, runReplace, pasteText, loading, submitting],
+    [atSourceUploadLimit, hasExistingMaster, runReplace, pasteText, loading, submitting],
   )
 
   useEffect(() => {
@@ -170,12 +193,27 @@ export function ProfileUploadZone({ onSubmit, token, loading, compact = false, e
         ))}
       </div>
 
-      {hasExistingMaster && (
+      {hasExistingMaster && atSourceUploadLimit && (
+        <div className="rounded-xl border border-amber-500/35 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
+          <strong>{existingChunkCount}</strong> chunks indexed ·{" "}
+          <strong>{sourceUploadCount}/{MAX_MASTER_SOURCE_UPLOADS}</strong> merge uploads used. You cannot add
+          another file or paste merge — edit chunks below, or use <strong>Tell your story</strong> to replace the
+          full master resume.
+        </div>
+      )}
+      {hasExistingMaster && !atSourceUploadLimit && profileIsRich && (
+        <div className="rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 px-4 py-3 text-sm text-slate-800 dark:text-slate-200">
+          <strong>{existingChunkCount}</strong> chunks indexed — your profile is already detailed. Add another
+          upload only if something is missing ({sourceUploadCount}/{MAX_MASTER_SOURCE_UPLOADS} merges used).
+          Otherwise edit chunks below. <strong>Tell your story → Save</strong> still replaces everything.
+        </div>
+      )}
+      {hasExistingMaster && !atSourceUploadLimit && !profileIsRich && (
         <div className="rounded-xl border border-emerald-500/35 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 text-sm text-emerald-950 dark:text-emerald-100">
-          <strong>{existingChunkCount}</strong> chunk{existingChunkCount === 1 ? "" : "s"} indexed. Use{" "}
-          <strong>Upload file</strong> or <strong>Paste text</strong> to add more career material (merged and
-          deduped). Saving again from <strong>Tell your story</strong> replaces the whole master resume with that
-          draft.
+          <strong>{existingChunkCount}</strong> chunk{existingChunkCount === 1 ? "" : "s"} indexed (
+          {sourceUploadCount}/{MAX_MASTER_SOURCE_UPLOADS} merges). Use <strong>Upload file</strong> or{" "}
+          <strong>Paste text</strong> to add more (deduped). <strong>Tell your story → Save</strong> replaces the
+          whole master resume.
         </div>
       )}
 

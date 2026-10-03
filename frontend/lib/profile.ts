@@ -60,12 +60,32 @@ export interface ProfileUploadResponse extends ProfileResume {
   conflicts?: ResumeRoleConflict[]
 }
 
+/** Keep in sync with ``MAX_SOURCE_RESUMES`` in backend master_resume/crud.py */
+export const MAX_MASTER_SOURCE_UPLOADS = 5
+
+/** Above this, UI nudges edit-in-place over more uploads (retrieval still works). */
+export const MASTER_CHUNK_RICH_THRESHOLD = 120
+
 export function countDistinctSourceDocs(chunks: ProfileChunk[]): number {
   const ids = new Set<string>()
   for (const c of chunks) {
     if (c.source_doc_id) ids.add(c.source_doc_id)
   }
   return ids.size
+}
+
+export function dedupeResumeRoleConflicts(
+  conflicts: ResumeRoleConflict[],
+): ResumeRoleConflict[] {
+  const seen = new Set<string>()
+  const out: ResumeRoleConflict[] = []
+  for (const c of conflicts) {
+    const key = `${c.company.toLowerCase()}|${c.existing.toLowerCase()}|${c.new.toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(c)
+  }
+  return out
 }
 
 // ── Section display ──────────────────────────────────────────────────────────
