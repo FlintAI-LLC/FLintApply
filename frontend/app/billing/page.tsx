@@ -51,6 +51,7 @@ const FEATURE_LABELS: Record<string, string> = {
   job_search: "Job search (Hirebase)",
   master_resume: "Master resume profile",
   ats_guidance: "ATS score & guidance panel",
+  story_segment_coach: "Coach me on each segment (up to 3 questions)",
 }
 
 // ── Plan display config ────────────────────────────────────────────────────
@@ -91,6 +92,9 @@ function planAllowances(plan: BillingPlan): string[] {
       ? "Whisper voice transcription (fair use)"
       : `${limits.whisper_uses_per_period} Whisper voice transcriptions / ${period}`,
   )
+  if (plan.code !== "free") {
+    lines.push("Coach me on each segment (up to 3 questions per segment)")
+  }
   return lines
 }
 

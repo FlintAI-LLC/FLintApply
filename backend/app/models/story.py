@@ -11,11 +11,19 @@ class CoachMessage(BaseModel):
 
 
 class CoachRequest(BaseModel):
+    coach_mode: Literal["segment", "whole_story"] = Field(
+        default="segment",
+        description="segment = per-segment Q&A (subscribers); whole_story = one feedback pass (free/credit).",
+    )
     segment_text: str = Field(
-        ...,
-        min_length=10,
+        default="",
         max_length=5000,
-        description="Transcript of the segment being coached.",
+        description="Transcript of the segment being coached (segment mode).",
+    )
+    segments: list[str] = Field(
+        default_factory=list,
+        max_length=30,
+        description="All story segments for whole_story mode.",
     )
     history: list[CoachMessage] = Field(
         default_factory=list,
@@ -28,6 +36,16 @@ class CoachRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_exchange_count(self) -> "CoachRequest":
+        if self.coach_mode == "whole_story":
+            if self.history:
+                raise ValueError("whole_story coach does not support conversation history.")
+            total_chars = sum(len((s or "").strip()) for s in self.segments)
+            if total_chars < 10:
+                raise ValueError("At least one non-empty story segment is required.")
+            return self
+
+        if len(self.segment_text.strip()) < 10:
+            raise ValueError("segment_text must be at least 10 characters.")
         coach_turns = sum(1 for m in self.history if m.role == "coach")
         if coach_turns > 3:
             raise ValueError("Maximum 3 coaching exchanges per segment session.")
