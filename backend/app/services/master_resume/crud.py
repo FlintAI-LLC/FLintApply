@@ -51,6 +51,34 @@ MAX_SOURCE_RESUMES = 5
 _COSINE_DEDUP_THRESHOLD = 0.92
 
 
+def _merge_fingerprint(
+    section_type: MasterResumeSectionType,
+    content: str,
+    metadata: dict[str, Any] | None,
+) -> str | None:
+    """Stable key for project/education rows when text differs slightly across uploads."""
+    meta = metadata or {}
+    if section_type == MasterResumeSectionType.project:
+        for key in ("title", "name"):
+            value = meta.get(key)
+            if isinstance(value, str) and value.strip():
+                return f"project:{_normalize_chunk_text(value)[:96]}"
+        first_line = (content or "").split("\n", 1)[0].strip()
+        if first_line:
+            return f"project:{_normalize_chunk_text(first_line)[:96]}"
+        return None
+    if section_type == MasterResumeSectionType.education:
+        for key in ("institution", "school"):
+            value = meta.get(key)
+            if isinstance(value, str) and value.strip():
+                return f"edu:{_normalize_chunk_text(value)[:96]}"
+        head = (content or "").split("—", 1)[0].strip()
+        if head:
+            return f"edu:{_normalize_chunk_text(head)[:96]}"
+        return None
+    return None
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -161,6 +189,11 @@ async def merge_upload_chunks(
         for c in existing
         if c.content
     }
+    merge_fingerprints: set[str] = set()
+    for row in existing:
+        fp = _merge_fingerprint(row.section_type, row.content, row.chunk_metadata)
+        if fp:
+            merge_fingerprints.add(fp)
 
     to_insert: list[Chunk] = []
     section_vectors: dict[MasterResumeSectionType, list[tuple[MasterResumeChunk, list[float]]]] = {}
@@ -185,6 +218,9 @@ async def merge_upload_chunks(
         norm = _normalize_chunk_text(chunk.content)
         if norm in normalized_existing:
             continue
+        fp = _merge_fingerprint(chunk.section_type, chunk.content, chunk.metadata)
+        if fp and fp in merge_fingerprints:
+            continue
         best = 0.0
         for _row, existing_vec in section_vectors.get(chunk.section_type, []):
             sim = _cosine_vectors(vector, existing_vec)
@@ -193,6 +229,8 @@ async def merge_upload_chunks(
             continue
         to_insert.append(chunk)
         normalized_existing.add(norm)
+        if fp:
+            merge_fingerprints.add(fp)
 
     source_doc_id: uuid.UUID | None = None
     if to_insert:
