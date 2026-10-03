@@ -464,9 +464,23 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
 
       {/* Error */}
       {error && (
-        <p className="text-red-700 dark:text-red-400 text-xs rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-500/20 px-3 py-2">
-          {error}
-        </p>
+        <div className="space-y-2">
+          <p className="text-red-700 dark:text-red-400 text-xs rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-500/20 px-3 py-2">
+            {error}
+          </p>
+          {phase === "interviewing" && !isStreaming && (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                void fireNextQuestion(history);
+              }}
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-sm py-2 hover:border-indigo-400 transition-colors"
+            >
+              Retry last question
+            </button>
+          )}
+        </div>
       )}
 
       {/* Complete state */}

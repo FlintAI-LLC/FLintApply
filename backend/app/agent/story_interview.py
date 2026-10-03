@@ -66,9 +66,19 @@ async def next_interview_question(
     ]
 
     accumulated = ""
-    async for delta in llm_client.stream(messages, max_tokens=60):
-        accumulated += delta
-        yield delta
+    for attempt in range(2):
+        attempt_text = ""
+        async for delta in llm_client.stream(messages, max_tokens=128):
+            attempt_text += delta
+            yield delta
+        accumulated = attempt_text
+        if accumulated.strip():
+            break
+        log.warning(
+            "story_interview.empty_response",
+            question_n=question_n,
+            attempt=attempt + 1,
+        )
 
     is_done = accumulated.strip() == _COMPLETE_SENTINEL
     log.info(
