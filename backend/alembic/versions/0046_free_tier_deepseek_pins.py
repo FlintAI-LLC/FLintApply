@@ -9,6 +9,12 @@ tone_lint, title_fit_insights) and global-only steps (company_intel) are
 excluded — they cannot have tier-level pins per model_registry.py rules.
 
 Safe to re-run: inserts are skipped when an active row already exists.
+
+NOTE: The enum value 'deepseek' was added in migration 0040. asyncpg caches
+enum type metadata per connection, so using 'deepseek' as a bound parameter
+raises UnsafeNewEnumValueUsageError even across transaction boundaries on the
+same connection. We embed provider as a SQL literal so PostgreSQL handles the
+cast server-side, bypassing asyncpg's stale cache.
 """
 
 from __future__ import annotations
@@ -24,7 +30,6 @@ branch_labels: str | tuple[str, ...] | None = None
 depends_on: str | tuple[str, ...] | None = None
 
 _PLAN_CODE = "free"
-_PROVIDER = "deepseek"
 _MODEL = "deepseek-v4-flash"
 _NOTES = "Bootstrapped: free tier cost reduction — DeepSeek over Gemini Flash"
 
@@ -61,19 +66,25 @@ def upgrade() -> None:
         ).fetchone()
         if existing is not None:
             continue
+
+        # Embed 'deepseek' as a SQL literal rather than a bound parameter.
+        # asyncpg caches enum OIDs when the connection is established; the
+        # 'deepseek' value was added in migration 0040 and may not be in the
+        # cache yet, causing UnsafeNewEnumValueUsageError on parameterised
+        # enum values. Server-side casting from text avoids that.
+        row_id = str(uuid.uuid4())
         conn.execute(
             sa.text(
-                "INSERT INTO tier_step_llm_configs "
-                "(id, plan_code, step, provider, model_string, is_active, notes, "
-                " created_by_admin_id, created_at, updated_at) "
-                "VALUES (:id, :plan, :step, :provider, :model, true, :notes, "
-                "        null, now(), now())"
+                f"INSERT INTO tier_step_llm_configs "
+                f"(id, plan_code, step, provider, model_string, is_active, notes, "
+                f" created_by_admin_id, created_at, updated_at) "
+                f"VALUES (:id, :plan, :step, 'deepseek'::llm_config_provider, :model, "
+                f"        true, :notes, null, now(), now())"
             ),
             {
-                "id": str(uuid.uuid4()),
+                "id": row_id,
                 "plan": _PLAN_CODE,
                 "step": step,
-                "provider": _PROVIDER,
                 "model": _MODEL,
                 "notes": _NOTES,
             },
@@ -81,15 +92,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
+    conn = op.get_bind()
+    conn.execute(
         sa.text(
             "DELETE FROM tier_step_llm_configs "
-            "WHERE plan_code = :plan AND provider = :provider AND model_string = :model "
-            "  AND notes = :notes"
-        ).bindparams(
-            plan=_PLAN_CODE,
-            provider=_PROVIDER,
-            model=_MODEL,
-            notes=_NOTES,
-        )
+            "WHERE plan_code = :plan AND model_string = :model AND notes = :notes"
+        ),
+        {"plan": _PLAN_CODE, "model": _MODEL, "notes": _NOTES},
     )
