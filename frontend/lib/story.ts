@@ -235,7 +235,8 @@ function consumeSseDataLine(
     if (evt.error === "free_tier_ai_cap_reached") {
       message = "You've used up the free-plan AI allowance. Upgrade to keep using the coach.";
     } else if (evt.error === "coach_empty") {
-      message = "The coach returned an empty response. Please try again.";
+      message =
+        "The coach returned an empty response. Please try again. (No credit was used.)";
     } else if (label === "Coach") {
       message = "The coach could not respond. Please retry in a moment.";
     } else {

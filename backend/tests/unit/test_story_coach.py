@@ -3,7 +3,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent.story_coach import MAX_EXCHANGES, _build_history_text, is_complete_response
+from app.agent.story_coach import (
+    MAX_EXCHANGES,
+    _build_history_text,
+    is_complete_response,
+    whole_story_feedback_looks_incomplete,
+)
 
 
 class TestBuildHistoryText:
@@ -134,3 +139,58 @@ class TestCoachSegmentStreaming:
 
         assert client.calls == 2
         assert "".join(deltas).strip() == "How many people were on the team?"
+
+    @pytest.mark.asyncio
+    async def test_whole_story_uses_complete_not_stream(self):
+        class WholeStoryLLM:
+            def __init__(self) -> None:
+                self.stream_calls = 0
+                self.complete_calls = 0
+
+            async def stream(self, messages, max_tokens=2048):
+                self.stream_calls += 1
+                yield "should not be used"
+
+            async def complete(self, messages, max_tokens=2048):
+                self.complete_calls += 1
+                from app.llm.base import LLMResponse
+
+                return LLMResponse(
+                    content="1. Add dates.\n2. Add team size.",
+                    input_tokens=10,
+                    output_tokens=20,
+                    model="test",
+                    provider="test",
+                )
+
+        from app.agent.story_coach import coach_whole_story
+
+        client = WholeStoryLLM()
+        parts: list[str] = []
+        async for delta in coach_whole_story(
+            ["I volunteer at the library and tutor math."],
+            client,
+        ):
+            parts.append(delta)
+
+        assert client.stream_calls == 0
+        assert client.complete_calls == 1
+        assert "".join(parts) == "1. Add dates.\n2. Add team size."
+
+
+class TestWholeStoryIncompleteHeuristic:
+    def test_single_bullet_mid_quote_is_incomplete(self):
+        text = (
+            "1. Add scope metrics for the tutoring and library volunteering: "
+            "number of weeks each ran, hours per session, how many kids at reading hour, "
+            "and whether either is still active as of now — the \""
+        )
+        assert whole_story_feedback_looks_incomplete(text)
+
+    def test_complete_sentinel_not_incomplete(self):
+        assert not whole_story_feedback_looks_incomplete("COMPLETE: Your story is detailed.")
+
+    def test_multiple_bullets_not_incomplete(self):
+        assert not whole_story_feedback_looks_incomplete(
+            "1. Add dates.\n2. Add team size.\n3. Quantify impact."
+        )

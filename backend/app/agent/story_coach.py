@@ -1,6 +1,7 @@
 """AI interview coach for Story Mode segments and whole-story review."""
 from __future__ import annotations
 
+import re
 import structlog
 from pathlib import Path
 from typing import AsyncGenerator
@@ -34,6 +35,22 @@ def _build_history_text(history: list[dict[str, str]]) -> str:
         text = msg.get("text", "")
         lines.append(f"{role}: {text}")
     return "\n".join(lines)
+
+
+def whole_story_feedback_looks_incomplete(text: str) -> bool:
+    """True when output likely stopped before the coach finished (not UI truncation)."""
+    t = text.strip()
+    if not t or t.startswith(_COMPLETE_SENTINEL):
+        return False
+    has_bullet_1 = re.search(r"(?m)^\s*1\.\s", t) is not None
+    has_bullet_2 = re.search(r"(?m)^\s*2\.\s", t) is not None
+    # Prompt asks for 3–6 bullets; a lone "1." without "2." is almost always a partial stream.
+    if has_bullet_1 and not has_bullet_2 and len(t) > 40:
+        return True
+    # Mid-sentence / mid-quote cutoff (e.g. ends with ``the "``).
+    if len(t) > 60 and t[-1] not in ".!?\n":
+        return True
+    return False
 
 
 def join_whole_story_segments(segments: list[str]) -> str:
@@ -127,7 +144,11 @@ async def coach_whole_story(
     segments: list[str],
     llm_client: LLMClient,
 ) -> AsyncGenerator[str, None]:
-    """Stream whole-story feedback bullets (single pass, no Q&A loop)."""
+    """Return whole-story feedback in one shot (non-streaming LLM call).
+
+    Gemini 3.x streaming often delivers partial visible text per chunk; a single
+    ``complete()`` response is more reliable for multi-bullet feedback.
+    """
     segments_text = join_whole_story_segments(segments)
     prompt = _load_whole_prompt().replace("{segments_text}", segments_text)
 
@@ -135,6 +156,8 @@ async def coach_whole_story(
         "story_coach.whole_start",
         segment_count=len(segments),
         chars=len(segments_text),
+        llm_provider=getattr(llm_client, "provider_name", "unknown"),
+        llm_model=getattr(llm_client, "model_name", "unknown"),
     )
 
     messages = [
@@ -145,18 +168,47 @@ async def coach_whole_story(
         LLMMessage(role="user", content=prompt),
     ]
 
+    max_tokens = 2048
     accumulated = ""
-    async for delta in _stream_with_empty_retry(
-        llm_client,
-        messages,
-        max_tokens=512,
-        log_event="story_coach",
-        attempt_meta={"mode": "whole_story"},
-    ):
-        accumulated += delta
-        yield delta
+    best_effort = ""
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            response = await llm_client.complete(messages, max_tokens=max_tokens)
+            accumulated = (response.content or "").strip()
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "story_coach.whole_complete_failed",
+                attempt=attempt + 1,
+                error=str(exc),
+            )
+            accumulated = ""
+        if not accumulated:
+            log.warning(
+                "story_coach.empty_response",
+                attempt=attempt + 1,
+                mode="whole_story",
+                transport="complete",
+            )
+            continue
+        if whole_story_feedback_looks_incomplete(accumulated):
+            best_effort = accumulated
+            log.warning(
+                "story_coach.whole_incomplete",
+                attempt=attempt + 1,
+                chars=len(accumulated),
+            )
+            continue
+        yield accumulated
+        break
+    else:
+        # All attempts empty or looked truncated — return the least-bad text if any.
+        if best_effort:
+            yield best_effort
+        elif accumulated:
+            yield accumulated
 
-    is_complete = accumulated.strip().startswith(_COMPLETE_SENTINEL)
+    is_complete = accumulated.startswith(_COMPLETE_SENTINEL)
     log.info(
         "story_coach.whole_done",
         chars=len(accumulated),

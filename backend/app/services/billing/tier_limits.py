@@ -101,8 +101,8 @@ def get_seed_rows() -> list[TierLimitsSeedRow]:
             tracker_active_limit=10,
             whisper_enabled=False,
             whisper_uses_per_period=0,
-            llm_provider="gemini",
-            llm_model_phase3="gemini-3.5-flash-lite",
+            llm_provider="deepseek",
+            llm_model_phase3="deepseek-v4-flash",
             soft_cap_message=None,
         ),
         _paid_tier(

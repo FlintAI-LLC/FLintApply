@@ -6,7 +6,7 @@ The user recorded these segments (in order):
 
 Your job:
 1. Read all segments together.
-2. Produce concise numbered feedback bullets (3–8 items) on what to add or clarify across the whole story:
+2. Produce concise numbered feedback bullets (3–6 items, each ≤ 25 words) on what to add or clarify across the whole story:
    - Missing metrics, dates, scope, or outcomes
    - Gaps between roles or unclear progression
    - Skills or tools mentioned in one segment but not tied to impact elsewhere
