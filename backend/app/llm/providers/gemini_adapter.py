@@ -202,6 +202,7 @@ class GeminiAdapter(LLMClient):
         )
         self.last_stream_input_tokens = 0
         self.last_stream_output_tokens = 0
+        prior_visible = ""
         async for chunk in resp:
             usage = getattr(chunk, "usage_metadata", None)
             if usage is not None:
@@ -211,5 +212,17 @@ class GeminiAdapter(LLMClient):
                     self.last_stream_input_tokens = int(prompt_tokens)
                 if candidate_tokens:
                     self.last_stream_output_tokens = int(candidate_tokens)
-            if chunk.text:
-                yield chunk.text
+            # Gemini 3.x may emit thought-only chunks where ``chunk.text`` is empty
+            # or raises; use the same visible-text path as :meth:`complete`.
+            visible = self._visible_text(chunk)
+            if not visible:
+                continue
+            # Streaming chunks may carry cumulative text — emit only the new suffix.
+            if visible.startswith(prior_visible):
+                delta = visible[len(prior_visible) :]
+                prior_visible = visible
+            else:
+                delta = visible
+                prior_visible = prior_visible + visible
+            if delta:
+                yield delta

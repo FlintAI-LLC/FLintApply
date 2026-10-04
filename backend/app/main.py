@@ -55,6 +55,7 @@ from app.services.llm.step_config import (
     refresh_llm_pin_caches,
     seed_step_llm_configs_if_empty,
 )
+from app.services.llm.tier_step_config import seed_free_tier_deepseek_pins_if_empty
 from app.services.security.logging import redact_sensitive
 from app.services.session_store import close_redis, health_check, init_redis
 
@@ -103,6 +104,7 @@ async def lifespan(app: FastAPI):
                 # waiting for an admin write.
                 await seed_llm_configs_if_empty(db_session)
                 await seed_step_llm_configs_if_empty(db_session)
+                await seed_free_tier_deepseek_pins_if_empty(db_session)
                 await refresh_llm_pin_caches(db_session)
                 unresolved = await assert_canonical_codes_resolve(db_session)
                 if unresolved and settings.APP_ENV in {"ci", "staging", "production"}:

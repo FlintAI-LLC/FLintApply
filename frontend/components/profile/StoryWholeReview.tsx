@@ -53,7 +53,9 @@ export function StoryWholeReview({
       );
       const text = accumulated.trim();
       if (!text) {
-        setError("The coach returned an empty response. Please try again.");
+        setError(
+          "The coach returned an empty response. Please try again. (No credit was used.)",
+        );
         return;
       }
       setFeedback(text);
@@ -125,11 +127,24 @@ export function StoryWholeReview({
       </p>
 
       {feedback ? (
-        <div
-          data-testid="whole-story-coach-feedback"
-          className="rounded-lg bg-white/70 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm whitespace-pre-wrap text-slate-800 dark:text-slate-200"
-        >
-          {feedback}
+        <div className="space-y-2">
+          <div
+            data-testid="whole-story-coach-feedback"
+            className="rounded-lg bg-white/70 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm whitespace-pre-wrap text-slate-800 dark:text-slate-200"
+          >
+            {feedback}
+          </div>
+          <button
+            type="button"
+            disabled={loading || disabled}
+            onClick={() => {
+              setFeedback(null);
+              void runReview();
+            }}
+            className="text-xs text-indigo-700 dark:text-indigo-300 hover:underline disabled:opacity-50"
+          >
+            Run feedback again (same build — no extra credit)
+          </button>
         </div>
       ) : null}
 
