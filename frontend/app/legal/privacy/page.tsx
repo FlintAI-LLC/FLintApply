@@ -1,23 +1,23 @@
 import type { Metadata } from "next"
 import { LegalPageShell } from "@/components/legal/LegalPageShell"
-import { PRIVACY_EMAIL } from "@/lib/brand"
+import { PRIVACY_EMAIL, PRODUCT_NAME, COMPANY_NAME } from "@/lib/brand"
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — TalioCV",
+  title: `Privacy Policy — ${PRODUCT_NAME}`,
   description:
-    "Privacy Policy for TalioCV.  GDPR lawful bases, data categories, retention periods, and your rights.",
+    `Privacy Policy for ${PRODUCT_NAME}. GDPR lawful bases, data categories, retention, browser extension disclosures, and your rights.`,
 }
 
-const LAST_UPDATED = "2026-08-21"
+const LAST_UPDATED = "2026-10-04"
 
 export default function PrivacyPage() {
   return (
     <LegalPageShell title="Privacy Policy" lastUpdated={LAST_UPDATED}>
       <p>
-        This Privacy Policy explains how TalioCV (&quot;we&quot;,
+        This Privacy Policy explains how {PRODUCT_NAME} (&quot;we&quot;,
         &quot;us&quot;) collects, uses, shares, and protects your information.
-        TalioCV is operated by Alireza Barzin Zanganeh.  Our Data Protection
-        Officer (DPO) can be reached at{" "}
+        {PRODUCT_NAME} is operated by {COMPANY_NAME} (Alireza Barzin Zanganeh).
+        Our Data Protection Officer (DPO) can be reached at{" "}
         <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>.
       </p>
 
@@ -76,6 +76,44 @@ export default function PrivacyPage() {
         <li>
           <strong>Usage telemetry</strong>: minimised structured logs (no
           plaintext secrets, no full PII bodies) for security and reliability.
+        </li>
+      </ul>
+
+      <h2 id="browser-extension">2a. Chrome browser extension</h2>
+      <p>
+        The optional {PRODUCT_NAME} browser extension (Chrome Web Store) connects
+        to the same account and API as the web app. It does not run in the
+        background to monitor your browsing.
+      </p>
+      <ul>
+        <li>
+          <strong>What we collect via the extension</strong>: when you click{" "}
+          <strong>Save job</strong> or use <strong>Autofill</strong>, job
+          description text and form field values you choose to fill are sent to
+          our API (<code>api.flintapply.com</code>) over HTTPS to tailor or
+          pre-fill applications. We do not collect page content unless you
+          trigger those actions on a supported job or application page.
+        </li>
+        <li>
+          <strong>Local storage</strong>: access and refresh tokens, token
+          expiry metadata, and extension UI preferences are stored in{" "}
+          <code>chrome.storage.local</code> on your device. Passwords are never
+          stored in the extension; email/password sign-in sends credentials
+          directly to our API for authentication.
+        </li>
+        <li>
+          <strong>Sign-in</strong>: Google, GitHub, or Microsoft sign-in opens
+          the provider&apos;s authorization page. OAuth authorization codes are
+          exchanged with our API; we do not receive your provider password.
+        </li>
+        <li>
+          <strong>What we do not collect</strong>: audio, video, screen
+          recordings, keystroke logging, or your full browsing history.
+        </li>
+        <li>
+          <strong>Sharing</strong>: extension traffic uses the same
+          sub-processors as the web app (see §4). OAuth providers process
+          sign-in according to their own policies during authentication only.
         </li>
       </ul>
 
@@ -152,7 +190,7 @@ export default function PrivacyPage() {
 
       <h2>6. Children</h2>
       <p>
-        TalioCV is not directed at users under 16.  Registration requires
+        {PRODUCT_NAME} is not directed at users under 16. Registration requires
         a self-attestation checkbox.  If you believe a minor has registered,
         contact us and we will close the account.
       </p>
