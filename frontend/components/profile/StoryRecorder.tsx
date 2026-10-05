@@ -40,6 +40,7 @@ import {
 } from "@/lib/story";
 import {
   clearStoryDraft,
+  clearWholeStoryCoachFeedback,
   loadStoryDraft,
   patchStoryDraft,
 } from "@/lib/storyDraft";
@@ -142,6 +143,14 @@ export function StoryRecorder({ token, onSaved }: Props) {
   }, []);
 
   const persistSegments = useCallback((next: string[], mode: StoryMode | null = "free") => {
+    const current = loadStoryDraft();
+    const prev = current?.segments ?? [];
+    const segmentsChanged =
+      prev.length !== next.length ||
+      prev.some((segment, index) => segment !== next[index]);
+    if (segmentsChanged) {
+      clearWholeStoryCoachFeedback();
+    }
     patchStoryDraft({
       storyMode: mode,
       segments: next,

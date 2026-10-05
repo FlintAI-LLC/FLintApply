@@ -12,6 +12,7 @@ const DRAFT_VERSION = 1;
 const MAX_SEGMENTS = 30;
 const MAX_SEGMENT_CHARS = 20_000;
 const MAX_REVIEW_CHARS = 80_000;
+const MAX_WHOLE_STORY_COACH_CHARS = 20_000;
 const MAX_INTERVIEW_TURNS = 40;
 
 export type StoryDraftMode = "free" | "interview";
@@ -36,6 +37,9 @@ export interface StoryDraft {
   interviewHistory: StoryInterviewTurn[];
   interviewPhase: StoryInterviewPhase | null;
   interviewReviewText: string | null;
+  /** Last whole-story coach bullets for the current build (avoids re-calling LLM on refresh). */
+  wholeStoryCoachFeedback: string | null;
+  wholeStoryCoachFeedbackSessionId: string | null;
   updatedAt: number;
 }
 
@@ -49,6 +53,8 @@ export function emptyStoryDraft(): StoryDraft {
     interviewHistory: [],
     interviewPhase: null,
     interviewReviewText: null,
+    wholeStoryCoachFeedback: null,
+    wholeStoryCoachFeedbackSessionId: null,
     updatedAt: 0,
   };
 }
@@ -118,6 +124,14 @@ export function parseStoryDraft(raw: string | null): StoryDraft | null {
     const interviewReviewText = parsed.interviewReviewText
       ? clampText(parsed.interviewReviewText, MAX_REVIEW_CHARS)
       : null;
+    const wholeStoryCoachFeedback = parsed.wholeStoryCoachFeedback
+      ? clampText(parsed.wholeStoryCoachFeedback, MAX_WHOLE_STORY_COACH_CHARS)
+      : null;
+    const wholeStoryCoachFeedbackSessionId =
+      typeof parsed.wholeStoryCoachFeedbackSessionId === "string" &&
+      parsed.wholeStoryCoachFeedbackSessionId.trim()
+        ? parsed.wholeStoryCoachFeedbackSessionId.trim()
+        : null;
     return {
       version: DRAFT_VERSION,
       storyMode,
@@ -127,6 +141,10 @@ export function parseStoryDraft(raw: string | null): StoryDraft | null {
       interviewHistory: normalizeInterviewHistory(parsed.interviewHistory),
       interviewPhase,
       interviewReviewText: interviewReviewText?.trim() ? interviewReviewText : null,
+      wholeStoryCoachFeedback: wholeStoryCoachFeedback?.trim()
+        ? wholeStoryCoachFeedback
+        : null,
+      wholeStoryCoachFeedbackSessionId,
       updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
     };
   } catch {
@@ -199,6 +217,44 @@ export function patchStoryDraft(
   }
   saveStoryDraft(next, storage);
   return next;
+}
+
+export function loadWholeStoryCoachFeedbackForSession(
+  storyBuildSessionId: string,
+  storage?: Storage,
+): string | null {
+  if (!storyBuildSessionId.trim()) return null;
+  const draft = loadStoryDraft(storage);
+  if (!draft?.wholeStoryCoachFeedback?.trim()) return null;
+  if (draft.wholeStoryCoachFeedbackSessionId !== storyBuildSessionId) return null;
+  return draft.wholeStoryCoachFeedback;
+}
+
+export function saveWholeStoryCoachFeedbackForSession(
+  storyBuildSessionId: string,
+  feedback: string,
+  storage?: Storage,
+): void {
+  if (!storyBuildSessionId.trim()) return;
+  const text = clampText(feedback, MAX_WHOLE_STORY_COACH_CHARS).trim();
+  if (!text) return;
+  patchStoryDraft(
+    {
+      wholeStoryCoachFeedback: text,
+      wholeStoryCoachFeedbackSessionId: storyBuildSessionId,
+    },
+    storage,
+  );
+}
+
+export function clearWholeStoryCoachFeedback(storage?: Storage): void {
+  patchStoryDraft(
+    {
+      wholeStoryCoachFeedback: null,
+      wholeStoryCoachFeedbackSessionId: null,
+    },
+    storage,
+  );
 }
 
 export function clearStoryDraft(storage?: Storage): void {
