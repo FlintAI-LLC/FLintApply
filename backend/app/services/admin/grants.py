@@ -61,17 +61,16 @@ def validate_grant_payload(
             raise InvalidGrantPayloadError(
                 "price_discount payload requires stripe_promotion_code_id"
             )
-        applicable = payload.get("applicable_plan_codes", [])
-        if applicable is not None and not isinstance(applicable, list):
+        applicable = payload.get("applicable_plan_codes")
+        if not isinstance(applicable, list) or not applicable:
             raise InvalidGrantPayloadError(
-                "applicable_plan_codes must be a list when provided"
+                "price_discount payload requires non-empty applicable_plan_codes"
             )
-        if isinstance(applicable, list):
-            for code in applicable:
-                if not isinstance(code, str) or not code.strip():
-                    raise InvalidGrantPayloadError(
-                        "applicable_plan_codes entries must be non-empty strings"
-                    )
+        for code in applicable:
+            if not isinstance(code, str) or not code.strip():
+                raise InvalidGrantPayloadError(
+                    "applicable_plan_codes entries must be non-empty strings"
+                )
         for optional_key in ("display_name", "headline"):
             value = payload.get(optional_key)
             if value is not None and (

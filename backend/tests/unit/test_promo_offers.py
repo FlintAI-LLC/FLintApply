@@ -35,7 +35,10 @@ def test_build_price_discount_payload() -> None:
 def test_validate_price_discount_payload() -> None:
     validate_grant_payload(
         AdminGrantType.price_discount,
-        build_price_discount_payload(stripe_promotion_code_id="promo_abc"),
+        build_price_discount_payload(
+            stripe_promotion_code_id="promo_abc",
+            applicable_plan_codes=["monthly_pro"],
+        ),
     )
 
 
