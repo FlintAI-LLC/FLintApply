@@ -7,8 +7,10 @@ import {
   hasMeaningfulStoryDraft,
   loadStoryDraft,
   parseStoryDraft,
+  loadWholeStoryCoachFeedbackForSession,
   patchStoryDraft,
   saveStoryDraft,
+  saveWholeStoryCoachFeedbackForSession,
   type StoryDraft,
 } from "../../lib/storyDraft";
 
@@ -107,6 +109,16 @@ describe("storyDraft", () => {
     const loaded = loadStoryDraft(storage);
     assert.equal(loaded?.segments.length, 2);
     assert.equal(loaded?.segments[0], "I work at Northline Health.");
+  });
+
+  it("persists whole-story coach feedback per build session", () => {
+    saveStoryDraft(sampleDraft(), storage);
+    saveWholeStoryCoachFeedbackForSession("build-abc", "1. Add dates.", storage);
+    assert.equal(
+      loadWholeStoryCoachFeedbackForSession("build-abc", storage),
+      "1. Add dates.",
+    );
+    assert.equal(loadWholeStoryCoachFeedbackForSession("other-build", storage), null);
   });
 
   it("drops blank segments and caps the list at 30", () => {

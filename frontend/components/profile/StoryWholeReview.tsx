@@ -1,8 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { dispatchCreditsExhausted } from "@/lib/offerPopup";
+import {
+  loadWholeStoryCoachFeedbackForSession,
+  saveWholeStoryCoachFeedbackForSession,
+} from "@/lib/storyDraft";
 import { streamCoach } from "@/lib/story";
 import { ExhaustionPaywall } from "@/components/billing/ExhaustionPaywall";
 import { EmailVerificationCallout } from "@/components/auth/EmailVerificationCallout";
@@ -24,8 +28,15 @@ export function StoryWholeReview({
   onCoachSessionUnlocked,
   disabled = false,
 }: Props) {
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(() =>
+    loadWholeStoryCoachFeedbackForSession(storyBuildSessionId),
+  );
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (loading) return;
+    setFeedback(loadWholeStoryCoachFeedbackForSession(storyBuildSessionId));
+  }, [storyBuildSessionId, loading]);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
@@ -35,7 +46,6 @@ export function StoryWholeReview({
     setLoading(true);
     setError(null);
     setErrorCode(null);
-    setFeedback(null);
     let accumulated = "";
     try {
       await streamCoach(
@@ -59,6 +69,7 @@ export function StoryWholeReview({
         return;
       }
       setFeedback(text);
+      saveWholeStoryCoachFeedbackForSession(storyBuildSessionId, text);
       if (!coachSessionUnlocked) {
         onCoachSessionUnlocked();
       }
@@ -138,12 +149,11 @@ export function StoryWholeReview({
             type="button"
             disabled={loading || disabled}
             onClick={() => {
-              setFeedback(null);
               void runReview();
             }}
             className="text-xs text-indigo-700 dark:text-indigo-300 hover:underline disabled:opacity-50"
           >
-            Run feedback again (same build — no extra credit)
+            Didn&apos;t get answer or is it broken? Try again — no extra credit
           </button>
         </div>
       ) : null}
