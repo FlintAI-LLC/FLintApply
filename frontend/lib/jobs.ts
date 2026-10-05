@@ -1,6 +1,7 @@
 import { getSession } from "next-auth/react"
 import type { FitAnalysisOutput } from "./api"
 import { ApiError } from "./api"
+import { liveBackendAccessToken } from "@/lib/auth/accessToken"
 import { notifySessionRevoked, parseApiErrorDetail } from "./parseApiError"
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
@@ -31,16 +32,21 @@ async function jobsRequest<T>(
   init?: RequestInit,
 ): Promise<T> {
   const session = await getSession()
-  const sessionToken = (session as { backendAccessToken?: string } | null)
-    ?.backendAccessToken
-  const bearer = sessionToken || token
+  const sessionToken = liveBackendAccessToken(
+    session as {
+      error?: string
+      backendAccessToken?: string
+      backendExpiresAt?: number
+    } | null,
+  )
+  const bearer = sessionToken ?? token
 
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${bearer}`,
       ...(init?.headers ?? {}),
+      Authorization: `Bearer ${bearer}`,
     },
   })
   if (!res.ok) {
