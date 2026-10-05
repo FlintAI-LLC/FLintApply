@@ -4,6 +4,7 @@ import assert from "node:assert/strict"
 import { formatMatchScore, matchJobs } from "@/lib/jobs"
 
 let mockResponses: Array<{ status: number; body: unknown }> = []
+let sessionPayload: Record<string, unknown> = {}
 let lastFetch: { url: string; init?: RequestInit } | null = null
 const originalFetch = globalThis.fetch
 const OriginalBroadcastChannel = globalThis.BroadcastChannel
@@ -39,7 +40,7 @@ before(() => {
       return Promise.resolve({
         ok: true,
         status: 200,
-        json: async () => ({}),
+        json: async () => sessionPayload,
       } as unknown as Response)
     }
     lastFetch = { url: href, init }
@@ -53,8 +54,16 @@ before(() => {
   }) as typeof fetch
 })
 
+function authFromInit(init?: RequestInit): string | undefined {
+  const headers = init?.headers
+  if (!headers) return undefined
+  if (headers instanceof Headers) return headers.get("Authorization") ?? undefined
+  return (headers as Record<string, string>).Authorization
+}
+
 afterEach(() => {
   mockResponses = []
+  sessionPayload = {}
   lastFetch = null
 })
 
@@ -101,5 +110,45 @@ describe("matchJobs", () => {
       page: 2,
       page_size: 10,
     })
+  })
+
+  it("prefers a live session bearer over a stale caller token", async () => {
+    sessionPayload = {
+      backendAccessToken: "live-tok",
+      backendExpiresAt: Date.now() + 60_000,
+    }
+    mockResponses.push({
+      status: 200,
+      body: {
+        jobs: [],
+        total: 0,
+        page: 1,
+        page_size: 10,
+        results_may_be_stale: false,
+        message: null,
+      },
+    })
+    await matchJobs("stale-tok", { page: 1, page_size: 10 })
+    assert.equal(authFromInit(lastFetch?.init), "Bearer live-tok")
+  })
+
+  it("falls back to the caller token when the session JWT is dead", async () => {
+    sessionPayload = {
+      backendAccessToken: "dead-tok",
+      backendExpiresAt: Date.now() - 1,
+    }
+    mockResponses.push({
+      status: 200,
+      body: {
+        jobs: [],
+        total: 0,
+        page: 1,
+        page_size: 10,
+        results_may_be_stale: false,
+        message: null,
+      },
+    })
+    await matchJobs("caller-tok", { page: 1, page_size: 10 })
+    assert.equal(authFromInit(lastFetch?.init), "Bearer caller-tok")
   })
 })

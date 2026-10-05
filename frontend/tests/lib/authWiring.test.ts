@@ -52,6 +52,12 @@ describe("auth wiring contracts", () => {
     assert.deepEqual(offenders, ["components/nav/BackendTokenRefresh.tsx"])
   })
 
+  it("useEntitlement waits on live backend tokens, not raw backendAccessToken", () => {
+    const source = read("hooks/useEntitlement.ts")
+    assert.match(source, /useLiveBackendAccessToken/)
+    assert.doesNotMatch(source, /session\?\.backendAccessToken/)
+  })
+
   it("UsageWidget does not trigger a refresh on 401", () => {
     const source = read("components/nav/UsageWidget.tsx")
     assert.doesNotMatch(source, /refreshBackendSession|requestBackendSessionRefresh/)

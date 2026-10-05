@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { getPopupOffers } from "@/lib/api";
 import { useEntitlement } from "@/hooks/useEntitlement";
+import { useLiveBackendAccessToken } from "@/hooks/useLiveBackendAccessToken";
 import { useExitIntent } from "@/hooks/useExitIntent";
 import {
   CREDITS_EXHAUSTED_EVENT,
@@ -19,8 +19,7 @@ import { OfferPopup } from "@/components/billing/OfferPopup";
 
 export function OfferPopupHost() {
   const pathname = usePathname();
-  const { data: session, status } = useSession();
-  const token = session?.backendAccessToken;
+  const { status, token, authLoading } = useLiveBackendAccessToken();
   const entitlement = useEntitlement();
   const [offers, setOffers] = useState<BillingPopupOffer[]>([]);
   const [activeOffer, setActiveOffer] = useState<BillingPopupOffer | null>(null);
@@ -31,6 +30,7 @@ export function OfferPopupHost() {
   const eligibleUser =
     status === "authenticated" &&
     !!token &&
+    !authLoading &&
     entitlement.isSubscribed === false &&
     !entitlement.loading;
 

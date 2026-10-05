@@ -2,17 +2,16 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { useSession } from "next-auth/react"
 import { getSubscriptionCurrent } from "@/lib/api"
+import { useLiveBackendAccessToken } from "@/hooks/useLiveBackendAccessToken"
 import { isSubscriptionActive } from "@/lib/billing"
 
 export function JobsNavItem() {
-  const { data: session, status } = useSession()
-  const token = session?.backendAccessToken
+  const { status, token, authLoading } = useLiveBackendAccessToken()
   const [subscribed, setSubscribed] = useState<boolean | null>(null)
 
   useEffect(() => {
-    if (!token || status !== "authenticated") {
+    if (!token || status !== "authenticated" || authLoading) {
       setSubscribed(null)
       return
     }
@@ -33,7 +32,7 @@ export function JobsNavItem() {
     return () => {
       cancelled = true
     }
-  }, [token, status])
+  }, [token, status, authLoading])
 
   if (status !== "authenticated" || subscribed === null) {
     return (

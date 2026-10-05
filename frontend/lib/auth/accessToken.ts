@@ -24,6 +24,33 @@ export function needsBackendAccessRefresh(session: {
   return Boolean(session?.backendAccessToken) && !liveBackendAccessToken(session)
 }
 
+export type BackendAuthSessionStatus =
+  | "loading"
+  | "authenticated"
+  | "unauthenticated";
+
+/** Pure helper for hooks/tests — when to wait vs call APIs with a bearer token. */
+export function resolveBackendAuthState(
+  session: {
+    error?: string;
+    backendAccessToken?: string;
+    backendExpiresAt?: number;
+  } | null
+  | undefined,
+  status: BackendAuthSessionStatus,
+): {
+  token: string | undefined;
+  pendingRefresh: boolean;
+  authLoading: boolean;
+} {
+  const token =
+    status === "authenticated" ? liveBackendAccessToken(session) : undefined;
+  const pendingRefresh =
+    status === "authenticated" && needsBackendAccessRefresh(session);
+  const authLoading = status === "loading" || pendingRefresh;
+  return { token, pendingRefresh, authLoading };
+}
+
 /** Sign-in URL after the refresh cookie cannot recover the session. */
 export function expiredSessionAuthUrl(dest?: string): string {
   const path =

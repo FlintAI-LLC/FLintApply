@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { getSubscriptionCurrent, type SubscriptionCurrentResponse } from "@/lib/api";
+import { useLiveBackendAccessToken } from "@/hooks/useLiveBackendAccessToken";
 import { isSubscriptionActive } from "@/lib/billing";
 
 type Subscription = NonNullable<SubscriptionCurrentResponse["subscription"]>;
@@ -44,13 +44,16 @@ const UNRESOLVED: Entitlement = {
  * plan already covers.
  */
 export function useEntitlement(): Entitlement {
-  const { data: session, status } = useSession();
-  const token = session?.backendAccessToken;
+  const { status, token, authLoading } = useLiveBackendAccessToken();
   const [state, setState] = useState<Entitlement>(UNRESOLVED);
 
   useEffect(() => {
+    if (authLoading) {
+      setState({ ...UNRESOLVED, loading: true });
+      return;
+    }
     if (!token || status !== "authenticated") {
-      setState({ ...UNRESOLVED, loading: status === "loading" });
+      setState({ ...UNRESOLVED, loading: false });
       return;
     }
 
@@ -83,7 +86,7 @@ export function useEntitlement(): Entitlement {
     return () => {
       cancelled = true;
     };
-  }, [token, status]);
+  }, [token, status, authLoading]);
 
   return state;
 }

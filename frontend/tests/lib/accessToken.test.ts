@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { liveBackendAccessToken, needsBackendAccessRefresh, expiredSessionAuthUrl } from "@/lib/auth/accessToken";
+import {
+  liveBackendAccessToken,
+  needsBackendAccessRefresh,
+  expiredSessionAuthUrl,
+  resolveBackendAuthState,
+} from "@/lib/auth/accessToken";
 
 describe("liveBackendAccessToken", () => {
   it("returns the token when it is still live", () => {
@@ -41,6 +46,22 @@ describe("liveBackendAccessToken", () => {
 });
 
 describe("needsBackendAccessRefresh", () => {
+  it("is false without a held token", () => {
+    assert.equal(needsBackendAccessRefresh(null), false);
+    assert.equal(needsBackendAccessRefresh({}), false);
+  });
+
+  it("flags TokenExpired even when expiry metadata is still in the future", () => {
+    assert.equal(
+      needsBackendAccessRefresh({
+        backendAccessToken: "tok",
+        error: "TokenExpired",
+        backendExpiresAt: Date.now() + 60_000,
+      }),
+      true,
+    );
+  });
+
   it("flags a held-but-dead JWT for refresh", () => {
     assert.equal(
       needsBackendAccessRefresh({
@@ -56,6 +77,42 @@ describe("needsBackendAccessRefresh", () => {
       }),
       false,
     );
+  });
+});
+
+describe("resolveBackendAuthState", () => {
+  it("waits while authenticated but the JWT is past expiry", () => {
+    const state = resolveBackendAuthState(
+      {
+        backendAccessToken: "tok",
+        backendExpiresAt: Date.now() - 1,
+      },
+      "authenticated",
+    );
+    assert.equal(state.token, undefined);
+    assert.equal(state.pendingRefresh, true);
+    assert.equal(state.authLoading, true);
+  });
+
+  it("does not auth-load forever when unauthenticated", () => {
+    const state = resolveBackendAuthState(
+      { backendAccessToken: "tok", backendExpiresAt: Date.now() + 60_000 },
+      "unauthenticated",
+    );
+    assert.equal(state.token, undefined);
+    assert.equal(state.authLoading, false);
+  });
+
+  it("exposes a live token when authenticated and not expired", () => {
+    const state = resolveBackendAuthState(
+      {
+        backendAccessToken: "tok",
+        backendExpiresAt: Date.now() + 60_000,
+      },
+      "authenticated",
+    );
+    assert.equal(state.token, "tok");
+    assert.equal(state.authLoading, false);
   });
 });
 

@@ -1,5 +1,6 @@
 import { byokHeaders } from "./keyStore";
 import { getSession } from "next-auth/react";
+import { liveBackendAccessToken } from "@/lib/auth/accessToken";
 import { notifySessionRevoked, parseApiErrorDetail } from "./parseApiError";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -29,8 +30,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let authHeader: Record<string, string> = {};
   try {
     const nextAuthSession = await getSession();
-    const token = (nextAuthSession as { backendAccessToken?: string } | null)
-      ?.backendAccessToken;
+    const token = liveBackendAccessToken(
+      nextAuthSession as {
+        error?: string;
+        backendAccessToken?: string;
+        backendExpiresAt?: number;
+      } | null,
+    );
     if (token) {
       authHeader = { Authorization: `Bearer ${token}` };
     }
@@ -44,8 +50,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       "Content-Type": "application/json",
       ...byokHeaders(),
-      ...authHeader,
       ...(initHeaders ?? {}),
+      ...authHeader,
     },
   });
   if (!res.ok) {
@@ -149,8 +155,13 @@ export async function uploadResumeFile(
   let authHeader: Record<string, string> = {};
   try {
     const nextAuthSession = await getSession();
-    const token = (nextAuthSession as { backendAccessToken?: string } | null)
-      ?.backendAccessToken;
+    const token = liveBackendAccessToken(
+      nextAuthSession as {
+        error?: string;
+        backendAccessToken?: string;
+        backendExpiresAt?: number;
+      } | null,
+    );
     if (token) authHeader = { Authorization: `Bearer ${token}` };
   } catch {
     // ignore

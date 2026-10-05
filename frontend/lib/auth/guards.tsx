@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef, ComponentType } from "react"
 import { fetchMe } from "@/lib/auth/api"
-import { needsBackendAccessRefresh } from "@/lib/auth/accessToken"
+import { liveBackendAccessToken, needsBackendAccessRefresh } from "@/lib/auth/accessToken"
 import { isOnboardingExempt, mustCompleteOnboarding, needsOnboarding } from "@/lib/auth/onboarding"
 import { saveAuthReturnUrl } from "@/lib/auth/returnUrl"
 
@@ -64,7 +64,7 @@ export function useRequireAuth(callbackUrl?: string) {
     }
 
     if (mustCompleteOnboarding(session) && path && !isOnboardingExempt(path)) {
-      const accessToken = session.backendAccessToken
+      const accessToken = liveBackendAccessToken(session)
       if (accessToken && !onboardingVerifyRef.current) {
         onboardingVerifyRef.current = true
         void fetchMe(accessToken)
