@@ -1,14 +1,14 @@
 import type { Metadata } from "next"
 import { LegalPageShell } from "@/components/legal/LegalPageShell"
-import { PRIVACY_EMAIL } from "@/lib/brand"
+import { PRIVACY_EMAIL, PRODUCT_NAME } from "@/lib/brand"
 
 export const metadata: Metadata = {
-  title: "Do Not Sell My Personal Information — TalioCV",
+  title: `Do Not Sell My Personal Information — ${PRODUCT_NAME}`,
   description:
-    "California Consumer Privacy Act (CCPA) statement.  TalioCV does not sell user personal information.",
+    `California Consumer Privacy Act (CCPA) statement.  ${PRODUCT_NAME} does not sell user personal information.`,
 }
 
-const LAST_UPDATED = "2026-05-31"
+const LAST_UPDATED = "2026-10-04"
 
 export default function CcpaPage() {
   return (
@@ -26,7 +26,7 @@ export default function CcpaPage() {
       <h2>Our position</h2>
       <p>
         <strong>
-          TalioCV does not sell or &quot;share&quot; (as those
+          {PRODUCT_NAME} does not sell or &quot;share&quot; (as those
           terms are defined under the CCPA / CPRA) the personal information
           of any user — California resident or otherwise.
         </strong>{" "}

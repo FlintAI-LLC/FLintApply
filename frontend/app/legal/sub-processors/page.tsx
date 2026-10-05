@@ -1,11 +1,11 @@
 import type { Metadata } from "next"
 import { LegalPageShell } from "@/components/legal/LegalPageShell"
-import { PRIVACY_EMAIL } from "@/lib/brand"
+import { PRIVACY_EMAIL, PRODUCT_NAME } from "@/lib/brand"
 
 export const metadata: Metadata = {
-  title: "Sub-processors — TalioCV",
+  title: `Sub-processors — ${PRODUCT_NAME}`,
   description:
-    "List of sub-processors used by TalioCV.  Updated with 30-day notice as required by our Privacy Policy.",
+    `List of sub-processors used by ${PRODUCT_NAME}.  Updated with 30-day notice as required by our Privacy Policy.`,
 }
 
 const LAST_UPDATED = "2026-08-27"
@@ -87,7 +87,7 @@ export default function SubProcessorsPage() {
   return (
     <LegalPageShell title="Sub-processors" lastUpdated={LAST_UPDATED}>
       <p>
-        TalioCV engages the following sub-processors to operate the
+        {PRODUCT_NAME} engages the following sub-processors to operate the
         Service.  This list is updated with at least <strong>30 days&apos;
         notice</strong> before any material change, in line with §19.9 of our
         system design and Section 4 of the{" "}

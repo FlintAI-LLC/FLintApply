@@ -10,7 +10,7 @@
 
 An AI-powered job-search platform. Build your master resume by speaking or uploading, tailor it to any job description in minutes, find matching jobs, write cover letters, and track every application — all in one place.
 
-> **Rebrand note:** Product UI and API surfaces use **FlintApply** / `flintapply.com`. Legal pages (`/legal/*`) still reference the legacy *TalioCV* controller name until the entity charter lands.
+> **Branding:** Product UI, API surfaces, and legal pages (`/legal/*`) use **FlintApply** / `flintapply.com`, operated by **The Flint AI**.
 
 ---
 

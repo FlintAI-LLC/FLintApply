@@ -21,6 +21,7 @@ import structlog
 from fastapi import APIRouter, Request, status
 from pydantic import BaseModel, EmailStr, Field
 
+from app.brand import PRODUCT_NAME
 from app.config import settings
 from app.limiter import limiter
 
@@ -62,7 +63,7 @@ class DPOContactResponse(BaseModel):
 async def dpo_contact(request: Request, payload: DPOContactRequest) -> DPOContactResponse:
     topic = payload.topic if payload.topic in _VALID_TOPICS else "other"
 
-    subject = f"[DPO][{topic}] {payload.name} — TalioCV privacy inquiry"
+    subject = f"[DPO][{topic}] {payload.name} — {PRODUCT_NAME} privacy inquiry"
     body_text = (
         f"From: {payload.name} <{payload.email}>\n"
         f"Topic: {topic}\n\n"

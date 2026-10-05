@@ -1,22 +1,26 @@
 import type { Metadata } from "next"
 import { LegalPageShell } from "@/components/legal/LegalPageShell"
-import { PRIVACY_EMAIL } from "@/lib/brand"
+import {
+  LEGAL_OPERATOR_LINE,
+  PRIVACY_EMAIL,
+  PRODUCT_NAME,
+} from "@/lib/brand"
 
 export const metadata: Metadata = {
-  title: "Terms of Service — TalioCV",
+  title: `Terms of Service — ${PRODUCT_NAME}`,
   description:
-    "Terms of Service for TalioCV.  Acceptance, license, prohibited uses, payment terms, termination, and governing law.",
+    `Terms of Service for ${PRODUCT_NAME}.  Acceptance, license, prohibited uses, payment terms, termination, and governing law.`,
 }
 
-const LAST_UPDATED = "2026-05-31"
+const LAST_UPDATED = "2026-10-04"
 
 export default function TermsPage() {
   return (
     <LegalPageShell title="Terms of Service" lastUpdated={LAST_UPDATED}>
       <p>
         These Terms of Service (&quot;Terms&quot;) govern your access to and use
-        of TalioCV (the &quot;Service&quot;), provided by Alireza
-        Barzin Zanganeh (&quot;TalioCV&quot;, &quot;we&quot;, &quot;us&quot;).  By
+        of {PRODUCT_NAME} (the &quot;Service&quot;), provided by{" "}
+        {LEGAL_OPERATOR_LINE} (&quot;we&quot;, &quot;us&quot;).  By
         creating an account or using the Service you agree to these Terms.  If
         you do not agree, do not use the Service.
       </p>
@@ -30,7 +34,7 @@ export default function TermsPage() {
 
       <h2>2. License Grant</h2>
       <p>
-        TalioCV grants you a limited, non-exclusive, non-transferable,
+        {PRODUCT_NAME} grants you a limited, non-exclusive, non-transferable,
         revocable license to access and use the Service for your personal or
         internal business resume / cover letter / job-search workflow,
         consistent with these Terms and the{" "}
@@ -93,7 +97,7 @@ export default function TermsPage() {
       <h2>5. Intellectual Property</h2>
       <p>
         You retain ownership of content you upload (master résumé, attachments,
-        notes).  TalioCV retains ownership of the Service, the user
+        notes).  {PRODUCT_NAME} retains ownership of the Service, the user
         interface, the platform code, and the model orchestration layer.
         Output generated for your account is yours to use; the underlying
         prompt &amp; retrieval pipelines remain ours.
@@ -118,7 +122,7 @@ export default function TermsPage() {
 
       <h2>8. Limitation of Liability</h2>
       <p>
-        To the maximum extent permitted by law, TalioCV&apos;s aggregate
+        To the maximum extent permitted by law, {PRODUCT_NAME}&apos;s aggregate
         liability for any claim arising from these Terms is limited to the
         fees you paid us in the 12 months preceding the claim.
       </p>

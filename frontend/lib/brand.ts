@@ -1,8 +1,5 @@
 /**
  * Canonical FlintApply branding — single source for user-facing product name.
- *
- * Legal pages and the Flint desktop import flow may still say TalioCV until
- * those are explicitly updated. Everything else should import from here.
  */
 
 export const PRODUCT_NAME = "FlintApply" as const;
@@ -10,6 +7,11 @@ export const PRODUCT_NAME = "FlintApply" as const;
 export const COMPANY_LINE = "by The Flint AI" as const;
 
 export const COMPANY_NAME = "The Flint AI" as const;
+
+export const LEGAL_CONTROLLER_NAME = "Alireza Barzin Zanganeh" as const;
+
+export const LEGAL_OPERATOR_LINE =
+  `${COMPANY_NAME} (${LEGAL_CONTROLLER_NAME})` as const;
 
 export const COMPANY_URL = "https://theflintai.com" as const;
 

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { PRODUCT_NAME } from "@/lib/brand"
 
 /**
  * Shared shell for /legal/* pages.
@@ -22,7 +23,7 @@ export function LegalPageShell({
       <article className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 p-8 shadow-2xl">
         <header className="mb-8 border-b border-slate-200 dark:border-slate-800 pb-6">
           <p className="text-xs uppercase tracking-widest text-slate-600 dark:text-slate-400">
-            TalioCV — Legal
+            {PRODUCT_NAME} — Legal
           </p>
           <h1 className="mt-1 text-3xl font-semibold text-slate-900 dark:text-white">{title}</h1>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
