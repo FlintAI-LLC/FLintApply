@@ -9,6 +9,10 @@ CVE-2026-55073
 # not ECDSA. Minimize exposure until python-jose removes/replaces ecdsa.
 PYSEC-2026-1325
 #
+# python-jose 3.5.0 — no fixed release on PyPI yet (2026-10-05). App JWTs use HS256
+# only (tokens.py JWT_ALG); decode paths must not accept alg=none/ECDSA from clients.
+CVE-2026-85394
+#
 # urllib3 1.26.x — pinned by botocore/boto3 for AWS SigV4 compatibility.
 # S3 usage is server-side only with trusted AWS endpoints.
 PYSEC-2026-141

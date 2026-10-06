@@ -14,7 +14,10 @@ from app.models.admin_grant import AdminGrantType
 from app.models.promo_code import PromoCode, PromoRedemption
 from app.models.user import AuthProvider, User, UserTier
 from app.services.billing.checkout_discount import resolve_checkout_discount
-from app.services.billing.promo import PromoCodeInvalidError, redeem_promo_code
+from app.services.billing.promo import (
+    PromoCodeWrongFlowError,
+    redeem_promo_code,
+)
 from app.services.billing.subscription import CheckoutSessionResult, create_checkout_session
 
 pytestmark = pytest.mark.unit
@@ -49,7 +52,9 @@ async def _seed_discount_promo(
         grant_type=AdminGrantType.price_discount,
         payload={
             "stripe_promotion_code_id": stripe_promotion_code_id,
-            "applicable_plan_codes": applicable_plan_codes or [],
+            "applicable_plan_codes": applicable_plan_codes
+            if applicable_plan_codes is not None
+            else ["monthly_pro"],
         },
         max_redemptions=max_redemptions,
         redemption_count=redemption_count,
@@ -197,7 +202,7 @@ async def test_redeem_price_discount_is_checkout_only(
     db_session.add(user)
     await _seed_discount_promo(db_session)
     await db_session.flush()
-    with pytest.raises(PromoCodeInvalidError):
+    with pytest.raises(PromoCodeWrongFlowError):
         await redeem_promo_code(
             db_session,
             user_id=user.id,

@@ -21,6 +21,13 @@ describe("promoRedeem copy", () => {
     );
   });
 
+  it("maps checkout-only code entered in redeem box", () => {
+    assert.equal(
+      promoRedeemErrorMessage("promo_code_wrong_flow"),
+      "This code applies at checkout, not for credits.",
+    );
+  });
+
   it("formats success message", () => {
     assert.equal(
       promoRedeemSuccessMessage(5),

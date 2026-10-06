@@ -48,6 +48,11 @@ class PromoCodeInactiveError(PromoRedeemError):
         super().__init__("promo_code_inactive")
 
 
+class PromoCodeWrongFlowError(PromoRedeemError):
+    def __init__(self) -> None:
+        super().__init__("promo_code_wrong_flow")
+
+
 @dataclass(frozen=True, slots=True)
 class PromoRedeemResult:
     promo_code_id: uuid.UUID
@@ -108,7 +113,7 @@ async def redeem_promo_code(
     ).scalar_one()
 
     if promo.grant_type == AdminGrantType.price_discount:
-        raise PromoCodeInvalidError()
+        raise PromoCodeWrongFlowError()
 
     if (
         promo.restricted_user_id is not None
@@ -198,6 +203,7 @@ __all__ = [
     "PromoCodeExpiredError",
     "PromoCodeInactiveError",
     "PromoCodeInvalidError",
+    "PromoCodeWrongFlowError",
     "PromoRedeemError",
     "PromoRedeemResult",
     "codes_match",

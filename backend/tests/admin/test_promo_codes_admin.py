@@ -132,6 +132,7 @@ async def test_public_billing_offer_returns_server_deadline(
             "grant_type": "price_discount",
             "payload": {
                 "stripe_promotion_code_id": "promo_public",
+                "applicable_plan_codes": ["monthly_pro"],
                 "display_name": "Public countdown offer",
             },
             "expires_at": expires.isoformat(),

@@ -17,6 +17,7 @@ import {
 import { useRequireAuth } from "@/lib/auth/guards"
 import {
   getBillingPrices,
+  getPopupOffers,
   getSubscriptionCurrent,
   createCheckoutSessionByCode,
   createPortalSession,
@@ -41,6 +42,8 @@ import {
 } from "@/lib/promoRedeem"
 import { clsx } from "clsx"
 import { ExhaustionPaywall } from "@/components/billing/ExhaustionPaywall"
+import { OfferCountdown } from "@/components/billing/OfferCountdown"
+import type { BillingPopupOffer } from "@/lib/offerPopup"
 
 // ── Feature display labels ─────────────────────────────────────────────────
 
@@ -309,6 +312,13 @@ export default function BillingPage() {
   const [yearlyToggle, setYearlyToggle] = useState(false)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [discountCode, setDiscountCode] = useState("")
+  const [discountWarning, setDiscountWarning] = useState<string | null>(null)
+  const [pendingCheckout, setPendingCheckout] = useState<{
+    planCode: string
+    url: string
+  } | null>(null)
+  const [timedOffer, setTimedOffer] = useState<BillingPopupOffer | null>(null)
   const [promoCode, setPromoCode] = useState("")
   const [promoMessage, setPromoMessage] = useState<string | null>(null)
   const [promoError, setPromoError] = useState<string | null>(null)
@@ -348,29 +358,59 @@ export default function BillingPage() {
     }
   }, [token])
 
+  const loadTimedOffers = useCallback(async () => {
+    if (!token) {
+      setTimedOffer(null)
+      return
+    }
+    try {
+      const data = await getPopupOffers(token)
+      const redeemable = data.offers.filter((offer) => offer.is_redeemable)
+      const withDeadline =
+        redeemable.find((offer) => offer.expires_at) ?? redeemable[0] ?? null
+      setTimedOffer(withDeadline)
+    } catch {
+      setTimedOffer(null)
+    }
+  }, [token])
+
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       void loadPrices()
       void loadCurrent()
+      void loadTimedOffers()
     }, 0)
 
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [loadPrices, loadCurrent])
+  }, [loadPrices, loadCurrent, loadTimedOffers])
 
   async function startCheckout(planCode: string) {
     if (!token || busyAction) return
+    if (pendingCheckout?.planCode === planCode) {
+      window.location.assign(pendingCheckout.url)
+      return
+    }
     setBusyAction(`checkout:${planCode}`)
     setError(null)
+    setDiscountWarning(null)
     try {
       const origin = window.location.origin
-      const { url } = await createCheckoutSessionByCode(token, {
+      const trimmedDiscount = discountCode.trim()
+      const result = await createCheckoutSessionByCode(token, {
         code: planCode,
         success_url: `${origin}/billing?checkout=success`,
         cancel_url: `${origin}/billing?checkout=cancel`,
+        promo_code: trimmedDiscount || undefined,
       })
-      window.location.assign(url)
+      if (trimmedDiscount && !result.discount_applied && result.discount_message) {
+        setDiscountWarning(result.discount_message)
+        setPendingCheckout({ planCode, url: result.url })
+        setBusyAction(null)
+        return
+      }
+      window.location.assign(result.url)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to start checkout")
       setBusyAction(null)
@@ -737,9 +777,64 @@ export default function BillingPage() {
         </section>
       )}
 
+      {timedOffer && (
+        <section
+          className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 space-y-2"
+          aria-labelledby="billing-timed-offer"
+        >
+          <h2
+            id="billing-timed-offer"
+            className="text-lg font-semibold text-amber-950 dark:text-amber-100"
+          >
+            {timedOffer.headline ?? timedOffer.display_name ?? "Limited-time offer"}
+          </h2>
+          {timedOffer.display_name && timedOffer.headline && (
+            <p className="text-sm text-amber-900/80 dark:text-amber-200/80">
+              {timedOffer.display_name}
+            </p>
+          )}
+          <OfferCountdown expiresAt={timedOffer.expires_at} />
+          <p className="text-xs text-amber-900/70 dark:text-amber-200/70">
+            Enter code{" "}
+            <span className="font-mono font-semibold">{timedOffer.code}</span> in the
+            discount field below when you subscribe or buy credits.
+          </p>
+        </section>
+      )}
+
+      {token && (
+        <section className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-2xl p-5 space-y-3">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Discount code (subscription or pack checkout)
+          </h2>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            Applied on your next Subscribe or Buy credits click for the plan you choose.
+          </p>
+          <input
+            type="text"
+            value={discountCode}
+            onChange={(e) => {
+              setDiscountCode(e.target.value.toUpperCase())
+              setDiscountWarning(null)
+              setPendingCheckout(null)
+            }}
+            placeholder="e.g. SAVE40"
+            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400/50"
+          />
+          {discountWarning && (
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              {discountWarning} You can still continue to checkout at the regular price.
+            </p>
+          )}
+        </section>
+      )}
+
       {token && (
         <section className="bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-3">
-          <h2 className="text-lg font-semibold text-white">Have a promo code?</h2>
+          <h2 className="text-lg font-semibold text-white">Redeem credit code</h2>
+          <p className="text-xs text-slate-400">
+            For free credit grants only — not subscription discounts.
+          </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="text"

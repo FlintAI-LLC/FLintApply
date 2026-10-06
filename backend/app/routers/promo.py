@@ -20,6 +20,7 @@ from app.services.billing.promo import (
     PromoCodeExpiredError,
     PromoCodeInactiveError,
     PromoCodeInvalidError,
+    PromoCodeWrongFlowError,
     PromoRedeemResult,
     redeem_promo_code,
 )
@@ -69,6 +70,11 @@ async def promo_redeem(
             code=body.code,
         )
     except PromoCodeInvalidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": exc.code},
+        ) from exc
+    except PromoCodeWrongFlowError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": exc.code},

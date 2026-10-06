@@ -13,6 +13,23 @@ from app.models.admin_grant import AdminGrantType
 from app.models.promo_code import PromoCode, PromoRedemption
 from app.services.billing.promo import _lookup_promo_for_compare, normalize_promo_code
 
+_EXTRA_CREDITS_CHECKOUT_MESSAGE = (
+    "This code is for free credits — use Redeem credits below."
+)
+
+
+def _normalize_applicable_plan_codes(payload: dict) -> list[str] | None:
+    """Return plan codes when payload is well-formed; otherwise None."""
+    applicable = payload.get("applicable_plan_codes")
+    if not isinstance(applicable, list) or not applicable:
+        return None
+    normalized: list[str] = []
+    for code in applicable:
+        if not isinstance(code, str) or not code.strip():
+            return None
+        normalized.append(code.strip())
+    return normalized
+
 
 @dataclass(frozen=True, slots=True)
 class CheckoutDiscountResolution:
@@ -41,7 +58,19 @@ async def resolve_checkout_discount(
         )
 
     promo = await _lookup_promo_for_compare(session, normalized)
-    if promo is None or promo.grant_type != AdminGrantType.price_discount:
+    if promo is None:
+        return CheckoutDiscountResolution(
+            None,
+            False,
+            "This promo code isn't valid.",
+        )
+    if promo.grant_type == AdminGrantType.extra_credits:
+        return CheckoutDiscountResolution(
+            None,
+            False,
+            _EXTRA_CREDITS_CHECKOUT_MESSAGE,
+        )
+    if promo.grant_type != AdminGrantType.price_discount:
         return CheckoutDiscountResolution(
             None,
             False,
@@ -110,8 +139,14 @@ async def resolve_checkout_discount(
             "This promo code isn't valid.",
         )
 
-    applicable = payload.get("applicable_plan_codes") or []
-    if isinstance(applicable, list) and applicable and plan_code not in applicable:
+    applicable = _normalize_applicable_plan_codes(payload)
+    if applicable is None:
+        return CheckoutDiscountResolution(
+            None,
+            False,
+            "This promo code isn't valid.",
+        )
+    if plan_code not in applicable:
         return CheckoutDiscountResolution(
             None,
             False,
