@@ -946,7 +946,11 @@ function SessionContent() {
   const rescoreFree = useCallback(
     async (options?: { resume?: TailoredResumeOutput }) => {
       const snapshot = options?.resume ?? tailored;
-      if (!snapshot || !qa || runInFlightRef.current || rescoreInFlightRef.current) return;
+      if (!snapshot) {
+        setRunError("Nothing to score yet — save your resume first.");
+        return;
+      }
+      if (runInFlightRef.current || rescoreInFlightRef.current) return;
       rescoreInFlightRef.current = true;
       setAtsRecalcRunning(true);
       const startedAtMs = Date.now();
@@ -972,7 +976,7 @@ function SessionContent() {
         setAtsRecalcRunning(false);
       }
     },
-    [tailored, qa, sessionId, recordAtsScore],
+    [tailored, sessionId, recordAtsScore],
   );
 
   const requestFullAtsReanalysis = useCallback(() => {
@@ -1110,7 +1114,7 @@ function SessionContent() {
   // One attempt per stale marker: a failed refresh waits for the next edit instead of looping.
   useEffect(() => {
     const staleMarker = stale["4"];
-    if (!staleMarker || !qa || !tailored) return;
+    if (!staleMarker || !tailored) return;
     if (phaseRunning || atsRecalcRunning || applyAllRunning) return;
     if (autoRescoreAttemptRef.current === staleMarker) return;
     const timer = setTimeout(() => {
@@ -1118,7 +1122,7 @@ function SessionContent() {
       void rescoreFree();
     }, AUTO_RESCORE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [stale, qa, tailored, phaseRunning, atsRecalcRunning, applyAllRunning, rescoreFree]);
+  }, [stale, tailored, phaseRunning, atsRecalcRunning, applyAllRunning, rescoreFree]);
 
   const runCurrentPhase = useCallback(
     async (options?: { force?: boolean; scope?: PhaseRunScope; auditOnly?: boolean }) => {

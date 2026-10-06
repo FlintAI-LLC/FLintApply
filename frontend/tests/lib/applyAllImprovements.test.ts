@@ -338,6 +338,7 @@ describe("applyAllImprovements wiring", () => {
       "const rescoreFree",
       "const requestFullAtsReanalysis",
     );
+    assert.doesNotMatch(slice, /if \(!snapshot \|\| !qa/);
     assert.match(slice, /await rescoreAtsFree\(sessionId\)/);
     assert.doesNotMatch(slice, /recalculateAts\(/);
     assert.doesNotMatch(slice, /runPhase\(|triggerPhase\(/);
