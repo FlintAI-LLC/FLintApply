@@ -105,6 +105,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
   const [reviewText, setReviewText] = useState<string | null>(null);
   const [verifyItems, setVerifyItems] = useState<VerifyItem[]>([]);
   const [verifyReviewCount, setVerifyReviewCount] = useState(0);
+  const [completenessWarnings, setCompletenessWarnings] = useState<string[]>([]);
   const [attestationChecked, setAttestationChecked] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [generateConfirmOpen, setGenerateConfirmOpen] = useState(false);
@@ -167,6 +168,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
     setReviewText(null);
     setVerifyItems([]);
     setVerifyReviewCount(0);
+    setCompletenessWarnings([]);
     setAttestationChecked(false);
     setSaveDialogOpen(false);
     setHasGeneratedOnce(false);
@@ -186,6 +188,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
     setReviewText(null);
     setVerifyItems([]);
     setVerifyReviewCount(0);
+    setCompletenessWarnings([]);
     setAttestationChecked(false);
     setSaveDialogOpen(false);
     setGenerateConfirmOpen(false);
@@ -359,6 +362,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
     setReviewText(null);
     setVerifyItems([]);
     setVerifyReviewCount(0);
+    setCompletenessWarnings([]);
     setAttestationChecked(false);
     setPrevText(null);
     patchStoryDraft({ reviewText: null });
@@ -369,6 +373,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
     setReviewText(null);
     setVerifyItems([]);
     setVerifyReviewCount(0);
+    setCompletenessWarnings([]);
     setAttestationChecked(false);
     setPrevText(null);
     patchStoryDraft({ reviewText: null });
@@ -389,6 +394,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
       setReviewText(text);
       setVerifyItems(result.verify_items ?? []);
       setVerifyReviewCount(result.verify_review_count ?? 0);
+      setCompletenessWarnings(result.completeness_warnings ?? []);
       setLastGenerateBilling(result.billing?.charged_to);
       setHasGeneratedOnce(true);
       setAttestationChecked(false);
@@ -409,6 +415,7 @@ export function StoryRecorder({ token, onSaved }: Props) {
         .then((result) => {
           setVerifyItems(result.verify_items);
           setVerifyReviewCount(result.verify_review_count);
+          setCompletenessWarnings(result.completeness_warnings ?? []);
         })
         .catch(() => {
           // Keep prior hints if refresh fails — user can still save manually.
@@ -509,6 +516,17 @@ export function StoryRecorder({ token, onSaved }: Props) {
         <p className="text-slate-600 dark:text-slate-400 text-sm">
           Review the draft, fix any names or dates, then save to your profile when you&apos;re ready.
         </p>
+
+        {completenessWarnings.length > 0 && (
+          <div
+            className="rounded-xl border border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100 space-y-1"
+            role="status"
+          >
+            {completenessWarnings.map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+          </div>
+        )}
 
         <StoryVerifyPanel
           items={verifyItems}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -17,7 +17,6 @@ import {
 import { clsx } from "clsx"
 import {
   fitJob,
-  getJobFit,
   formatMatchScore,
   formatPostedDate,
   formatSalaryRange,
@@ -63,7 +62,6 @@ export function JobCard({
   const [fitAnalysisId, setFitAnalysisId] = useState<string | null>(null)
   const [fitExpanded, setFitExpanded] = useState(false)
   const [fitLoading, setFitLoading] = useState(false)
-  const [fitHydrating, setFitHydrating] = useState(false)
   const [fitError, setFitError] = useState<string | null>(null)
   const [saveLoading, setSaveLoading] = useState(false)
   const [trackLoading, setTrackLoading] = useState(false)
@@ -75,29 +73,8 @@ export function JobCard({
   const matchScoreLabel = formatMatchScore(job.score)
   const hasFit = fitResult !== null
 
-  useEffect(() => {
-    if (!accessToken || blurred) return
-    let cancelled = false
-    setFitHydrating(true)
-    void getJobFit(accessToken, job.id)
-      .then((res) => {
-        if (cancelled || !res) return
-        setFitResult(res.result)
-        setFitAnalysisId(res.analysis_id)
-      })
-      .catch(() => {
-        // Non-fatal — user can still run Check Fit once.
-      })
-      .finally(() => {
-        if (!cancelled) setFitHydrating(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [accessToken, blurred, job.id])
-
   const handleCheckFit = async () => {
-    if (blurred || fitLoading || fitHydrating) return
+    if (blurred || fitLoading) return
     if (hasFit) {
       setFitExpanded(true)
       return
@@ -308,10 +285,10 @@ export function JobCard({
           <button
             type="button"
             onClick={handleCheckFit}
-            disabled={fitLoading || fitHydrating || blurred}
+            disabled={fitLoading || blurred}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-sm hover:border-slate-600 disabled:opacity-40"
           >
-            {fitLoading || fitHydrating ? (
+            {fitLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Target className="w-4 h-4" />

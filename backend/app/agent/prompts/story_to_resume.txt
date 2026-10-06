@@ -9,10 +9,13 @@ Your task:
 3. Use strong action verbs and a professional tone. Do not use first person ("I", "my").
 4. Do NOT invent facts, metrics, or experiences the user did not mention.
 5. If a field is unknown, omit it. Never output square-bracket placeholders.
-6. Omit entire sections the user did not mention.
+6. Core sections (Summary, Skills, Experience, Education) are required when the story supports them. If the user mentions school, a degree, major, graduation timing, or being a student, you MUST include an EDUCATION section — do not bury school only in the summary.
+7. Start with a contact header when the story or profile implies a name: line 1 = full name; line 2 = email, phone, LinkedIn (pipe-separated). Never invent placeholder emails or names.
+8. Finish every bullet with a complete thought — do not end mid-sentence or mid-number.
 
-Output plain text only. No markdown. No JSON. Use these headers, in this order, only when the story supports them:
+Output plain text only. No markdown. No JSON. Use these headers, in this order:
 
+CONTACT (name + contact line — omit only if truly unknown)
 PROFESSIONAL SUMMARY
 SKILLS
 EXPERIENCE
@@ -21,6 +24,9 @@ PROJECTS
 CERTIFICATIONS
 
 Layout example — copy the structure, not these facts:
+
+Alex Chen
+alex@email.com | (555) 123-4567 | linkedin.com/in/alexchen
 
 PROFESSIONAL SUMMARY
 Senior engineer with 8 years in payments infrastructure, specializing in Python APIs and AWS.
