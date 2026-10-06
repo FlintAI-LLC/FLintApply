@@ -41,3 +41,26 @@ def test_clean_skill_does_not_fire() -> None:
     issues = lint_bullets([], ["Languages: Kubernetes, Python"], JD)
     blocking = {i.rule for i in issues if i.rule in BLOCKING_RULES}
     assert blocking == set()
+
+
+def test_soft_skill_phrases_with_to_are_allowed() -> None:
+    skills = ["Soft Skills: communication, attention to detail, teamwork"]
+    issues = lint_bullets([], skills, JD)
+    blocking = {i.rule for i in issues if i.rule in BLOCKING_RULES}
+    assert blocking == set()
+
+
+def test_comma_split_and_fragments_coalesce_before_lint() -> None:
+    skills = ["Soft Skills: reliability, protocols, teamwork, and sound judgment"]
+    issues = lint_bullets([], skills, JD)
+    blocking = {i.rule for i in issues if i.rule in BLOCKING_RULES}
+    assert blocking == set()
+
+
+def test_jd_sentence_skill_still_blocked() -> None:
+    skills = [
+        "Tools: with experience in cloud and platform engineering for enterprise teams"
+    ]
+    issues = lint_bullets([], skills, JD)
+    blocking = {i.rule for i in issues if i.rule in BLOCKING_RULES}
+    assert "skill_is_sentence" in blocking
