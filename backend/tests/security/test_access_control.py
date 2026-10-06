@@ -596,6 +596,23 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+_PHASE1_SEED_JD = (
+    "Senior Software Engineer — platform backend role. "
+    "Requirements: Python, FastAPI, PostgreSQL, Kubernetes, observability. "
+) * 6
+
+
+async def _attach_minimal_jd(
+    app_client: AsyncClient, session_id: str, token: str
+) -> None:
+    res = await app_client.post(
+        f"/api/sessions/{session_id}/jd",
+        json={"jd_text": _PHASE1_SEED_JD},
+        headers=_auth(token),
+    )
+    assert res.status_code == 200, res.text
+
+
 async def _seed_resume_record(
     db: AsyncSession, user_id: uuid.UUID, *, session_id: str | None = None
 ) -> ResumeRecord:
@@ -1212,6 +1229,7 @@ async def test_superseded_token_cannot_drive_a_claimed_session(
     created = await app_client.post("/api/sessions", headers=_auth(live_token))
     assert created.status_code == 201, created.text
     session_id = created.json()["session_id"]
+    await _attach_minimal_jd(app_client, session_id, live_token)
 
     denied = await app_client.post(
         f"/api/sessions/{session_id}/phases/1/run",
@@ -1290,6 +1308,8 @@ async def test_superseded_token_does_not_claim_a_new_session(
     assert session.user_id is None, (
         "a superseded token claimed the new session for its subject"
     )
+
+    await _attach_minimal_jd(app_client, session_id, live_token)
 
     # The live token still claims it, so refusing to bind costs the real
     # owner nothing.

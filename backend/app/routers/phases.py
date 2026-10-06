@@ -159,6 +159,15 @@ async def trigger_phase(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    if phase == 1 and not (session.jd_raw or "").strip():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "jd_required",
+                "message": "Add a job description before running analysis.",
+            },
+        )
+
     user_id = session.user_id
     uid: uuid.UUID | None = None
     if user_id:

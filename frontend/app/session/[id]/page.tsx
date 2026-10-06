@@ -1761,7 +1761,21 @@ function SessionContent() {
                   <ProgressLog messages={progressLog} done={false} />
                 </div>
               )}
-              {!keywords && !phaseRunning && sessionLoaded && (
+              {!keywords && !phaseRunning && sessionLoaded && !hasJd && (
+                <div
+                  className="mb-6 rounded-lg border border-amber-400/30 bg-amber-400/5 p-4 text-sm text-slate-700 dark:text-slate-300"
+                  data-testid="analysis-jd-required"
+                >
+                  <p className="mb-2">Add a job description before running analysis.</p>
+                  <Link
+                    href={`/session/new?continue=${sessionId}&step=jd`}
+                    className="font-medium text-amber-800 dark:text-amber-300 hover:underline"
+                  >
+                    Open job description step
+                  </Link>
+                </div>
+              )}
+              {!keywords && !phaseRunning && sessionLoaded && hasJd && (
                 <button
                   type="button"
                   onClick={() => runCurrentPhase()}
