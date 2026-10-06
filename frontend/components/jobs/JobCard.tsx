@@ -175,6 +175,14 @@ export function JobCard({
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-slate-900 dark:text-white truncate">{job.title}</h3>
             <p className="text-sm text-slate-600 dark:text-slate-400">{job.company}</p>
+            {job.match_reasons && job.match_reasons.length > 0 && (
+              <p
+                className="text-xs text-slate-500 dark:text-slate-500 mt-1"
+                data-testid={`job-match-reasons-${job.id}`}
+              >
+                {job.match_reasons.join(" · ")}
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-slate-600 dark:text-slate-400">
               {job.location && (
                 <span className="inline-flex items-center gap-1">

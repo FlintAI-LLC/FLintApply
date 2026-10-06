@@ -315,6 +315,18 @@ async def search_jobs(
         expand=body.expand,
         allow_hirebase=allow_hirebase,
     )
+    from app.services.jobs.job_service import tokenize_job_search_terms
+    from app.services.jobs.search_enrichment import (
+        classify_search_off_ramp,
+        enrich_search_results,
+    )
+
+    jobs = enrich_search_results(body.query, jobs)
+    off_ramp = classify_search_off_ramp(
+        body.query,
+        jobs,
+        terms=tokenize_job_search_terms(body.query),
+    )
     await _require_subscription_quota(
         db, user=user, action=QuotaAction.job_search, charge=charge
     )
@@ -327,6 +339,7 @@ async def search_jobs(
         results_may_be_stale=stale,
         message=message,
         source=source,
+        off_ramp=off_ramp,
     )
 
 

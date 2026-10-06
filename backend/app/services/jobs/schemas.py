@@ -31,6 +31,8 @@ class JobResult(BaseModel):
     sources: list[str] = Field(default_factory=list)
     score: float | None = None
     first_seen_at: datetime | None = None
+    match_reasons: list[str] = Field(default_factory=list)
+    relevance_tier: str | None = None
 
 
 class JobSearchResponse(BaseModel):
@@ -41,6 +43,7 @@ class JobSearchResponse(BaseModel):
     results_may_be_stale: bool = False
     message: str | None = None
     source: str = "hirebase"
+    off_ramp: str | None = None
 
 
 class JobSearchRequest(BaseModel):

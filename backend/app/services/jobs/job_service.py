@@ -105,18 +105,34 @@ def _search_variants_for_term(term: str) -> tuple[str, ...]:
     return _JOB_SEARCH_TERM_ALIASES.get(term, (term,))
 
 
+def _postgres_word_match(column, variant: str):
+    """Whole-token match — avoids tutor matching inside tutorial."""
+    escaped = re.escape(variant)
+    pattern = rf"(^|[^[:alnum:]]){escaped}([^[:alnum:]]|$)"
+    return column.op("~*")(pattern)
+
+
 def _job_cache_term_clause(term: str):
     """Match a search term (plus aliases) against title, company, or description."""
     clauses = []
     for variant in _search_variants_for_term(term):
-        pattern = f"%{variant}%"
-        clauses.append(
-            or_(
-                JobCache.title.ilike(pattern),
-                JobCache.company.ilike(pattern),
-                JobCache.description.ilike(pattern),
+        if " " in variant:
+            pattern = f"%{variant}%"
+            clauses.append(
+                or_(
+                    JobCache.title.ilike(pattern),
+                    JobCache.company.ilike(pattern),
+                    JobCache.description.ilike(pattern),
+                )
             )
-        )
+        else:
+            clauses.append(
+                or_(
+                    _postgres_word_match(JobCache.title, variant),
+                    _postgres_word_match(JobCache.company, variant),
+                    _postgres_word_match(JobCache.description, variant),
+                )
+            )
     return or_(*clauses)
 
 
@@ -181,10 +197,17 @@ def _job_cache_relevance_score(terms: list[str]):
     score = literal(0)
     for term in terms:
         for variant in _search_variants_for_term(term):
-            pattern = f"%{variant}%"
-            score = score + case((JobCache.title.ilike(pattern), 10), else_=0)
-            score = score + case((JobCache.company.ilike(pattern), 4), else_=0)
-            score = score + case((JobCache.description.ilike(pattern), 1), else_=0)
+            if " " in variant:
+                pattern = f"%{variant}%"
+                score = score + case((JobCache.title.ilike(pattern), 10), else_=0)
+                score = score + case((JobCache.company.ilike(pattern), 4), else_=0)
+                score = score + case((JobCache.description.ilike(pattern), 1), else_=0)
+            else:
+                score = score + case((_postgres_word_match(JobCache.title, variant), 10), else_=0)
+                score = score + case((_postgres_word_match(JobCache.company, variant), 4), else_=0)
+                score = score + case(
+                    (_postgres_word_match(JobCache.description, variant), 1), else_=0
+                )
     return score
 
 
