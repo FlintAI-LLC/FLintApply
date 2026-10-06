@@ -441,7 +441,7 @@ function NewSessionContent() {
         }
         await submitJD(sessionId, {
           jd_text: jdText,
-          jd_title: jdTitle ?? undefined,
+          jd_id: jdId,
         });
         if (!cancelled) jobsJdPersistedRef.current = true;
       } catch {
