@@ -8,6 +8,7 @@ import { JOB_CORPUS_ROADMAP_NOTE, JOB_CORPUS_SCOPE_LABEL } from "@/lib/brand"
 import { getSubscriptionCurrent } from "@/lib/api"
 import { isSubscriptionActive } from "@/lib/billing"
 import { JobsStaleBanner } from "@/components/jobs/JobsStaleBanner"
+import { JobsSearchOffRamp } from "@/components/jobs/JobsSearchOffRamp"
 import { JobCard } from "@/components/jobs/JobCard"
 import { JobCardSkeleton } from "@/components/jobs/JobCardSkeleton"
 import {
@@ -67,6 +68,11 @@ function JobsPageContent() {
   const [preferredTitles, setPreferredTitles] = useState<string[]>([])
   const [titlesConfirmed, setTitlesConfirmed] = useState(false)
   const [searchMode, setSearchMode] = useState<JobSearchMode>("keyword")
+  const [jobsTab, setJobsTab] = useState<"search" | "saved">("search")
+  const [savedJobsList, setSavedJobsList] = useState<JobResult[]>([])
+  const [savedJobsLoading, setSavedJobsLoading] = useState(false)
+  const [offRamp, setOffRamp] = useState<string | null>(null)
+  const [lastSearchQuery, setLastSearchQuery] = useState("")
 
   const loadPreferences = useCallback(async () => {
     if (!token) return
@@ -95,8 +101,23 @@ function JobsPageContent() {
     try {
       const saved = await listSavedJobs(token)
       setSavedIds(new Set(saved.map((j) => j.id)))
+      setSavedJobsList(saved)
     } catch {
       // Non-fatal — bookmarks still work optimistically
+    }
+  }, [token])
+
+  const refreshSavedTab = useCallback(async () => {
+    if (!token) return
+    setSavedJobsLoading(true)
+    try {
+      const saved = await listSavedJobs(token)
+      setSavedJobsList(saved)
+      setSavedIds(new Set(saved.map((j) => j.id)))
+    } catch {
+      setError("Could not load saved jobs.")
+    } finally {
+      setSavedJobsLoading(false)
     }
   }, [token])
 
@@ -126,6 +147,7 @@ function JobsPageContent() {
     setPage(1)
     setStale(false)
     setStaleMessage(null)
+    setOffRamp(null)
   }
 
   const handleModeChange = (mode: JobSearchMode) => {
@@ -179,7 +201,12 @@ function JobsPageContent() {
     }
   }
 
-  const runSearch = async (nextPage: number, append: boolean, queryOverride?: string) => {
+  const runSearch = async (
+    nextPage: number,
+    append: boolean,
+    queryOverride?: string,
+    expand = false,
+  ) => {
     const query = (queryOverride ?? role).trim()
     if (!token || !query) {
       setError("Enter a role or keyword to search.")
@@ -198,12 +225,14 @@ function JobsPageContent() {
     }
 
     try {
+      setLastSearchQuery(query)
       const res = await searchJobs(token, {
         query,
         location: location.trim() || null,
         filters: buildFilters(),
         page: nextPage,
         page_size: PAGE_SIZE,
+        expand,
       })
 
       setJobs((prev) => (append ? [...prev, ...res.jobs] : res.jobs))
@@ -211,6 +240,7 @@ function JobsPageContent() {
       setPage(res.page)
       setStale(res.results_may_be_stale)
       setStaleMessage(res.message)
+      setOffRamp(res.off_ramp ?? null)
     } catch (e) {
       const err = e as Error & { code?: string }
       if (err.code === "subscription_required") {
@@ -254,6 +284,11 @@ function JobsPageContent() {
       if (shouldSave) {
         await saveJob(token, jobId)
         setSavedIds((prev) => new Set(prev).add(jobId))
+        setSavedJobsList((prev) => {
+          const job = jobs.find((j) => j.id === jobId)
+          if (!job || prev.some((j) => j.id === jobId)) return prev
+          return [job, ...prev]
+        })
       } else {
         await unsaveJob(token, jobId)
         setSavedIds((prev) => {
@@ -261,6 +296,7 @@ function JobsPageContent() {
           next.delete(jobId)
           return next
         })
+        setSavedJobsList((prev) => prev.filter((j) => j.id !== jobId))
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update bookmark.")
@@ -298,16 +334,66 @@ function JobsPageContent() {
               Find roles, check fit, and tailor your resume in one flow.
             </p>
           </div>
-          <Link
-            href="/jobs/preferences"
-            className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2"
-          >
-            <Settings2 className="w-4 h-4" />
-            Preferences
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-800 p-0.5 text-sm">
+              <button
+                type="button"
+                onClick={() => setJobsTab("search")}
+                className={`px-3 py-1.5 rounded-md ${jobsTab === "search" ? "bg-slate-200 dark:bg-slate-800 font-medium" : "text-slate-600 dark:text-slate-400"}`}
+                data-testid="jobs-tab-search"
+              >
+                Search
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setJobsTab("saved")
+                  void refreshSavedTab()
+                }}
+                className={`px-3 py-1.5 rounded-md ${jobsTab === "saved" ? "bg-slate-200 dark:bg-slate-800 font-medium" : "text-slate-600 dark:text-slate-400"}`}
+                data-testid="jobs-tab-saved"
+              >
+                Saved
+              </button>
+            </div>
+            <Link
+              href="/jobs/preferences"
+              className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2"
+            >
+              <Settings2 className="w-4 h-4" />
+              Preferences
+            </Link>
+          </div>
         </div>
 
-        {!titlesConfirmed && searchMode === "keyword" && (
+        {jobsTab === "saved" && (
+          <div className="space-y-4">
+            {savedJobsLoading && (
+              <div className="flex justify-center py-12 text-slate-600 dark:text-slate-400">
+                <Loader2 className="w-6 h-6 animate-spin" />
+              </div>
+            )}
+            {!savedJobsLoading && savedJobsList.length === 0 && (
+              <p className="text-center text-slate-600 dark:text-slate-400 py-12">
+                No saved jobs yet. Bookmark roles from search results to find them here.
+              </p>
+            )}
+            {!savedJobsLoading &&
+              savedJobsList.map((job, index) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  index={index}
+                  isSubscribed={subscribed}
+                  accessToken={token}
+                  saved={true}
+                  onSaveToggle={handleSaveToggle}
+                />
+              ))}
+          </div>
+        )}
+
+        {jobsTab === "search" && !titlesConfirmed && searchMode === "keyword" && (
           <div className="mb-6 rounded-xl border border-amber-400/30 bg-amber-400/5 p-4 text-sm text-slate-700 dark:text-slate-300">
             <p className="mb-2">
               Pick job titles from your resume to search our tech job corpus ({JOB_CORPUS_SCOPE_LABEL}).{" "}
@@ -349,6 +435,7 @@ function JobsPageContent() {
           </div>
         )}
 
+        {jobsTab === "search" && (
         <form
           onSubmit={handleSearch}
           className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4 mb-8"
@@ -512,8 +599,9 @@ function JobsPageContent() {
             )}
           </button>
         </form>
+        )}
 
-        {error && (
+        {jobsTab === "search" && error && (
           <div className="mb-6 flex items-start gap-2 text-red-700 dark:text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-lg p-3">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
             {error}
@@ -535,9 +623,21 @@ function JobsPageContent() {
           </div>
         )}
 
-        <JobsStaleBanner resultsMayBeStale={stale} message={staleMessage} />
+        {jobsTab === "search" && (
+          <JobsStaleBanner resultsMayBeStale={stale} message={staleMessage} />
+        )}
 
-        {loading && (
+        {jobsTab === "search" && offRamp && hasSearched && !loading && (
+          <JobsSearchOffRamp
+            reason={offRamp}
+            query={lastSearchQuery || role}
+            subscribed={subscribed}
+            preferredTitles={preferredTitles}
+            onSearchWider={() => void runSearch(1, false, lastSearchQuery || role, true)}
+          />
+        )}
+
+        {jobsTab === "search" && loading && (
           <div className="space-y-4" data-testid="jobs-results-loading">
             {Array.from({ length: 3 }).map((_, i) => (
               <JobCardSkeleton key={i} />
@@ -545,7 +645,7 @@ function JobsPageContent() {
           </div>
         )}
 
-        {!loading && hasSearched && jobs.length === 0 && !error && (
+        {jobsTab === "search" && !loading && hasSearched && jobs.length === 0 && !error && !offRamp && (
           <p className="text-center text-slate-600 dark:text-slate-400 py-12">
             {searchMode === "match"
               ? "No matching jobs right now. Try again later or search by role."
@@ -553,7 +653,7 @@ function JobsPageContent() {
           </p>
         )}
 
-        {!loading && jobs.length > 0 && (
+        {jobsTab === "search" && !loading && jobs.length > 0 && (
           <div className="space-y-4">
             <p className="text-sm text-slate-600 dark:text-slate-400">
               Showing {jobs.length} of {total} result{total !== 1 ? "s" : ""}

@@ -92,6 +92,8 @@ export interface JobResult {
   sources: string[]
   score: number | null
   first_seen_at?: string | null
+  match_reasons?: string[]
+  relevance_tier?: string | null
 }
 
 export interface JobSearchResponse {
@@ -102,6 +104,7 @@ export interface JobSearchResponse {
   results_may_be_stale: boolean
   message: string | null
   source?: string
+  off_ramp?: string | null
 }
 
 export interface JobMatchRequest {

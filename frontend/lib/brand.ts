@@ -86,6 +86,20 @@ export const JOB_CORPUS_SCOPE_LABEL = "Tech jobs (expanding soon)" as const;
 export const JOB_CORPUS_INTRO =
   `${PRODUCT_NAME} matches your story to real openings from our tech employer job corpus. ${JOB_CORPUS_ROADMAP_NOTE}` as const;
 
+/** Shown on off-ramp when the query is outside the tech corpus. */
+export const JOB_CORPUS_EARLY_ACCESS_NOTE =
+  "In-app search is focused on tech roles for the first ~3 months; more industries are on the roadmap." as const;
+
+export function linkedInJobSearchUrl(query: string): string {
+  const q = encodeURIComponent(query.trim() || "jobs")
+  return `https://www.linkedin.com/jobs/search/?keywords=${q}`
+}
+
+export function indeedJobSearchUrl(query: string): string {
+  const q = encodeURIComponent(query.trim() || "jobs")
+  return `https://www.indeed.com/jobs?q=${q}`
+}
+
 export const METADATA_OG_TITLE = PRODUCT_NAME;
 
 export const METADATA_OG_DESCRIPTION =
