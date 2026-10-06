@@ -124,18 +124,26 @@ def _unbalanced_parens(text: str) -> bool:
     return depth != 0
 
 
+_ORPHAN_SKILL_CONJUNCTION = re.compile(r"^(and|or)\b", re.IGNORECASE)
+
+
 def _flatten_skill_lines(skills: list[str]) -> list[str]:
     terms: list[str] = []
     for line in skills:
         payload = line.split(":", 1)[1] if ":" in line else line
         for part in payload.split(","):
             trimmed = part.strip()
-            if trimmed:
+            if not trimmed:
+                continue
+            if _ORPHAN_SKILL_CONJUNCTION.match(trimmed) and terms:
+                terms[-1] = f"{terms[-1]} {trimmed}"
+            else:
                 terms.append(trimmed)
     return terms
 
 
 def _skill_is_sentence(skill: str) -> bool:
+    """Flag JD prose pasted as a skill, not short multi-word phrases like 'attention to detail'."""
     candidate = skill.strip()
     if not candidate:
         return False
@@ -143,9 +151,13 @@ def _skill_is_sentence(skill: str) -> bool:
         return True
     if candidate[-1] in _TERMINAL_PUNCT:
         return True
-    if _SKILL_FUNCTION_WORDS.search(candidate):
+    if _ORPHAN_SKILL_CONJUNCTION.match(candidate):
         return True
-    return False
+    words = candidate.split()
+    if len(words) >= 8:
+        return True
+    function_word_hits = len(_SKILL_FUNCTION_WORDS.findall(candidate))
+    return function_word_hits >= 2
 
 
 def _skill_is_jd_substring(skill: str, jd_lower: str) -> bool:
