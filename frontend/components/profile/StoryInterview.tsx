@@ -76,6 +76,7 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
   const [reviewText, setReviewText] = useState<string | null>(null);
   const [verifyItems, setVerifyItems] = useState<VerifyItem[]>([]);
   const [verifyReviewCount, setVerifyReviewCount] = useState(0);
+  const [completenessWarnings, setCompletenessWarnings] = useState<string[]>([]);
   const [attestationChecked, setAttestationChecked] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -347,6 +348,7 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
       setReviewText(text);
       setVerifyItems(result.verify_items ?? []);
       setVerifyReviewCount(result.verify_review_count ?? 0);
+      setCompletenessWarnings(result.completeness_warnings ?? []);
       setAttestationChecked(false);
       patchStoryDraft({ interviewReviewText: text });
       setPhase("done");
@@ -453,6 +455,16 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
           <CheckCircle className="w-5 h-5" />
           Resume draft ready — verify before saving
         </div>
+        {completenessWarnings.length > 0 && (
+          <div
+            className="rounded-xl border border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100 space-y-1"
+            role="status"
+          >
+            {completenessWarnings.map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+          </div>
+        )}
         <StoryVerifyPanel
           items={verifyItems}
           reviewCount={verifyReviewCount}
@@ -490,6 +502,7 @@ export function StoryInterview({ token, isFreeUser, onSaved, onBack }: Props) {
               .then((result) => {
                 setVerifyItems(result.verify_items);
                 setVerifyReviewCount(result.verify_review_count);
+                setCompletenessWarnings(result.completeness_warnings ?? []);
               })
               .catch(() => undefined);
           }}

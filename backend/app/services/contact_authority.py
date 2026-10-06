@@ -6,6 +6,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.rewrite import TailoredResumeOutput
 from app.models.user import User
@@ -99,7 +100,11 @@ def apply_authoritative_contact(
     return output.model_copy(update={"contact": merged})
 
 
-async def resolve_account_email(user_id: str | None) -> str | None:
+async def resolve_account_email(
+    user_id: str | None,
+    *,
+    db: AsyncSession | None = None,
+) -> str | None:
     """Load the authenticated account email for contact authority."""
     if not user_id:
         return None
@@ -107,11 +112,18 @@ async def resolve_account_email(user_id: str | None) -> str | None:
         uid = uuid.UUID(user_id)
     except ValueError:
         return None
-    from app.db.engine import async_session_factory
 
-    async with async_session_factory() as db:
-        row = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
+    async def _email_from_session(session: AsyncSession) -> str | None:
+        row = (await session.execute(select(User).where(User.id == uid))).scalar_one_or_none()
         if row is None:
             return None
         email = (row.email or "").strip()
         return email or None
+
+    if db is not None:
+        return await _email_from_session(db)
+
+    from app.db.engine import async_session_factory
+
+    async with async_session_factory() as session:
+        return await _email_from_session(session)

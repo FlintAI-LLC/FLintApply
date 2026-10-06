@@ -182,3 +182,33 @@ async def test_story_endpoint_unauthenticated(app_client: AsyncClient):
         json={"segments": ["Some career story text goes here."], "whisper_path": False},
     )
     assert response.status_code == 401
+
+
+INTERVIEW_HISTORY = [
+    {"role": "interviewer", "text": "Tell me about your recent role."},
+    {"role": "user", "text": VALID_SEGMENTS[0]},
+    {"role": "interviewer", "text": "What did you do before that?"},
+    {"role": "user", "text": VALID_SEGMENTS[1]},
+]
+
+
+@pytest.mark.asyncio
+async def test_interview_submit_returns_completeness_and_contact_header(
+    app_client: AsyncClient, db_session: AsyncSession
+):
+    token = await _register_and_login(app_client, db_session)
+
+    with patch("app.routers.profile.story_to_resume", new_callable=AsyncMock) as mock_s2r:
+        mock_s2r.return_value = MOCK_DRAFT
+        response = await app_client.post(
+            "/api/profile/story/interview/submit",
+            json={"history": INTERVIEW_HISTORY, "whisper_path": False},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["resume_text"].startswith("Story User")
+    assert MOCK_DRAFT.strip() in data["resume_text"]
+    assert "completeness_warnings" in data
+    assert "verify_items" in data
