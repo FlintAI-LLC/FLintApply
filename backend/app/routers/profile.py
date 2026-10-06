@@ -814,6 +814,43 @@ async def _story_user_info_for_contact(
     )
 
 
+async def _enrich_story_draft_for_review(
+    db: AsyncSession,
+    user: User,
+    narrative: str,
+    spoken_segments: list[str],
+    draft_text: str,
+) -> tuple[str, list[dict], int, list[str]]:
+    """Contact header, verify hints, and completeness warnings for story drafts."""
+    account_email = (user.email or "").strip() or await resolve_account_email(
+        str(user.id), db=db
+    )
+    user_info = await _story_user_info_for_contact(db, user, account_email)
+    draft_text = prepend_authoritative_contact_header(
+        draft_text,
+        user_info=user_info,
+        account_email=account_email,
+        narrative=narrative,
+    )
+    include_github = narrative_or_resume_is_tech(narrative, draft_text)
+    verify_items = [
+        item.to_dict()
+        for item in build_verify_items(
+            spoken_segments,
+            draft_text,
+            profile_name=user_info.name or user.display_name,
+            profile_email=user_info.email or account_email,
+            profile_linkedin=user_info.linkedin,
+            profile_phone=user_info.phone,
+            profile_github=user_info.github,
+            include_github=include_github,
+        )
+    ]
+    review_count = sum(1 for item in verify_items if item["status"] == "review")
+    section_warnings = completeness_warnings(narrative, draft_text)
+    return draft_text, verify_items, review_count, section_warnings
+
+
 @router.post("/resume/from-story", status_code=200)
 @limiter.limit("5/minute")
 async def create_resume_from_story(
@@ -861,14 +898,6 @@ async def create_resume_from_story(
 
         try:
             draft_text = await story_to_resume(narrative, llm_client)
-            account_email = await resolve_account_email(str(user.id))
-            user_info = await _story_user_info_for_contact(db, user, account_email)
-            draft_text = prepend_authoritative_contact_header(
-                draft_text,
-                user_info=user_info,
-                account_email=account_email,
-                narrative=narrative,
-            )
         except FreeTierAiBudgetExceededError as exc:
             raise HTTPException(
                 status_code=402,
@@ -881,24 +910,11 @@ async def create_resume_from_story(
                 detail={"code": "story_conversion_failed", "message": str(exc)},
             ) from exc
 
-    account_email = await resolve_account_email(str(user.id))
-    user_info = await _story_user_info_for_contact(db, user, account_email)
-    include_github = narrative_or_resume_is_tech(narrative, draft_text)
-    verify_items = [
-        item.to_dict()
-        for item in build_verify_items(
-            body.segments,
-            draft_text,
-            profile_name=user_info.name or user.display_name,
-            profile_email=user_info.email or account_email,
-            profile_linkedin=user_info.linkedin,
-            profile_phone=user_info.phone,
-            profile_github=user_info.github,
-            include_github=include_github,
+    draft_text, verify_items, review_count, section_warnings = (
+        await _enrich_story_draft_for_review(
+            db, user, narrative, body.segments, draft_text
         )
-    ]
-    review_count = sum(1 for item in verify_items if item["status"] == "review")
-    section_warnings = completeness_warnings(narrative, draft_text)
+    )
 
     log.info(
         "story.draft_generated",
@@ -929,7 +945,9 @@ async def story_verify_draft(
 ) -> dict:
     """Recompute verify hints after the user edits the draft text."""
     narrative = "\n\n---\n\n".join(seg.strip() for seg in body.segments if seg.strip())
-    account_email = await resolve_account_email(str(user.id))
+    account_email = (user.email or "").strip() or await resolve_account_email(
+        str(user.id), db=db
+    )
     user_info = await _story_user_info_for_contact(db, user, account_email)
     include_github = narrative_or_resume_is_tech(narrative, body.resume_text)
     verify_items = [
@@ -1351,8 +1369,11 @@ async def story_interview_submit(
     user_segments = [
         m["text"] for m in history_dicts if m["role"] == "user" and m["text"].strip()
     ]
-    verify_items = [item.to_dict() for item in build_verify_items(user_segments, draft_text)]
-    review_count = sum(1 for item in verify_items if item["status"] == "review")
+    draft_text, verify_items, review_count, section_warnings = (
+        await _enrich_story_draft_for_review(
+            session, user, narrative, user_segments, draft_text
+        )
+    )
 
     log.info(
         "story_interview.draft_generated",
@@ -1363,6 +1384,7 @@ async def story_interview_submit(
         "resume_text": draft_text,
         "verify_items": verify_items,
         "verify_review_count": review_count,
+        "completeness_warnings": section_warnings,
         "billing": {
             "charged_to": "interview_session_included",
             "action": "story_interview",
