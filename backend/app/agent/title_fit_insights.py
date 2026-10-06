@@ -54,6 +54,12 @@ def _resume_blob(resume_text: str) -> str:
     return resume_text.casefold()
 
 
+def _token_in_blob(tok: str, blob: str) -> bool:
+    if not tok:
+        return False
+    return bool(re.search(rf"\b{re.escape(tok)}\b", blob))
+
+
 def _held_match(title: str, held_titles: list[str]) -> bool:
     key = title.casefold()
     return any(key == held.casefold() for held in held_titles)
@@ -140,7 +146,7 @@ def score_title_fit(
         score += 18
 
     if tokens:
-        hits = sum(1 for tok in tokens if tok in blob)
+        hits = sum(1 for tok in tokens if _token_in_blob(tok, blob))
         ratio = hits / len(tokens)
         score += int(ratio * 22)
 

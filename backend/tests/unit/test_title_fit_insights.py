@@ -42,6 +42,17 @@ def test_senior_title_without_senior_resume_adds_weakness() -> None:
     assert any("senior" in w.lower() for w in insight.weaknesses)
 
 
+def test_front_end_title_does_not_false_positive_on_end_token() -> None:
+    resume = "Front End Developer building React dashboards for analytics."
+    held = ["Front End Developer"]
+    insight = score_title_fit(
+        "Front End Developer",
+        resume_text=resume,
+        held_titles=held,
+    )
+    assert insight.fit_score >= 80
+
+
 def test_enrich_sorts_by_fit_score_descending() -> None:
     resume = "Python FastAPI backend engineer. PostgreSQL, Redis, AWS."
     held = ["Backend Engineer"]

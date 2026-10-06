@@ -50,6 +50,7 @@ export interface StoryPreviewResponse {
   resume_text: string;
   verify_items: VerifyItem[];
   verify_review_count: number;
+  completeness_warnings?: string[];
   billing: StoryBillingInfo;
 }
 
@@ -133,7 +134,11 @@ export async function refreshStoryVerify(
   segments: string[],
   resumeText: string,
   token: string,
-): Promise<{ verify_items: VerifyItem[]; verify_review_count: number }> {
+): Promise<{
+  verify_items: VerifyItem[];
+  verify_review_count: number;
+  completeness_warnings?: string[];
+}> {
   const res = await fetch(`${BASE}/api/profile/resume/story-verify`, {
     method: "POST",
     headers: {

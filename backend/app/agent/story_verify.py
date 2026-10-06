@@ -21,7 +21,32 @@ _MONTH_YEAR = re.compile(
     r"\.?\s+\d{4}\b",
     re.IGNORECASE,
 )
-_YEAR = re.compile(r"\b(19|20)\d{2}\b")
+_YEAR_FULL = re.compile(r"\b(?:19|20)\d{2}\b")
+_EMPLOYER_STOPLIST = frozenset(
+    {
+        "a",
+        "about",
+        "all",
+        "and",
+        "babysitting",
+        "five",
+        "for",
+        "from",
+        "home",
+        "kids",
+        "local",
+        "my",
+        "or",
+        "programmer",
+        "shops",
+        "the",
+        "tutor",
+        "tutoring",
+        "volunteering",
+        "with",
+        "your",
+    }
+)
 _AT_COMPANY = re.compile(
     r"\b(?:at|for|from)\s+([A-Za-z][A-Za-z0-9&\-. ]{2,40}?)(?:\s+(?:since|from|in|I|we|they|that|there|where|when|and|or)\b|[,.]|$)",
     re.IGNORECASE,
@@ -67,18 +92,23 @@ def _names_match(spoken: str, resume: str) -> bool:
     return overlap >= 0.6
 
 
-def _extract_experience_block(resume_text: str) -> str:
+def _extract_section_block(resume_text: str, header: str) -> str:
     upper = resume_text.upper()
-    start = upper.find("EXPERIENCE")
+    start = upper.find(header.upper())
     if start < 0:
-        return resume_text
+        return ""
     end_candidates = [
-        upper.find(h, start + 1)
-        for h in ("EDUCATION", "PROJECTS", "CERTIFICATIONS", "SKILLS")
-        if upper.find(h, start + 1) >= 0
+        upper.find(h, start + len(header))
+        for h in ("PROFESSIONAL SUMMARY", "SKILLS", "EXPERIENCE", "EDUCATION", "PROJECTS", "CERTIFICATIONS")
+        if h != header.upper() and upper.find(h, start + len(header)) >= 0
     ]
     end = min(end_candidates) if end_candidates else len(resume_text)
     return resume_text[start:end]
+
+
+def _extract_experience_block(resume_text: str) -> str:
+    block = _extract_section_block(resume_text, "EXPERIENCE")
+    return block if block else resume_text
 
 
 def extract_resume_companies(resume_text: str) -> list[tuple[str, str, str]]:
@@ -94,6 +124,20 @@ def extract_resume_companies(resume_text: str) -> list[tuple[str, str, str]]:
     return entries
 
 
+def _is_plausible_employer(name: str) -> bool:
+    key = _normalize(name)
+    if len(key) < 3:
+        return False
+    tokens = [t for t in key.split() if t]
+    if not tokens:
+        return False
+    if all(t in _EMPLOYER_STOPLIST for t in tokens):
+        return False
+    if tokens[0] in _EMPLOYER_STOPLIST and len(tokens) == 1:
+        return False
+    return True
+
+
 def extract_spoken_companies(segments: list[str]) -> list[str]:
     text = " ".join(segments)
     found: list[str] = []
@@ -102,7 +146,7 @@ def extract_spoken_companies(segments: list[str]) -> list[str]:
         for m in pattern.finditer(text):
             name = m.group(1).strip(" .,")
             key = _normalize(name)
-            if len(key) < 3 or key in seen:
+            if len(key) < 3 or key in seen or not _is_plausible_employer(name):
                 continue
             seen.add(key)
             found.append(name)
@@ -155,10 +199,23 @@ def extract_resume_date_phrases(resume_text: str) -> list[str]:
         if key not in seen:
             seen.add(key)
             phrases.append(phrase)
-    for m in _YEAR.finditer(block):
+    for m in _YEAR_FULL.finditer(block):
         phrase = m.group(0)
         key = phrase.lower()
         if key not in seen and phrase not in phrases:
+            seen.add(key)
+            phrases.append(phrase)
+    edu_block = _extract_section_block(resume_text, "EDUCATION")
+    for m in _MONTH_YEAR.finditer(edu_block):
+        phrase = m.group(0)
+        key = phrase.lower()
+        if key not in seen:
+            seen.add(key)
+            phrases.append(phrase)
+    for m in _YEAR_FULL.finditer(edu_block):
+        phrase = m.group(0)
+        key = phrase.lower()
+        if key not in seen:
             seen.add(key)
             phrases.append(phrase)
     return phrases
@@ -180,19 +237,115 @@ def _company_review_message(spoken: str, resume: str) -> str:
 def _dates_related(spoken: str, resume: str) -> bool:
     if _names_match(spoken, resume) or spoken.lower() in resume.lower() or resume.lower() in spoken.lower():
         return True
-    spoken_years = set(_YEAR.findall(spoken))
-    resume_years = set(_YEAR.findall(resume))
+    spoken_years = set(_YEAR_FULL.findall(spoken))
+    resume_years = set(_YEAR_FULL.findall(resume))
     return bool(spoken_years & resume_years)
 
 
-def build_verify_items(segments: list[str], resume_text: str) -> list[VerifyItem]:
+def _contact_line_present(resume_text: str, value: str) -> bool:
+    if not value.strip():
+        return True
+    return value.strip().casefold() in resume_text.casefold()
+
+
+def build_contact_verify_items(
+    resume_text: str,
+    *,
+    profile_name: str | None = None,
+    profile_email: str | None = None,
+    profile_linkedin: str | None = None,
+    profile_phone: str | None = None,
+    profile_github: str | None = None,
+    include_github: bool = False,
+) -> list[VerifyItem]:
     items: list[VerifyItem] = []
+    checks: list[tuple[str, str | None, str]] = [
+        ("Contact — Name", profile_name, "Add your name at the top of the resume."),
+        ("Contact — Email", profile_email, "Add your email in the contact header."),
+        ("Contact — LinkedIn", profile_linkedin, "Add your LinkedIn URL in the contact header."),
+        ("Contact — Phone", profile_phone, "Add your phone number if you want recruiters to call."),
+    ]
+    if include_github:
+        checks.append(
+            ("Contact — GitHub", profile_github, "Add your GitHub profile for technical roles."),
+        )
+    for field, profile_val, hint in checks:
+        if not (profile_val or "").strip():
+            continue
+        present = _contact_line_present(resume_text, profile_val)
+        items.append(
+            VerifyItem(
+                field=field,
+                spoken=f"Profile: {profile_val.strip()}",
+                resume=profile_val.strip() if present else "(not in resume header)",
+                status="ok" if present else "review",
+                message="Contact line present." if present else hint,
+            )
+        )
+    if profile_name and not _contact_line_present(resume_text, profile_name):
+        first = resume_text.strip().splitlines()[0] if resume_text.strip() else ""
+        if first and not _contact_line_present(resume_text, profile_name):
+            items.insert(
+                0,
+                VerifyItem(
+                    field="Contact — Name",
+                    spoken="(profile)",
+                    resume=first[:80],
+                    status="review",
+                    message="Top line does not match your profile name — fix the header before saving.",
+                ),
+            )
+    return items
+
+
+def build_section_gap_items(segments: list[str], resume_text: str) -> list[VerifyItem]:
+    from app.agent.story_completeness import completeness_warnings
+
+    items: list[VerifyItem] = []
+    narrative = " ".join(segments)
+    for warning in completeness_warnings(narrative, resume_text):
+        items.append(
+            VerifyItem(
+                field="Section completeness",
+                spoken="(from your story)",
+                resume="(draft)",
+                status="review",
+                message=warning,
+            )
+        )
+    return items
+
+
+def build_verify_items(
+    segments: list[str],
+    resume_text: str,
+    *,
+    profile_name: str | None = None,
+    profile_email: str | None = None,
+    profile_linkedin: str | None = None,
+    profile_phone: str | None = None,
+    profile_github: str | None = None,
+    include_github: bool = False,
+) -> list[VerifyItem]:
+    items: list[VerifyItem] = []
+    items.extend(
+        build_contact_verify_items(
+            resume_text,
+            profile_name=profile_name,
+            profile_email=profile_email,
+            profile_linkedin=profile_linkedin,
+            profile_phone=profile_phone,
+            profile_github=profile_github,
+            include_github=include_github,
+        )
+    )
+    items.extend(build_section_gap_items(segments, resume_text))
     spoken_companies = extract_spoken_companies(segments)
     resume_entries = extract_resume_companies(resume_text)
     resume_companies = [c for c, _, _ in resume_entries]
 
     matched_resume: set[int] = set()
-    for spoken in spoken_companies:
+    for spoken in spoken_companies[:8]:
         best_idx = -1
         for i, resume_co in enumerate(resume_companies):
             if i in matched_resume:
