@@ -82,7 +82,9 @@ async def test_story_generate_returns_preview_not_saved(
 
     assert response.status_code == 200, response.text
     data = response.json()
-    assert data["resume_text"] == MOCK_DRAFT
+    assert data["resume_text"].startswith("Story User")
+    assert MOCK_DRAFT.strip() in data["resume_text"]
+    assert "completeness_warnings" in data
     assert "verify_items" in data
     assert isinstance(data["verify_items"], list)
     assert "chunk_count" not in data
