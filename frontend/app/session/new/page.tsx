@@ -81,6 +81,9 @@ function NewSessionContent() {
 
   const [loading, setLoading] = useState(false);
   const jdLoadedRef = useRef(false);
+  const jobsJdPersistedRef = useRef(false);
+  const applicationNameDirtyRef = useRef(false);
+  const jdAutoRefetchRef = useRef(false);
   const checkupResumeAppliedRef = useRef(false);
   const sessionBootstrapRef = useRef(false);
   const appNameRestoredRef = useRef(false);
@@ -107,8 +110,10 @@ function NewSessionContent() {
     const storedName = sessionStorage.getItem(APP_NAME_STORAGE_KEY);
     if (!storedName) return;
     appNameRestoredRef.current = true;
-    setApplicationName(storedName);
-    lastPersistedNameRef.current = storedName;
+    setApplicationName((prev) => (prev.trim() || applicationNameDirtyRef.current ? prev : storedName));
+    if (!applicationNameDirtyRef.current) {
+      lastPersistedNameRef.current = storedName;
+    }
   }, []);
 
   const hydrateWizardFromSession = (
@@ -409,6 +414,46 @@ function NewSessionContent() {
     };
   }, [backendToken, searchParams, router, jdRetryNonce]);
 
+  useEffect(() => {
+    const jdId = searchParams.get("jd_id");
+    if (!jdId || jdText.trim() || !backendToken) return;
+    if (jdAutoRefetchRef.current) return;
+    jdAutoRefetchRef.current = true;
+    jdLoadedRef.current = false;
+    setJdRetryNonce((n) => n + 1);
+  }, [backendToken, searchParams, jdText]);
+
+  // Jobs handoff: persist JD to the session as soon as we have text + session id.
+  useEffect(() => {
+    const source = searchParams.get("source");
+    const jdId = searchParams.get("jd_id");
+    if (source !== "jobs" || !jdId || !sessionId || !jdText.trim()) return;
+    if (jobsJdPersistedRef.current) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const snap = await checkSession(sessionId);
+        if (cancelled) return;
+        if (snap.has_jd) {
+          jobsJdPersistedRef.current = true;
+          return;
+        }
+        await submitJD(sessionId, {
+          jd_text: jdText,
+          jd_title: jdTitle ?? undefined,
+        });
+        if (!cancelled) jobsJdPersistedRef.current = true;
+      } catch {
+        // User can still submit on the JD step.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, jdText, jdTitle, searchParams]);
+
   const goTo = (s: Step) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("step", s);
@@ -445,7 +490,11 @@ function NewSessionContent() {
       </label>
       <input
         value={applicationName}
-        onChange={(e) => setApplicationName(e.target.value)}
+        autoComplete="off"
+        onChange={(e) => {
+          applicationNameDirtyRef.current = true;
+          setApplicationName(e.target.value);
+        }}
         onBlur={() => {
           if (applicationName.trim()) {
             void persistApplicationName(applicationName);
@@ -472,7 +521,9 @@ function NewSessionContent() {
       if (step !== "resume") {
         setStep("resume");
         setParsedResume(null);
-        setJdText("");
+        if (!searchParams.get("jd_id")) {
+          setJdText("");
+        }
       }
       return;
     }
@@ -539,9 +590,16 @@ function NewSessionContent() {
     if (applicationName.trim()) {
       await persistApplicationName(applicationName);
     }
-    // If JD is already filled (extension flow: JD → Resume → Info), advance to info.
-    // Otherwise follow the normal flow: Resume → JD.
-    goTo(jdText.trim() ? "info" : "jd");
+    if (!sessionId) {
+      goTo("jd");
+      return;
+    }
+    try {
+      const snap = await checkSession(sessionId);
+      goTo(snap.has_jd ? "info" : "jd");
+    } catch {
+      goTo("jd");
+    }
   };
 
   // JD submitted → save to backend, store text locally, advance to next step.
@@ -624,6 +682,13 @@ function NewSessionContent() {
     try {
       const handoff = getExtensionHandoff();
       const jdId = searchParams.get("jd_id") ?? handoff?.jd_id ?? undefined;
+      const beforeInfo = await checkSession(sessionId);
+      if (!beforeInfo.has_jd) {
+        setBootstrapError(
+          "This session has no job description saved. Go back to the Job Description step and paste or confirm the JD before continuing.",
+        );
+        return;
+      }
       await saveUserInfo(sessionId, info, jdId);
       sessionStorage.removeItem(SESSION_STORAGE_KEY);
       sessionStorage.removeItem(APP_NAME_STORAGE_KEY);
