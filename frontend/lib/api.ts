@@ -531,7 +531,10 @@ let popupOffersCache: {
   data: BillingPopupOfferResponse
   fetchedAt: number
 } | null = null
-let popupOffersInflight: Promise<BillingPopupOfferResponse> | null = null
+let popupOffersInflight: {
+  token: string
+  promise: Promise<BillingPopupOfferResponse>
+} | null = null
 let popupOffersBlockedUntil = 0
 
 export async function getPopupOffers(token: string): Promise<BillingPopupOfferResponse> {
@@ -546,9 +549,9 @@ export async function getPopupOffers(token: string): Promise<BillingPopupOfferRe
   ) {
     return popupOffersCache.data
   }
-  if (popupOffersInflight) return popupOffersInflight
+  if (popupOffersInflight?.token === token) return popupOffersInflight.promise
 
-  popupOffersInflight = request<BillingPopupOfferResponse>("/api/billing/popup-offers", {
+  const promise = request<BillingPopupOfferResponse>("/api/billing/popup-offers", {
     headers: { Authorization: `Bearer ${token}` },
   })
     .then((data) => {
@@ -563,10 +566,11 @@ export async function getPopupOffers(token: string): Promise<BillingPopupOfferRe
       throw err
     })
     .finally(() => {
-      popupOffersInflight = null
+      if (popupOffersInflight?.token === token) popupOffersInflight = null
     })
 
-  return popupOffersInflight
+  popupOffersInflight = { token, promise }
+  return promise
 }
 
 const SUBSCRIPTION_CACHE_TTL_MS = 60_000
@@ -575,7 +579,10 @@ let subscriptionCache: {
   data: SubscriptionCurrentResponse
   fetchedAt: number
 } | null = null
-let subscriptionInflight: Promise<SubscriptionCurrentResponse> | null = null
+let subscriptionInflight: {
+  token: string
+  promise: Promise<SubscriptionCurrentResponse>
+} | null = null
 let subscriptionBlockedUntil = 0
 
 async function fetchSubscriptionCurrentRaw(
@@ -586,10 +593,12 @@ async function fetchSubscriptionCurrentRaw(
   })
 }
 
-/** Drop cached subscription/credit snapshot (e.g. after a credit-consuming action). */
+/** Drop cached billing snapshots (e.g. after credit use or token rotation). */
 export function invalidateSubscriptionCache(): void {
   subscriptionCache = null
   subscriptionInflight = null
+  popupOffersCache = null
+  popupOffersInflight = null
 }
 
 /** Cached, single-flight subscription snapshot for nav widgets. */
@@ -609,9 +618,9 @@ export async function getSubscriptionCurrent(
     return subscriptionCache.data
   }
 
-  if (subscriptionInflight) return subscriptionInflight
+  if (subscriptionInflight?.token === token) return subscriptionInflight.promise
 
-  subscriptionInflight = fetchSubscriptionCurrentRaw(token)
+  const promise = fetchSubscriptionCurrentRaw(token)
     .then((data) => {
       subscriptionCache = { token, data, fetchedAt: Date.now() }
       return data
@@ -623,10 +632,11 @@ export async function getSubscriptionCurrent(
       throw err
     })
     .finally(() => {
-      subscriptionInflight = null
+      if (subscriptionInflight?.token === token) subscriptionInflight = null
     })
 
-  return subscriptionInflight
+  subscriptionInflight = { token, promise }
+  return promise
 }
 
 export async function claimExhaustionTopUp(
