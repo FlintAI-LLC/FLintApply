@@ -62,14 +62,23 @@ def free_tier_ai_cap_detail() -> dict[str, str]:
     return {"code": FREE_TIER_AI_CAP_CODE, "message": FREE_TIER_AI_CAP_MESSAGE}
 
 
+_ACTION_LABELS: dict[str, str] = {
+    "fit_analysis": "fit analyses",
+    "job_search": "job searches",
+    "resume_tailor": "resume tailoring actions",
+    "cover_letter": "cover letter actions",
+}
+
+
 def plan_limit_reached_detail(exc: PlanLimitReachedError) -> dict[str, str | int]:
+    label = _ACTION_LABELS.get(exc.action, "resume actions")
     return {
         "code": "plan_limit_reached",
         "action": exc.action,
         "used": exc.used,
         "limit": exc.limit,
         "message": (
-            f"You've used all {exc.limit} resume actions for this billing period "
+            f"You've used all {exc.limit} {label} for this billing period "
             f"({exc.used}/{exc.limit}). Wait for renewal or upgrade to continue."
         ),
     }
@@ -170,6 +179,14 @@ class SubscriptionPauseNotAllowedError(BillingError):
         self.billing_cycle = billing_cycle
 
 
+class CheckoutSessionError(BillingError):
+    """Stripe rejected checkout session creation (e.g. invalid promotion code)."""
+
+    def __init__(self, message: str, *, discount_message: str | None = None) -> None:
+        super().__init__(message)
+        self.discount_message = discount_message or message
+
+
 class RefundError(BillingError):
     """Refund workflow could not be completed.
 
@@ -188,6 +205,7 @@ __all__ = [
     "AccountSuspendedError",
     "BillingCycleMismatchError",
     "BillingError",
+    "CheckoutSessionError",
     "CreditsLockedUntilVerificationError",
     "FreeTierAiBudgetExceededError",
     "FREE_TIER_AI_CAP_CODE",

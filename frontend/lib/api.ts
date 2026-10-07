@@ -1,7 +1,11 @@
 import { byokHeaders } from "./keyStore";
 import { getSession } from "next-auth/react";
 import { liveBackendAccessToken } from "@/lib/auth/accessToken";
-import { notifySessionRevoked, parseApiErrorDetail } from "./parseApiError";
+import {
+  notifySessionRevoked,
+  parseApiErrorDetail,
+  type ApiFieldError,
+} from "./parseApiError";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -9,18 +13,25 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export class ApiError extends Error {
   code: string | undefined;
   status: number;
-  constructor(message: string, status: number, code?: string) {
+  fieldErrors?: ApiFieldError[];
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    fieldErrors?: ApiFieldError[],
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.fieldErrors = fieldErrors;
   }
 }
 
 function formatApiErrorMessage(
   detail: unknown,
   status: number,
-): { message: string; code?: string } {
+): { message: string; code?: string; fieldErrors?: ApiFieldError[] } {
   return parseApiErrorDetail(detail, status);
 }
 
@@ -56,9 +67,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const { message, code } = formatApiErrorMessage(body?.detail, res.status);
+    const { message, code, fieldErrors } = formatApiErrorMessage(
+      body?.detail,
+      res.status,
+    );
     notifySessionRevoked(code);
-    throw new ApiError(message, res.status, code);
+    throw new ApiError(message, res.status, code, fieldErrors);
   }
   return res.json() as Promise<T>;
 }
@@ -511,10 +525,48 @@ export interface BillingPopupOfferResponse {
   }>;
 }
 
+const POPUP_OFFERS_CACHE_TTL_MS = 60_000
+let popupOffersCache: {
+  token: string
+  data: BillingPopupOfferResponse
+  fetchedAt: number
+} | null = null
+let popupOffersInflight: Promise<BillingPopupOfferResponse> | null = null
+let popupOffersBlockedUntil = 0
+
 export async function getPopupOffers(token: string): Promise<BillingPopupOfferResponse> {
-  return request("/api/billing/popup-offers", {
+  const now = Date.now()
+  if (now < popupOffersBlockedUntil) {
+    if (popupOffersCache?.token === token) return popupOffersCache.data
+    throw new ApiError("rate_limited", 429, "rate_limited")
+  }
+  if (
+    popupOffersCache?.token === token &&
+    now - popupOffersCache.fetchedAt < POPUP_OFFERS_CACHE_TTL_MS
+  ) {
+    return popupOffersCache.data
+  }
+  if (popupOffersInflight) return popupOffersInflight
+
+  popupOffersInflight = request<BillingPopupOfferResponse>("/api/billing/popup-offers", {
     headers: { Authorization: `Bearer ${token}` },
   })
+    .then((data) => {
+      popupOffersCache = { token, data, fetchedAt: Date.now() }
+      return data
+    })
+    .catch((err: unknown) => {
+      if (err instanceof ApiError && err.status === 429) {
+        popupOffersBlockedUntil = Date.now() + 60_000
+        if (popupOffersCache?.token === token) return popupOffersCache.data
+      }
+      throw err
+    })
+    .finally(() => {
+      popupOffersInflight = null
+    })
+
+  return popupOffersInflight
 }
 
 const SUBSCRIPTION_CACHE_TTL_MS = 60_000
@@ -1248,6 +1300,7 @@ export interface SubscriptionCurrentResponse {
     searches_used: number;
     searches_limit: number;
     fit_analyses_limit: number;
+    fit_analyses_used: number;
     whisper_uses_used: number;
     /** null means unlimited (Premium fair-use) */
     whisper_uses_limit: number | null;

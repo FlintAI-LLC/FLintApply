@@ -171,6 +171,7 @@ function JobsPageContent() {
       const res = await matchJobs(token, {
         page: nextPage,
         page_size: PAGE_SIZE,
+        filters: buildFilters(),
       })
 
       setJobs((prev) => (append ? [...prev, ...res.jobs] : res.jobs))

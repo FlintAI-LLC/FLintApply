@@ -26,7 +26,7 @@ Checklist items to evaluate:
 4. "Recruiter-friendly language" — is there any internal jargon, acronym not in the JD, or obscure title?
 5. "Only relevant experience included" — are there any bullets or sections with no connection to this JD?
 6. "Within page limits" — is it within 1 page (early/mid) or 2 pages (senior)?
-7. "Professional contact details" — is the email address professional (full name, no nicknames)?
+7. "Professional contact details" — is the email clearly professional (no nickname/joke handles)? First name or first.last on a real domain is OK.
 8. "ML transition signals visible" — if is_transitioning_to_ml = true, are projects/certifications/stats visible?
 
 Rules:

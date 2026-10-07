@@ -88,6 +88,7 @@ import { reconcileAddressedKeys } from "@/lib/reconcileAddressedKeys";
 import { applyResumePatch, normalizeResumePatch } from "@/lib/applyResumePatch";
 import { isPatchPlaceable } from "@/lib/suggestionHighlight";
 import { mergeSuggestionBatch, patchFingerprint, type ResumeSuggestion } from "@/lib/suggestions";
+import { stripBlockingSkillTerms } from "@/lib/tailoredLint";
 import {
   applyMechanicalQuickWins,
   applyPatchesDeterministically,
@@ -160,6 +161,7 @@ function SessionContent() {
   const [sessionApprovedMetrics, setSessionApprovedMetrics] = useState<import("@/lib/api").ApprovedMetric[]>([]);
   const [exportCompany, setExportCompany] = useState<string | null>(null);
   const [hasJd, setHasJd] = useState(false);
+  const [jdRaw, setJdRaw] = useState("");
   const [costInfo, setCostInfo] = useState<{ cost_formatted: string; provider: string; model: string } | null>(null);
   const [editorSyncKey, setEditorSyncKey] = useState(0);
   const [savedVersionNumber, setSavedVersionNumber] = useState(0);
@@ -457,6 +459,7 @@ function SessionContent() {
     setHasPhase4Score(sessionHasPhase4Score(s.phases));
     setPhase1Complete(!!s.phase1_complete);
     setHasJd(!!s.has_jd);
+    setJdRaw(s.jd_raw ?? "");
     setExportCompany(s.export_company ?? null);
     setOriginalAtsScore(
       typeof s.original_ats_score === "number" ? s.original_ats_score : null,
@@ -1033,7 +1036,7 @@ function SessionContent() {
 
     try {
       const { mechanical, chat } = partitionMechanicalAndChatIssues(tailored, issues);
-      const mechanicalResult = applyMechanicalQuickWins(tailored, mechanical);
+      const mechanicalResult = applyMechanicalQuickWins(tailored, mechanical, jdRaw);
       let current = mechanicalResult.resume;
 
       let patchResult: ReturnType<typeof applyPatchesDeterministically> | null = null;
@@ -1090,8 +1093,10 @@ function SessionContent() {
       }
 
       if (resumeChanged) {
-        await saveTailoredResume(sessionId, current);
-        setTailored(current);
+        const sanitized = stripBlockingSkillTerms(current, jdRaw);
+        await saveTailoredResume(sessionId, sanitized);
+        setTailored(sanitized);
+        current = sanitized;
         setEditorSyncKey((k) => k + 1);
         setStale((prev) => ({ ...prev, "4": new Date().toISOString() }));
         // Deterministic refresh: shows the real gain from this batch with no AI cost.
@@ -1118,6 +1123,7 @@ function SessionContent() {
     dismissedSuggestionFingerprints,
     skippedAtsKeys,
     sessionId,
+    jdRaw,
     rescoreFree,
   ]);
 

@@ -67,6 +67,8 @@ function NewSessionContent() {
   const [jdReviewRecommended, setJdReviewRecommended] = useState(false);
   const [infoHydrating, setInfoHydrating] = useState(false);
   const [applicationName, setApplicationName] = useState("");
+  /** True after the user explicitly saves the application name (Save / Enter). */
+  const [applicationNameConfirmed, setApplicationNameConfirmed] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   // Specific, actionable failure for the extension/jobs JD fetch (I6) — never
   // a silent blank textarea. `jdRetryNonce` re-triggers the load effect for
@@ -89,6 +91,7 @@ function NewSessionContent() {
   const appNameRestoredRef = useRef(false);
   const lastPersistedNameRef = useRef<string | null>(null);
   const [hasMasterResume, setHasMasterResume] = useState<boolean | undefined>(undefined);
+  const [masterChunkCount, setMasterChunkCount] = useState<number>(0);
 
   // Restore extension handoff if OAuth stripped jd_id from the URL.
   useEffect(() => {
@@ -113,6 +116,7 @@ function NewSessionContent() {
     setApplicationName((prev) => (prev.trim() || applicationNameDirtyRef.current ? prev : storedName));
     if (!applicationNameDirtyRef.current) {
       lastPersistedNameRef.current = storedName;
+      setApplicationNameConfirmed(true);
     }
   }, []);
 
@@ -126,6 +130,7 @@ function NewSessionContent() {
       setApplicationName((prev) => (prev.trim() ? prev : label));
       sessionStorage.setItem(APP_NAME_STORAGE_KEY, label);
       lastPersistedNameRef.current = label;
+      setApplicationNameConfirmed(true);
     }
   };
 
@@ -170,6 +175,7 @@ function NewSessionContent() {
         sessionStorage.removeItem(SESSION_STORAGE_KEY);
         sessionStorage.removeItem(APP_NAME_STORAGE_KEY);
         lastPersistedNameRef.current = null;
+        setApplicationNameConfirmed(false);
       }
 
       try {
@@ -274,12 +280,18 @@ function NewSessionContent() {
         if (cancelled) return;
         if (res.ok) {
           const profile = await res.json() as { chunk_count?: number };
-          setHasMasterResume((profile.chunk_count ?? 0) > 0);
+          const chunks = profile.chunk_count ?? 0;
+          setMasterChunkCount(chunks);
+          setHasMasterResume(chunks > 0);
         } else {
+          setMasterChunkCount(0);
           setHasMasterResume(false);
         }
       } catch {
-        if (!cancelled) setHasMasterResume(false);
+        if (!cancelled) {
+          setMasterChunkCount(0);
+          setHasMasterResume(false);
+        }
       }
     })();
 
@@ -338,9 +350,10 @@ function NewSessionContent() {
             const lastNamedJdId = sessionStorage.getItem(APP_NAME_JD_KEY);
             if (suggestedName && lastNamedJdId !== jdId) {
               sessionStorage.setItem(APP_NAME_JD_KEY, jdId);
-              sessionStorage.setItem(APP_NAME_STORAGE_KEY, suggestedName);
-              lastPersistedNameRef.current = suggestedName;
-              setApplicationName(suggestedName);
+              if (!applicationNameDirtyRef.current) {
+                setApplicationName((prev) => (prev.trim() ? prev : suggestedName));
+                setApplicationNameConfirmed(false);
+              }
             } else if (suggestedName) {
               setApplicationName((prev) => (prev.trim() ? prev : suggestedName));
             }
@@ -382,6 +395,13 @@ function NewSessionContent() {
           setJdText(job.description);
           if (job.title?.trim()) {
             setJdTitle(job.title.trim());
+          }
+          const suggestedName = formatApplicationLabel(job.company, job.title);
+          const lastNamedJdId = sessionStorage.getItem(APP_NAME_JD_KEY);
+          if (suggestedName && lastNamedJdId !== jdId && !applicationNameDirtyRef.current) {
+            sessionStorage.setItem(APP_NAME_JD_KEY, jdId);
+            setApplicationName((prev) => (prev.trim() ? prev : suggestedName));
+            setApplicationNameConfirmed(false);
           }
           setStep("jd");
           replaceSessionNewUrlIfNeeded(router, {
@@ -472,7 +492,7 @@ function NewSessionContent() {
 
   const persistApplicationName = async (name: string) => {
     const trimmed = name.trim();
-    if (!trimmed || trimmed === lastPersistedNameRef.current) return;
+    if (!trimmed) return;
     sessionStorage.setItem(APP_NAME_STORAGE_KEY, trimmed);
     lastPersistedNameRef.current = trimmed;
     if (!sessionId) return;
@@ -483,26 +503,61 @@ function NewSessionContent() {
     }
   };
 
+  const confirmApplicationName = async () => {
+    const trimmed = applicationName.trim();
+    if (!trimmed) return;
+    await persistApplicationName(trimmed);
+    setApplicationNameConfirmed(true);
+  };
+
+  const applicationNameReady =
+    applicationNameConfirmed && applicationName.trim().length > 0;
+
   const applicationNameField = (
-    <div className="mb-6">
+    <div className="mb-6" data-testid="application-name-field">
       <label className="block text-slate-600 dark:text-slate-400 text-xs mb-1 font-medium">
         Application name *
       </label>
-      <input
-        value={applicationName}
-        autoComplete="off"
-        onChange={(e) => {
-          applicationNameDirtyRef.current = true;
-          setApplicationName(e.target.value);
-        }}
-        onBlur={() => {
-          if (applicationName.trim()) {
-            void persistApplicationName(applicationName);
-          }
-        }}
-        placeholder="e.g. Acme Health — Senior Backend Engineer"
-        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-800 dark:text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder-slate-600"
-      />
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          value={applicationName}
+          autoComplete="off"
+          onChange={(e) => {
+            applicationNameDirtyRef.current = true;
+            const next = e.target.value;
+            setApplicationName(next);
+            if (next.trim() !== (lastPersistedNameRef.current ?? "")) {
+              setApplicationNameConfirmed(false);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void confirmApplicationName();
+            }
+          }}
+          placeholder="e.g. Acme Health — Senior Backend Engineer"
+          className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-800 dark:text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder-slate-600"
+        />
+        <button
+          type="button"
+          onClick={() => void confirmApplicationName()}
+          disabled={!applicationName.trim()}
+          className="shrink-0 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
+          data-testid="application-name-save"
+        >
+          Save name
+        </button>
+      </div>
+      {applicationNameReady ? (
+        <p className="text-emerald-700 dark:text-emerald-400 text-xs mt-2">
+          Name saved — you can continue to the next step.
+        </p>
+      ) : applicationName.trim() ? (
+        <p className="text-amber-800 dark:text-amber-200 text-xs mt-2">
+          Press <strong>Enter</strong> or click <strong>Save name</strong> when the label looks right.
+        </p>
+      ) : null}
     </div>
   );
 
@@ -715,6 +770,14 @@ function NewSessionContent() {
       router.push("/dashboard");
       return;
     }
+    if (
+      step === "jd" &&
+      searchParams.get("source") === "jobs" &&
+      searchParams.get("jd_id")
+    ) {
+      router.push("/jobs");
+      return;
+    }
     goTo(STEPS[stepIndex - 1]!);
   }
 
@@ -855,23 +918,45 @@ function NewSessionContent() {
                 Your progress is saved under this name until you finish tailoring.
               </p>
               {applicationNameField}
-              <h2 className="text-lg font-semibold mb-1">Upload your resume</h2>
+              <h2 className="text-lg font-semibold mb-1">
+                {hasMasterResume ? "Confirm resume source" : "Upload your resume"}
+              </h2>
               <p className="text-slate-600 dark:text-slate-400 text-sm mb-6">
-                Upload a file, paste text, speak it, or reuse your saved master resume. Voice with
-                live transcription is free in Chrome and Edge.
+                {hasMasterResume
+                  ? "Your master resume library is ready — use it for tailoring unless you need a one-off upload for this job only."
+                  : "Upload a file, paste text, speak it, or build a master profile first. Voice with live transcription is free in Chrome and Edge."}
               </p>
-              {!applicationName.trim() && (
+              {!applicationNameReady && (
                 <p className="text-amber-800 dark:text-amber-200 text-sm mb-4 bg-amber-500/10 border border-amber-400/30 rounded-lg px-3 py-2">
-                  Name this application above before continuing.
+                  Save the application name above before continuing.
                 </p>
+              )}
+              {jdText.trim() && (
+                <div
+                  className="mb-4 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-3 text-sm"
+                  data-testid="wizard-jd-loaded-banner"
+                >
+                  <p className="text-slate-700 dark:text-slate-300">
+                    Job description already loaded
+                    {jdTitle ? ` for ${jdTitle}` : ""}.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => goTo("jd")}
+                    className="mt-2 text-amber-800 dark:text-amber-400 font-semibold text-xs hover:underline"
+                  >
+                    Review job description →
+                  </button>
+                </div>
               )}
               <ResumeUploader
                 sessionId={sessionId}
                 token={session?.backendAccessToken ?? undefined}
                 onParsed={(parsed) => void handleResumeParsed(parsed)}
                 hasMasterResume={hasMasterResume}
+                masterChunkCount={masterChunkCount}
                 onMasterResumeSaved={() => setHasMasterResume(true)}
-                canProceed={applicationName.trim().length > 0}
+                canProceed={applicationNameReady}
               />
             </div>
           )}
@@ -888,18 +973,11 @@ function NewSessionContent() {
           {step === "jd" && sessionId && (
             <div>
               <h1 className="text-xl font-bold mb-1">Job description</h1>
-              {applicationName.trim() ? (
-                <p className="text-slate-600 dark:text-slate-400 text-xs mb-2">
-                  Application: <span className="font-medium text-slate-800 dark:text-slate-200">{applicationName}</span>
-                </p>
-              ) : (
-                <>
-                  <p className="text-slate-600 dark:text-slate-400 text-sm mb-4">
-                    Name this application so you can find it on your dashboard.
-                  </p>
-                  {applicationNameField}
-                </>
-              )}
+              <p className="text-slate-600 dark:text-slate-400 text-sm mb-4">
+                Name this application so you can find it on your dashboard — save the name
+                before you analyze the job description.
+              </p>
+              {applicationNameField}
               <p className="text-slate-600 dark:text-slate-400 text-sm mb-6">
                 Paste the full job posting. {PRODUCT_NAME} uses platform AI to extract ATS keywords
                 and pre-fill your info from your resume.
@@ -911,8 +989,8 @@ function NewSessionContent() {
                 jdId={searchParams.get("jd_id") ?? undefined}
                 showCompletenessWarning={jdReviewRecommended}
                 sourceUrl={jdSourceUrl}
-                disabled={!applicationName.trim()}
-                disabledHint="Name this application above before analyzing the job description."
+                disabled={!applicationNameReady}
+                disabledHint="Save the application name above before analyzing the job description."
               />
             </div>
           )}

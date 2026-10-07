@@ -1128,6 +1128,13 @@ export async function patchAdminPromoCode(
   })
 }
 
+export async function deleteAdminPromoCode(
+  token: string,
+  promoId: string,
+): Promise<void> {
+  await req(`/api/admin/promo-codes/${promoId}`, token, { method: "DELETE" })
+}
+
 export async function listAdminPromoRedemptions(
   token: string,
   promoId: string,

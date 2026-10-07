@@ -349,4 +349,50 @@ async def admin_promo_codes_update(
     )
 
 
+@router.delete(
+    "/promo-codes/{promo_code_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+@limiter.limit("30/minute")
+async def admin_promo_codes_delete(
+    request: Request,
+    promo_code_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_admin_role(*_PROMO_MUTATION_ROLES))],
+) -> None:
+    row = (
+        await db.execute(
+            select(PromoCode).where(PromoCode.id == promo_code_id).with_for_update()
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "promo_code_not_found"},
+        )
+    if row.redemption_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "promo_code_has_redemptions"},
+        )
+    before_snap = {
+        "code": row.code,
+        "grant_type": row.grant_type.value,
+        "redemption_count": row.redemption_count,
+    }
+    await db.delete(row)
+    await write_admin_audit(
+        db,
+        actor_admin_id=admin.id,
+        action="promo_code_deleted",
+        target_kind="promo_code",
+        target_id=str(promo_code_id),
+        before=before_snap,
+        ip=resolve_client_ip(request),
+        user_agent=request.headers.get("user-agent", ""),
+        request_id=request.headers.get("x-request-id", ""),
+    )
+    await db.commit()
+
+
 __all__ = ["router"]

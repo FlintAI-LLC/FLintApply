@@ -8,7 +8,7 @@ Instructions:
 - For cliches_found: list every cliché phrase found in the full resume.
 - For irrelevant_sections: name any section that has no connection to this JD (e.g. "Hobbies", very old unrelated roles).
 - For page_estimate: estimate the page count based on text volume (assume ~500 words per page).
-- For contact_issues: flag unprofessional email addresses (nickname, numbers-only, etc.).
+- For contact_issues: flag ONLY clearly unprofessional emails (nickname handles, joke names, numbers-only local parts, sexual/offensive strings). Do NOT flag when the local part is a reasonable first name, initials, or first.last pattern even if it does not exactly match the full name on the resume header (e.g. alireza@company.com with header name "Ali Barzin" is acceptable). Do NOT put PDF formatting preferences here (Email: labels, https:// on LinkedIn) — omit those from contact_issues entirely. Max 2 contact_issues; if none qualify, return an empty array.
 - overall_score: integer 0-100 representing the Phase 2 Audit score. Base it on keyword coverage and quality rule compliance.
 
 Skill format note: tailored output presents skills as 3-5 "Category: items" lines (JobRight-style). Do not flag this as a structural issue; treat each comma-separated entry inside a category as an individual skill when checking coverage.

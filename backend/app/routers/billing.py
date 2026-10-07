@@ -243,6 +243,7 @@ class SubscriptionView(BaseModel):
     searches_used: int
     searches_limit: int
     fit_analyses_limit: int
+    fit_analyses_used: int
     whisper_uses_used: int
     whisper_uses_limit: int | None
     upgraded_resumes_used: int
@@ -333,6 +334,17 @@ def _billing_error_to_http(exc: BillingError) -> HTTPException:
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "billing_cycle_mismatch"},
+        )
+    from app.services.billing.exceptions import CheckoutSessionError
+
+    if isinstance(exc, CheckoutSessionError):
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "checkout_failed",
+                "message": str(exc),
+                "discount_message": exc.discount_message,
+            },
         )
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -788,6 +800,7 @@ async def subscriptions_current(
             resumes_limit=limits.resumes_per_period,
             searches_limit=limits.searches_per_period,
             fit_analyses_limit=limits.fit_analyses_per_period,
+            fit_analyses_used=sub.fit_analyses_used,
             whisper_uses_used=sub.whisper_uses_used,
             whisper_uses_limit=limits.whisper_uses_per_period,
             llm_upgrade=sub.llm_upgrade.value,

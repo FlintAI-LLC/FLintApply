@@ -10,6 +10,7 @@ import {
   getAdminFreeGrant,
   listAdminPromoCodes,
   patchAdminFreeGrant,
+  deleteAdminPromoCode,
   patchAdminPromoCode,
 } from "@/lib/admin/api"
 import { generatePromoCode } from "@/lib/admin/promoCode"
@@ -252,7 +253,7 @@ export default function AdminPromoPage() {
                     >
                       <Copy className="w-4 h-4 inline" />
                     </button>
-                    {promo.is_active && (
+                    {promo.is_active ? (
                       <button
                         disabled={isPending}
                         onClick={() =>
@@ -272,6 +273,49 @@ export default function AdminPromoPage() {
                       >
                         Deactivate
                       </button>
+                    ) : (
+                      <>
+                        <button
+                          disabled={isPending}
+                          onClick={() =>
+                            runAction(async () => {
+                              const res = await patchAdminPromoCode(token, promo.id, {
+                                is_active: true,
+                              })
+                              showAuditToast(res.audit_log_id)
+                              setPromos((prev) =>
+                                prev.map((p) =>
+                                  p.id === promo.id ? res.promo_code : p,
+                                ),
+                              )
+                            })
+                          }
+                          className="text-xs text-emerald-300 hover:text-emerald-200"
+                        >
+                          Reactivate
+                        </button>
+                        {promo.redemption_count === 0 && (
+                          <button
+                            disabled={isPending}
+                            onClick={() => {
+                              if (
+                                !window.confirm(
+                                  `Delete code ${promo.code}? This frees the name for reuse.`,
+                                )
+                              ) {
+                                return
+                              }
+                              runAction(async () => {
+                                await deleteAdminPromoCode(token, promo.id)
+                                setPromos((prev) => prev.filter((p) => p.id !== promo.id))
+                              })
+                            }}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </>
                     )}
                   </td>
                 </tr>
@@ -435,7 +479,7 @@ export default function AdminPromoPage() {
                     >
                       <Copy className="w-4 h-4 inline" />
                     </button>
-                    {promo.is_active && (
+                    {promo.is_active ? (
                       <button
                         disabled={isPending}
                         onClick={() =>
@@ -455,6 +499,51 @@ export default function AdminPromoPage() {
                       >
                         Deactivate
                       </button>
+                    ) : (
+                      <>
+                        <button
+                          disabled={isPending}
+                          onClick={() =>
+                            runAction(async () => {
+                              const res = await patchAdminPromoCode(token, promo.id, {
+                                is_active: true,
+                              })
+                              showAuditToast(res.audit_log_id)
+                              setDiscountOffers((prev) =>
+                                prev.map((p) =>
+                                  p.id === promo.id ? res.promo_code : p,
+                                ),
+                              )
+                            })
+                          }
+                          className="text-xs text-emerald-300 hover:text-emerald-200"
+                        >
+                          Reactivate
+                        </button>
+                        {promo.redemption_count === 0 && (
+                          <button
+                            disabled={isPending}
+                            onClick={() => {
+                              if (
+                                !window.confirm(
+                                  `Delete offer ${promo.code}? This frees the name for reuse.`,
+                                )
+                              ) {
+                                return
+                              }
+                              runAction(async () => {
+                                await deleteAdminPromoCode(token, promo.id)
+                                setDiscountOffers((prev) =>
+                                  prev.filter((p) => p.id !== promo.id),
+                                )
+                              })
+                            }}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </>
                     )}
                   </td>
                 </tr>

@@ -5,6 +5,22 @@ interface TextHit {
   score: number;
 }
 
+const LOCATE_STOPWORDS = new Set([
+  "many",
+  "missing",
+  "keyword",
+  "keywords",
+  "must",
+  "have",
+  "absent",
+  "section",
+  "experience",
+  "summary",
+  "suggestion",
+  "mirror",
+  "bullet",
+]);
+
 function quotedTerms(text: string): string[] {
   const terms: string[] = [];
   for (const match of text.matchAll(/['"]([^'"]{2,80})['"]/g)) {
@@ -26,6 +42,9 @@ export function searchTermsForIssue(issue: BlockingIssue): string[] {
     const phrase = match[1]?.trim();
     if (!phrase || phrase.length > 40) continue;
     if (/^(Suggestion|Mirror|Bullet|Keyword|Section|Experience|Summary)$/i.test(phrase)) {
+      continue;
+    }
+    if (LOCATE_STOPWORDS.has(phrase.toLowerCase())) {
       continue;
     }
     terms.push(phrase);

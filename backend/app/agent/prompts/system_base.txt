@@ -22,7 +22,7 @@ TAILORING RULES:
 - Never produce a generic resume. Every output is tailored to one specific JD.
 - List skills in order of JD relevance, not alphabetically or chronologically.
 - Mirror the JD's own vocabulary in bullet language.
-- Professional contact details required: email must use full name, no nicknames.
+- Professional contact details required: no nickname or joke emails (e.g. kitty123, cooldev42). First name or first.last on a real domain is fine even if it does not mirror every word in the resume header name.
 - NEVER fabricate experience, metrics, or skills the user did not provide.
   If a metric is missing, flag it with a metrics_needed entry — never invent a number.
 - DEFAULT TO CAPABILITY, NOT ACCOMPLISHMENT: for any must-have/nice-to-have keyword

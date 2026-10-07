@@ -8,20 +8,19 @@ from app.config import settings
 
 
 def checkout_wallet_kwargs() -> dict[str, Any]:
-    """Kwargs for ``stripe.checkout.Session.create`` to surface wallet buttons.
+    """Extra kwargs for ``stripe.checkout.Session.create``.
 
-    Uses Stripe automatic payment methods so Apple Pay and Google Pay appear on
-    supported devices without enabling PayPal or other redirect-heavy methods
-    we have not validated for subscriptions in every market.
+    Apple Pay and Google Pay on Stripe *hosted* Checkout are controlled from the
+    Dashboard payment-method settings. Do **not** pass ``automatic_payment_methods``
+    here — that parameter is for PaymentIntents, and Stripe rejects it on Checkout
+    Sessions with ``invalid_request_error`` (surfaced to users as HTTP 500).
+
+    ``STRIPE_CHECKOUT_WALLETS_ENABLED`` is retained for future ``wallet_options``
+    tuning; today both paths omit invalid Session parameters.
     """
     if not settings.STRIPE_CHECKOUT_WALLETS_ENABLED:
         return {}
-    return {
-        "automatic_payment_methods": {
-            "enabled": True,
-            "allow_redirects": "never",
-        },
-    }
+    return {}
 
 
 __all__ = ["checkout_wallet_kwargs"]

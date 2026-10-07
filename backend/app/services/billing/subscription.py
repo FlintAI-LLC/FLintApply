@@ -36,6 +36,7 @@ from app.services.billing.checkout_wallets import checkout_wallet_kwargs
 from app.services.billing.credit_packs import is_one_time_purchase_code
 from app.services.billing.exceptions import (
     BillingCycleMismatchError,
+    CheckoutSessionError,
     SubscriptionPauseNotAllowedError,
 )
 from app.services.billing.price_resolver import resolve_price_id
@@ -128,10 +129,25 @@ async def create_checkout_session(
 
     checkout_kwargs.update(checkout_wallet_kwargs())
 
-    checkout = await _run_in_thread(
-        stripe.checkout.Session.create,
-        **checkout_kwargs,
-    )
+    try:
+        checkout = await _run_in_thread(
+            stripe.checkout.Session.create,
+            **checkout_kwargs,
+        )
+    except stripe.error.InvalidRequestError as exc:
+        log.warning(
+            "checkout.session_create_failed",
+            error_user_message=getattr(exc, "user_message", None) or str(exc),
+            code=getattr(exc, "code", None),
+        )
+        hint = (
+            "This discount could not be applied to checkout. "
+            "Check the code, plan, and Stripe promotion settings."
+        )
+        raise CheckoutSessionError(
+            str(exc),
+            discount_message=hint,
+        ) from exc
     return CheckoutSessionResult(
         session=_to_dict(checkout),
         discount_applied=discount.applied,

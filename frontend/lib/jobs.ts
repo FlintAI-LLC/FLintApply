@@ -110,6 +110,7 @@ export interface JobSearchResponse {
 export interface JobMatchRequest {
   page?: number
   page_size?: number
+  filters?: JobSearchFilters
 }
 
 export type JobSearchMode = "keyword" | "match"

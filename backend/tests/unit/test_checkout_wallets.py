@@ -16,20 +16,16 @@ from app.services.billing.subscription import create_checkout_session
 pytestmark = pytest.mark.unit
 
 
-def test_checkout_wallet_kwargs_enabled_by_default() -> None:
+def test_checkout_wallet_kwargs_never_sends_automatic_payment_methods() -> None:
+    """Checkout Sessions reject automatic_payment_methods (PaymentIntent-only)."""
     with patch.object(settings, "STRIPE_CHECKOUT_WALLETS_ENABLED", True):
-        kwargs = checkout_wallet_kwargs()
-    assert kwargs["automatic_payment_methods"]["enabled"] is True
-    assert kwargs["automatic_payment_methods"]["allow_redirects"] == "never"
-
-
-def test_checkout_wallet_kwargs_disabled_returns_empty() -> None:
+        assert checkout_wallet_kwargs() == {}
     with patch.object(settings, "STRIPE_CHECKOUT_WALLETS_ENABLED", False):
         assert checkout_wallet_kwargs() == {}
 
 
 @pytest.mark.asyncio
-async def test_create_checkout_session_enables_wallet_payment_methods() -> None:
+async def test_create_checkout_session_omits_invalid_wallet_params() -> None:
     user = User(
         id=uuid.uuid4(),
         email="wallet@example.com",
@@ -65,7 +61,4 @@ async def test_create_checkout_session_enables_wallet_payment_methods() -> None:
             cancel_url="http://localhost:3100/billing?checkout=cancel",
         )
 
-    assert captured["automatic_payment_methods"] == {
-        "enabled": True,
-        "allow_redirects": "never",
-    }
+    assert "automatic_payment_methods" not in captured
