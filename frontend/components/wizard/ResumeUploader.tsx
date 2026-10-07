@@ -12,9 +12,11 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface Props {
   sessionId: string;
-  token?: string; // backend JWT — needed for voice fallback + saved-resume tabs
+  token?: string; // backend JWT — needed for voice fallback + master-resume tab
   onParsed: (parsed: ParsedResume) => void;
   hasMasterResume?: boolean;
+  /** Live chunk count from profile — shown on the master-resume CTA. */
+  masterChunkCount?: number;
   /** Called after the first upload is persisted to the master profile. */
   onMasterResumeSaved?: () => void;
   /** When false, parse/upload actions stay disabled (e.g. application name missing). */
@@ -35,20 +37,17 @@ export function ResumeUploader({
   token,
   onParsed,
   hasMasterResume,
+  masterChunkCount,
   onMasterResumeSaved,
   canProceed = true,
 }: Props) {
-  const [mode, setMode]       = useState<Mode>("upload");
+  const [mode, setMode] = useState<Mode>(hasMasterResume ? "saved" : "upload");
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [pasteText, setPasteText] = useState("");
-
-  useEffect(() => {
-    if (hasMasterResume) {
-      setMode("saved");
-    }
-  }, [hasMasterResume]);
+  const [savedText, setSavedText] = useState<string | null>(null); // null = not loaded
+  const [savedLoading, setSavedLoading] = useState(false);
 
   const persistToMaster = useCallback(
     async (payload: { file?: File; text?: string }) => {
@@ -62,10 +61,6 @@ export function ResumeUploader({
     },
     [token, hasMasterResume, onMasterResumeSaved],
   );
-
-  // ── Saved resume state ─────────────────────────────────────────────────────
-  const [savedText, setSavedText] = useState<string | null>(null); // null = not loaded
-  const [savedLoading, setSavedLoading] = useState(false);
 
   // ── File upload ────────────────────────────────────────────────────────────
   const handleFile = useCallback(
@@ -133,23 +128,59 @@ export function ResumeUploader({
     }
   };
 
-  // ── Saved resume ───────────────────────────────────────────────────────────
-  const loadSavedResume = async () => {
-    if (!token) { setSavedText(""); return; }
+  // ── Master resume ──────────────────────────────────────────────────────────
+  const loadSavedResume = useCallback(async (): Promise<string> => {
+    if (!token) {
+      setSavedText("");
+      return "";
+    }
     setSavedLoading(true);
     setSavedText(null);
     try {
       const res = await fetch(`${BASE}/api/profile/resume`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.status === 404) { setSavedText(""); return; }
+      if (res.status === 404) {
+        setSavedText("");
+        return "";
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { raw_text?: string };
-      setSavedText(data.raw_text ?? "");
+      const text = data.raw_text ?? "";
+      setSavedText(text);
+      return text;
     } catch {
       setSavedText("");
+      return "";
     } finally {
       setSavedLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (hasMasterResume) {
+      setMode("saved");
+    }
+  }, [hasMasterResume]);
+
+  useEffect(() => {
+    if (hasMasterResume && token && savedText === null) {
+      void loadSavedResume();
+    }
+  }, [hasMasterResume, token, savedText, loadSavedResume]);
+
+  const applyMasterResumeText = async (text: string) => {
+    const trimmed = text.trim();
+    if (!canProceed || !trimmed) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await pasteResumeText(sessionId, trimmed);
+      onParsed(result.parsed);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to use master resume.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -160,28 +191,70 @@ export function ResumeUploader({
   };
 
   const handleUseSaved = async () => {
-    if (!canProceed || !savedText?.trim()) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await pasteResumeText(sessionId, savedText);
-      onParsed(result.parsed);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to use saved resume.");
-    } finally {
-      setLoading(false);
-    }
+    if (!savedText?.trim()) return;
+    await applyMasterResumeText(savedText);
   };
 
-  const TABS: { id: Mode; label: string; icon: React.ReactNode; needsToken?: boolean }[] = [
-    { id: "upload", label: "Upload file",  icon: <Upload   className="w-3.5 h-3.5" /> },
-    { id: "paste",  label: "Paste text",   icon: <FileText className="w-3.5 h-3.5" /> },
-    { id: "voice",  label: "Record voice", icon: <Mic      className="w-3.5 h-3.5" /> },
-    { id: "saved",  label: "Use saved",    icon: <BookUser className="w-3.5 h-3.5" />, needsToken: true },
+  const continueWithMasterResume = async () => {
+    if (!canProceed) return;
+    let text = savedText ?? "";
+    if (!text.trim()) {
+      text = await loadSavedResume();
+    }
+    if (!text.trim()) {
+      setError("No master resume found. Build your profile library first.");
+      return;
+    }
+    await applyMasterResumeText(text);
+  };
+
+  const TAB_DEFS: { id: Mode; label: string; icon: React.ReactNode; needsToken?: boolean }[] = [
+    { id: "saved", label: "Use master resume", icon: <BookUser className="w-3.5 h-3.5" />, needsToken: true },
+    { id: "upload", label: "Upload file", icon: <Upload className="w-3.5 h-3.5" /> },
+    { id: "paste", label: "Paste text", icon: <FileText className="w-3.5 h-3.5" /> },
+    { id: "voice", label: "Record voice", icon: <Mic className="w-3.5 h-3.5" /> },
   ];
+
+  const tabs = TAB_DEFS.filter((t) => !t.needsToken || token);
 
   return (
     <div className="space-y-6">
+      {hasMasterResume && (
+        <div
+          className="rounded-xl border border-amber-400/40 bg-amber-500/10 dark:bg-amber-400/10 p-4 space-y-3"
+          data-testid="master-resume-primary-cta"
+        >
+          <div>
+            <p className="text-slate-900 dark:text-white font-semibold text-sm">
+              Use your master resume
+            </p>
+            <p className="text-slate-600 dark:text-slate-400 text-xs mt-1">
+              Tailoring pulls from your indexed career library
+              {masterChunkCount != null && masterChunkCount > 0
+                ? ` (${masterChunkCount.toLocaleString()} chunk${masterChunkCount === 1 ? "" : "s"})`
+                : ""}
+              . This is the default — upload below only if you want a one-off resume for this job.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void continueWithMasterResume()}
+            disabled={!canProceed || loading || savedLoading}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-400 text-slate-900 font-semibold rounded-lg hover:bg-amber-300 disabled:opacity-40 transition-colors text-sm"
+            data-testid="use-master-resume-button"
+          >
+            {loading || savedLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading master resume…
+              </>
+            ) : (
+              "Continue with master resume"
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Story mode promotional card */}
       {!hasMasterResume && (
         <div className="rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100/60 dark:bg-slate-800/60 p-4 flex items-start gap-3">
@@ -203,9 +276,15 @@ export function ResumeUploader({
         </div>
       )}
 
+      {hasMasterResume && (
+        <p className="text-slate-600 dark:text-slate-400 text-xs font-medium uppercase tracking-wide">
+          Or use a different resume for this session only
+        </p>
+      )}
+
       {/* Mode tabs */}
-      <div className="flex flex-wrap gap-2">
-        {TABS.filter((t) => !t.needsToken || token).map((t) => (
+      <div className="flex flex-wrap gap-2" data-testid="resume-uploader-tabs">
+        {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -279,9 +358,9 @@ export function ResumeUploader({
         />
       )}
 
-      {/* ── Use saved ── */}
+      {/* ── Use master resume ── */}
       {mode === "saved" && (
-        <div className="space-y-4">
+        <div className="space-y-4" data-testid="master-resume-panel">
           {savedLoading && (
             <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 text-sm py-8 justify-center">
               <Loader2 className="w-4 h-4 animate-spin" /> Loading your master resume…
@@ -292,19 +371,19 @@ export function ResumeUploader({
               <BookUser className="w-10 h-10 text-slate-600 dark:text-slate-400 mx-auto" />
               <p className="text-slate-600 dark:text-slate-400 font-medium">No master resume found</p>
               <p className="text-slate-600 dark:text-slate-400 text-sm">
-                Upload your career history on the{" "}
+                Build your career library on the{" "}
                 <a href="/profile" target="_blank" className="text-amber-700 dark:text-amber-400 hover:underline">
                   Profile page
                 </a>{" "}
-                first, then come back here to reuse it.
+                first, then return here to tailor with it.
               </p>
             </div>
           )}
           {!savedLoading && savedText && (
             <div className="space-y-3">
               <p className="text-slate-600 dark:text-slate-400 text-sm">
-                Your saved master resume will be used for this session.
-                Edit below if needed before parsing.
+                Preview your master resume text for this session. Edit below only if you need a
+                one-off change — your profile library is unchanged.
               </p>
               <textarea
                 value={savedText}
@@ -316,10 +395,13 @@ export function ResumeUploader({
               <div className="flex items-center justify-between">
                 <span className="text-slate-600 dark:text-slate-400 text-xs">{savedText.length.toLocaleString()} characters</span>
                 <button
-                  type="button" onClick={() => void handleUseSaved()} disabled={!canProceed || !savedText.trim() || loading}
+                  type="button"
+                  onClick={() => void handleUseSaved()}
+                  disabled={!canProceed || !savedText.trim() || loading}
                   className="px-5 py-2 bg-amber-400 text-slate-900 font-semibold rounded-lg hover:bg-amber-300 disabled:opacity-40 transition-colors text-sm"
+                  data-testid="use-master-resume-confirm"
                 >
-                  {loading ? "Parsing…" : "Use this resume"}
+                  {loading ? "Parsing…" : "Use master resume"}
                 </button>
               </div>
             </div>

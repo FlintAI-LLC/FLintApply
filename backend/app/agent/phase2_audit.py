@@ -9,6 +9,7 @@ import structlog
 from app.llm.base import LLMClient, LLMMessage
 from app.llm.context import truncate_to_fit
 from app.llm.structured import complete_structured
+from app.agent.contact_issues_filter import filter_contact_issues
 from app.models.audit import AuditLLMOutput, AuditOutput, BulletIssue, KeywordCoverage
 from app.models.session import Session
 from pydantic import BaseModel
@@ -131,7 +132,17 @@ def _prioritize_bullet_issues(issues: list[BulletIssue]) -> list[BulletIssue]:
     return kept[:_MAX_BULLET_ISSUES]
 
 
-def _merge_audit(coverage: KeywordCoverage, llm: AuditLLMOutput) -> AuditOutput:
+def _merge_audit(
+    coverage: KeywordCoverage,
+    llm: AuditLLMOutput,
+    session: Session,
+) -> AuditOutput:
+    resume_name = ""
+    contact_email = ""
+    if session.user_info:
+        resume_name = (session.user_info.name or "").strip()
+        contact_email = (session.user_info.email or "").strip()
+
     return AuditOutput(
         keyword_coverage=coverage,
         bullet_issues=_prioritize_bullet_issues(llm.bullet_issues),
@@ -139,7 +150,11 @@ def _merge_audit(coverage: KeywordCoverage, llm: AuditLLMOutput) -> AuditOutput:
         irrelevant_sections=llm.irrelevant_sections,
         page_estimate=llm.page_estimate,
         page_limit_exceeded=llm.page_limit_exceeded,
-        contact_issues=llm.contact_issues,
+        contact_issues=filter_contact_issues(
+            llm.contact_issues,
+            resume_name=resume_name,
+            contact_email=contact_email,
+        ),
         overall_score=llm.overall_score,
         summary=llm.summary,
     )
@@ -216,7 +231,7 @@ async def run(
             page_estimate="1 page" if len(resume_text) < 3000 else "2 pages",
         )
 
-    output = _merge_audit(coverage, llm_output)
+    output = _merge_audit(coverage, llm_output, session)
     await event_queue.put({"event": "progress", "phase": 2, "message": f"Finalizing audit — audit score {output.overall_score}/100…"})
     await event_queue.put({"event": "partial", "phase": 2, "data": json.loads(output.model_dump_json())})
     log.info("phase2_done", overall_score=output.overall_score, issues=len(output.bullet_issues))

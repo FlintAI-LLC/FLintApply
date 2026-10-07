@@ -68,6 +68,7 @@ import { AiBudgetMeter } from "@/components/billing/AiBudgetMeter";
 import {
   AtsScoreRefreshControls,
   deriveAtsScoreRefreshMode,
+  sessionHasPhase4Score,
 } from "@/components/session/AtsScoreRefreshControls";
 import { useEntitlement } from "@/hooks/useEntitlement";
 import {
@@ -87,6 +88,7 @@ import { reconcileAddressedKeys } from "@/lib/reconcileAddressedKeys";
 import { applyResumePatch, normalizeResumePatch } from "@/lib/applyResumePatch";
 import { isPatchPlaceable } from "@/lib/suggestionHighlight";
 import { mergeSuggestionBatch, patchFingerprint, type ResumeSuggestion } from "@/lib/suggestions";
+import { stripBlockingSkillTerms } from "@/lib/tailoredLint";
 import {
   applyMechanicalQuickWins,
   applyPatchesDeterministically,
@@ -159,6 +161,7 @@ function SessionContent() {
   const [sessionApprovedMetrics, setSessionApprovedMetrics] = useState<import("@/lib/api").ApprovedMetric[]>([]);
   const [exportCompany, setExportCompany] = useState<string | null>(null);
   const [hasJd, setHasJd] = useState(false);
+  const [jdRaw, setJdRaw] = useState("");
   const [costInfo, setCostInfo] = useState<{ cost_formatted: string; provider: string; model: string } | null>(null);
   const [editorSyncKey, setEditorSyncKey] = useState(0);
   const [savedVersionNumber, setSavedVersionNumber] = useState(0);
@@ -192,6 +195,7 @@ function SessionContent() {
   >(() => new Set());
   const [reTailorConfirmOpen, setReTailorConfirmOpen] = useState(false);
   const [phase4RecalcActive, setPhase4RecalcActive] = useState(false);
+  const [hasPhase4Score, setHasPhase4Score] = useState(false);
   const [atsRecalcRunning, setAtsRecalcRunning] = useState(false);
   const [pendingCreditAction, setPendingCreditAction] = useState<{
     label: string;
@@ -441,6 +445,7 @@ function SessionContent() {
     }
     if (phaseNum === 4) {
       const qaOut = output as QAOutput;
+      setHasPhase4Score(typeof qaOut.ats_score === "number");
       setQa(qaOut);
       recordAtsScore(qaOut);
       reconcileAtsTrackingAfterRescore(qaOut);
@@ -451,8 +456,10 @@ function SessionContent() {
 
   const hydrateFromSession = useCallback((s: Awaited<ReturnType<typeof checkSession>>) => {
     setStale(s.stale ?? { "3": null, "4": null });
+    setHasPhase4Score(sessionHasPhase4Score(s.phases));
     setPhase1Complete(!!s.phase1_complete);
     setHasJd(!!s.has_jd);
+    setJdRaw(s.jd_raw ?? "");
     setExportCompany(s.export_company ?? null);
     setOriginalAtsScore(
       typeof s.original_ats_score === "number" ? s.original_ats_score : null,
@@ -968,9 +975,15 @@ function SessionContent() {
           return editedDuringScoring ? prev : { ...prev, "4": null };
         });
       } catch (err) {
-        setRunError(
-          err instanceof Error ? err.message : "Could not refresh the ATS score. Please try again.",
-        );
+        const message =
+          err instanceof Error ? err.message : "Could not refresh the ATS score. Please try again.";
+        if (message.toLowerCase().includes("run the ats score once")) {
+          setRunError(
+            "Run ATS scoring on the Export step first — free rescore is only available after your first score.",
+          );
+        } else {
+          setRunError(message);
+        }
       } finally {
         rescoreInFlightRef.current = false;
         setAtsRecalcRunning(false);
@@ -988,6 +1001,7 @@ function SessionContent() {
   const atsScoreRefreshMode = deriveAtsScoreRefreshMode({
     staleSince: stale["4"],
     pendingPaidConfirm: pendingCreditAction?.label === "Full AI re-analysis",
+    hasPriorScore: hasPhase4Score || typeof qa?.ats_score === "number",
   });
 
   const applyAllImprovements = useCallback(async () => {
@@ -1022,7 +1036,7 @@ function SessionContent() {
 
     try {
       const { mechanical, chat } = partitionMechanicalAndChatIssues(tailored, issues);
-      const mechanicalResult = applyMechanicalQuickWins(tailored, mechanical);
+      const mechanicalResult = applyMechanicalQuickWins(tailored, mechanical, jdRaw);
       let current = mechanicalResult.resume;
 
       let patchResult: ReturnType<typeof applyPatchesDeterministically> | null = null;
@@ -1079,8 +1093,10 @@ function SessionContent() {
       }
 
       if (resumeChanged) {
-        await saveTailoredResume(sessionId, current);
-        setTailored(current);
+        const sanitized = stripBlockingSkillTerms(current, jdRaw);
+        await saveTailoredResume(sessionId, sanitized);
+        setTailored(sanitized);
+        current = sanitized;
         setEditorSyncKey((k) => k + 1);
         setStale((prev) => ({ ...prev, "4": new Date().toISOString() }));
         // Deterministic refresh: shows the real gain from this batch with no AI cost.
@@ -1107,6 +1123,7 @@ function SessionContent() {
     dismissedSuggestionFingerprints,
     skippedAtsKeys,
     sessionId,
+    jdRaw,
     rescoreFree,
   ]);
 
@@ -1114,7 +1131,7 @@ function SessionContent() {
   // One attempt per stale marker: a failed refresh waits for the next edit instead of looping.
   useEffect(() => {
     const staleMarker = stale["4"];
-    if (!staleMarker || !tailored) return;
+    if (!staleMarker || !tailored || !(hasPhase4Score || qa)) return;
     if (phaseRunning || atsRecalcRunning || applyAllRunning) return;
     if (autoRescoreAttemptRef.current === staleMarker) return;
     const timer = setTimeout(() => {
@@ -1122,7 +1139,7 @@ function SessionContent() {
       void rescoreFree();
     }, AUTO_RESCORE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [stale, tailored, phaseRunning, atsRecalcRunning, applyAllRunning, rescoreFree]);
+  }, [stale, tailored, hasPhase4Score, qa, phaseRunning, atsRecalcRunning, applyAllRunning, rescoreFree]);
 
   const runCurrentPhase = useCallback(
     async (options?: { force?: boolean; scope?: PhaseRunScope; auditOnly?: boolean }) => {
@@ -1912,6 +1929,7 @@ function SessionContent() {
                       busy={atsRecalcRunning}
                       disabled={phaseRunning || (!!pendingCreditAction && pendingCreditAction.label !== "Full AI re-analysis")}
                       onRefreshFree={() => void rescoreFree()}
+                      onRunInitialScore={() => goTo("export")}
                       onRequestFullReanalysis={requestFullAtsReanalysis}
                       onConfirmFullReanalysis={() => {
                         const run = pendingCreditAction?.run;
@@ -2189,6 +2207,7 @@ function SessionContent() {
                         pendingCreditAction.label !== "Full AI re-analysis")
                     }
                     onRefreshFree={() => void rescoreFree()}
+                    onRunInitialScore={() => goTo("export")}
                     onRequestFullReanalysis={requestFullAtsReanalysis}
                     onConfirmFullReanalysis={() => {
                       const run = pendingCreditAction?.run;

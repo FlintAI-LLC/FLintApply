@@ -250,14 +250,11 @@ async def analyze_fit(
     except SubscriptionRequiredError:
         raise HTTPException(status_code=402, detail={"code": "subscription_required"})
     except PlanLimitReachedError as exc:
+        from app.services.billing.exceptions import plan_limit_reached_detail
+
         raise HTTPException(
             status_code=402,
-            detail={
-                "code": "plan_limit_reached",
-                "action": exc.action,
-                "used": exc.used,
-                "limit": exc.limit,
-            },
+            detail=plan_limit_reached_detail(exc),
         )
 
     plan_code = await resolve_plan_code_for_llm(db, user)

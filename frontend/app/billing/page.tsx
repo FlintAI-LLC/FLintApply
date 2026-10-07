@@ -657,6 +657,11 @@ export default function BillingPage() {
               limit={sub.searches_limit}
             />
             <UsageMeter
+              label="Job fit analyses"
+              used={sub.fit_analyses_used}
+              limit={sub.fit_analyses_limit}
+            />
+            <UsageMeter
               label="Whisper voice transcriptions"
               used={sub.whisper_uses_used}
               limit={sub.whisper_uses_limit}

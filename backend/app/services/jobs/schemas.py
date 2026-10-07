@@ -58,6 +58,7 @@ class JobSearchRequest(BaseModel):
 class JobMatchRequest(BaseModel):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=50)
+    filters: dict[str, Any] = Field(default_factory=dict)
 
 
 class SavedSearchCreate(BaseModel):

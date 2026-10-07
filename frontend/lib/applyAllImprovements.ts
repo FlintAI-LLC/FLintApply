@@ -104,11 +104,12 @@ export type MechanicalApplyResult = {
 export function applyMechanicalQuickWins(
   tailored: TailoredResumeOutput,
   issues: BlockingIssue[],
+  jdText = "",
 ): MechanicalApplyResult {
   let resume = tailored;
   const appliedIssues: BlockingIssue[] = [];
   for (const issue of issues) {
-    const result = tryApplyMechanicalQuickWin(resume, issue);
+    const result = tryApplyMechanicalQuickWin(resume, issue, jdText);
     if (result && result.changes.length > 0) {
       resume = result.resume;
       appliedIssues.push(issue);

@@ -235,14 +235,11 @@ async def _require_subscription_quota(
     except SubscriptionRequiredError:
         raise HTTPException(status_code=402, detail={"code": "subscription_required"})
     except PlanLimitReachedError as exc:
+        from app.services.billing.exceptions import plan_limit_reached_detail
+
         raise HTTPException(
             status_code=402,
-            detail={
-                "code": "plan_limit_reached",
-                "action": exc.action,
-                "used": exc.used,
-                "limit": exc.limit,
-            },
+            detail=plan_limit_reached_detail(exc),
         )
 
 
@@ -451,6 +448,7 @@ async def match_jobs(
         page=body.page,
         page_size=body.page_size,
         blocked_companies=_blocked(user),
+        filters=body.filters,
     )
     if message and not jobs and not charge:
         raise HTTPException(status_code=422, detail=message)

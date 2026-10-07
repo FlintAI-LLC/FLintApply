@@ -1,4 +1,7 @@
 import type { BlockingIssue, TailoredResumeOutput } from "@/lib/api";
+import { isValidSkillKeyword } from "@/lib/tailoredLint";
+
+export { isValidSkillKeyword } from "@/lib/tailoredLint";
 
 const ADD_TO_SKILLS_RE =
   /Add ['"\u2018\u2019\u201c\u201d]([^'"\u2018\u2019\u201c\u201d]{1,80})['"\u2018\u2019\u201c\u201d] to the Skills/i;
@@ -62,25 +65,6 @@ function flattenSkillTerms(skills: string[]): string[] {
 
 function keywordInText(text: string, keyword: string): boolean {
   return text.toLowerCase().includes(keyword.toLowerCase());
-}
-
-const SKILL_FUNCTION_WORD_RE =
-  /\b(with|of|in|the|a|to|that|which|for|and|or|by|from|as|at)\b/i;
-
-const TERMINAL_PUNCT = new Set([".", ",", ";", ":", "!", "?"]);
-
-/** Reject JD sentences and prose masquerading as skill tags. */
-export function isValidSkillKeyword(term: string, jdText = ""): boolean {
-  const candidate = term.trim();
-  if (!candidate || candidate.length > 40) return false;
-  const last = candidate[candidate.length - 1];
-  if (last && TERMINAL_PUNCT.has(last)) return false;
-  if (SKILL_FUNCTION_WORD_RE.test(candidate)) return false;
-  const lowered = candidate.toLowerCase();
-  if (jdText && lowered.split(/\s+/).length >= 5 && jdText.toLowerCase().includes(lowered)) {
-    return false;
-  }
-  return true;
 }
 
 function textHasEmDashChain(text: string): boolean {

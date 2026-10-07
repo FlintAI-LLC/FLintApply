@@ -7,6 +7,10 @@ from pathlib import Path
 import structlog
 
 from app.agent.checkup_guidance import build_checkup_guidance
+from app.agent.contact_issues_filter import (
+    filter_contact_export_strings,
+    should_drop_contact_export_item,
+)
 from app.agent.phase3_postprocess import flatten_skill_terms
 from app.agent.phase4_deterministic import (
     build_blocking_issues_from_score,
@@ -165,6 +169,35 @@ async def run(
         )
         if r.ats_score == 0 and r.score_ceiling == 0
         else None,
+    )
+    contact = tailored.contact or {}
+    resume_name = str(contact.get("name") or "").strip() or None
+    contact_email = str(contact.get("email") or "").strip() or None
+    if user_info and user_info.email and not contact_email:
+        contact_email = user_info.email.strip()
+    filtered_actions = filter_contact_export_strings(
+        output.user_action_required,
+        resume_name=resume_name,
+        contact_email=contact_email,
+    )
+    filtered_checklist = []
+    for item in output.checklist:
+        probe = f"{item.item} {item.note}".strip()
+        if item.status == "fail" and should_drop_contact_export_item(
+            probe,
+            resume_name=resume_name,
+            contact_email=contact_email,
+        ):
+            filtered_checklist.append(
+                item.model_copy(update={"status": "pass", "note": ""})
+            )
+        else:
+            filtered_checklist.append(item)
+    output = output.model_copy(
+        update={
+            "user_action_required": filtered_actions,
+            "checklist": filtered_checklist,
+        }
     )
     # Post-process keyword guidance using the full tailored resume text
     # (not just the Skills list).  Two transformations:

@@ -20,7 +20,7 @@ from app.services.jobs.circuit_breaker import (
     HirebaseUnavailableError,
     get_circuit_state,
 )
-from app.services.jobs.filtering import filter_blocked_companies
+from app.services.jobs.filtering import apply_job_result_filters, filter_blocked_companies
 from app.services.jobs import hirebase_client
 from app.services.jobs.schemas import JobResult
 
@@ -710,6 +710,7 @@ async def run_resume_match(
     page: int,
     page_size: int,
     blocked_companies: list[str],
+    filters: dict[str, Any] | None = None,
 ) -> tuple[list[JobResult], int, bool, str | None, bool]:
     """Match jobs to the user's master resume via Hirebase artifact."""
     master = (
@@ -765,6 +766,7 @@ async def run_resume_match(
         return [], 0, True, _OUTAGE_EMPTY_MESSAGE, False
 
     jobs = filter_blocked_companies(raw_jobs, blocked_companies)
+    jobs = apply_job_result_filters(jobs, filters or {})
     return jobs, len(jobs), False, None, True
 
 

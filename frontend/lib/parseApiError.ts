@@ -1,20 +1,43 @@
 /** Shared FastAPI `detail` parsing for client fetch helpers. */
 
+import { formatTailoredLintErrors } from "@/lib/tailoredLint";
+
 export const SESSION_REPLACED_CODE = "session_replaced";
 export const SESSION_REVOKED_EVENT = "app:session-revoked";
+
+export type ApiFieldError = {
+  field: string;
+  rule: string;
+  original: string;
+};
 
 export function parseApiErrorDetail(
   detail: unknown,
   status: number,
-): { message: string; code?: string } {
+): { message: string; code?: string; fieldErrors?: ApiFieldError[] } {
   if (typeof detail === "string") {
     return { message: detail };
   }
   if (detail && typeof detail === "object") {
     const d = detail as Record<string, unknown>;
     const code = typeof d.code === "string" ? d.code : undefined;
+    const fieldErrors = Array.isArray(d.field_errors)
+      ? (d.field_errors as ApiFieldError[]).filter(
+          (entry) =>
+            typeof entry?.field === "string" &&
+            typeof entry?.rule === "string" &&
+            typeof entry?.original === "string",
+        )
+      : undefined;
     const candidate = d.message ?? d.error;
     if (typeof candidate === "string") {
+      if (fieldErrors?.length) {
+        return {
+          message: formatTailoredLintErrors(fieldErrors),
+          code,
+          fieldErrors,
+        };
+      }
       return { message: candidate, code };
     }
     if (code === "insufficient_credits") {

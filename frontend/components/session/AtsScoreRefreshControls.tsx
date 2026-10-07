@@ -3,13 +3,18 @@
 import { CreditChargeConfirm } from "@/components/billing/CreditChargeConfirm";
 import { cn } from "@/lib/utils";
 
-export type AtsScoreRefreshMode = "current" | "stale_free" | "paid_confirm";
+export type AtsScoreRefreshMode =
+  | "current"
+  | "stale_free"
+  | "needs_initial_score"
+  | "paid_confirm";
 
 interface Props {
   mode: AtsScoreRefreshMode;
   busy?: boolean;
   disabled?: boolean;
   onRefreshFree: () => void;
+  onRunInitialScore: () => void;
   onRequestFullReanalysis: () => void;
   onConfirmFullReanalysis: () => void;
   onCancelFullReanalysis: () => void;
@@ -21,6 +26,7 @@ export function AtsScoreRefreshControls({
   busy = false,
   disabled = false,
   onRefreshFree,
+  onRunInitialScore,
   onRequestFullReanalysis,
   onConfirmFullReanalysis,
   onCancelFullReanalysis,
@@ -37,6 +43,15 @@ export function AtsScoreRefreshControls({
           onCancel={onCancelFullReanalysis}
           disabled={blocked}
         />
+      ) : mode === "needs_initial_score" ? (
+        <button
+          type="button"
+          onClick={onRunInitialScore}
+          disabled={blocked}
+          className="px-4 py-2 rounded-lg bg-amber-400 text-slate-900 text-sm font-semibold hover:bg-amber-300 disabled:opacity-40"
+        >
+          Run ATS scoring on Export
+        </button>
       ) : mode === "stale_free" ? (
         <button
           type="button"
@@ -73,6 +88,11 @@ export function AtsScoreRefreshControls({
           batches.
         </p>
       )}
+      {mode === "needs_initial_score" && (
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs text-right">
+          Free rescore unlocks after your first score on the Export step.
+        </p>
+      )}
       {mode === "stale_free" && (
         <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs text-right">
           Free refresh — no credit. Updates the number only.
@@ -82,11 +102,20 @@ export function AtsScoreRefreshControls({
   );
 }
 
+export function sessionHasPhase4Score(
+  phases: Record<string, { output: unknown | null } | undefined> | undefined,
+): boolean {
+  const out = phases?.["4"]?.output as { ats_score?: number } | null | undefined;
+  return typeof out?.ats_score === "number";
+}
+
 export function deriveAtsScoreRefreshMode(args: {
   staleSince: string | null | undefined;
   pendingPaidConfirm: boolean;
+  hasPriorScore: boolean;
 }): AtsScoreRefreshMode {
   if (args.pendingPaidConfirm) return "paid_confirm";
+  if (args.staleSince && !args.hasPriorScore) return "needs_initial_score";
   if (args.staleSince) return "stale_free";
   return "current";
 }
