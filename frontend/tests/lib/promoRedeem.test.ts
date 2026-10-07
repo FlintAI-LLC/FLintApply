@@ -24,7 +24,7 @@ describe("promoRedeem copy", () => {
   it("maps checkout-only code entered in redeem box", () => {
     assert.equal(
       promoRedeemErrorMessage("promo_code_wrong_flow"),
-      "This code applies at checkout, not for credits.",
+      "This code applies at checkout — use the Discount code section above when you subscribe or buy credits, not Redeem credit code.",
     );
   });
 

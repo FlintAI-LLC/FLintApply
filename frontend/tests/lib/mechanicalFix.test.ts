@@ -195,11 +195,10 @@ test("reinforce with dual targets applies summary when experience already has ke
   const result = tryApplyMechanicalQuickWin(withSiemInExp, issue)
   assert.ok(preview)
   assert.ok(result)
-  assert.equal(result.changes.length, 1)
-  assert.equal(result.changes[0]!.section, "Summary")
-  assert.match(result.resume.summary!, /SIEM/i)
-  assert.deepEqual(result.unmet, ["already in experience"])
-  assert.deepEqual(preview.changes, result.changes)
+  // Non-empty summaries are no longer mutated with "— includes {term}" tails (ST-004).
+  assert.equal(result.changes.length, 0)
+  assert.equal(preview.changes.length, 0)
+  assert.ok(result.unmet?.some((u) => u.toLowerCase().includes("summary")))
   assert.deepEqual(preview.unmet, result.unmet)
 })
 
