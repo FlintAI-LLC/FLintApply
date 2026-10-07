@@ -41,6 +41,7 @@ export const SUBSCRIBED_USER_FIXTURE = {
     searches_used: 45,
     searches_limit: 300,
     fit_analyses_limit: 50,
+    fit_analyses_used: 0,
     whisper_uses_used: 1,
     whisper_uses_limit: 5 as number | null,
     cancel_at_period_end: false,

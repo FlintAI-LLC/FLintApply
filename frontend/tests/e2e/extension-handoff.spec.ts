@@ -144,7 +144,7 @@ async function login(page: Page) {
 }
 
 test.describe("extension handoff — already signed in (AC1)", () => {
-  test("jd_id in the URL fills JD text and derives the application label", async ({ page }) => {
+  test("jd_id in the URL fills JD text and prefills the application name field", async ({ page }) => {
     await mockAuth(page)
     await mockWizardBootstrap(page)
     await page.route(`${API}/api/job-descriptions/${JD_ID}`, (route: Route) =>
@@ -154,7 +154,10 @@ test.describe("extension handoff — already signed in (AC1)", () => {
 
     await page.goto(`/session/new?jd_id=${JD_ID}&source=extension&step=jd`)
     await expect(page.getByRole("heading", { name: "Job description" })).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText("Lenovo — Advanced AI Enterprise Engineer")).toBeVisible()
+    await expect(page.getByTestId("application-name-field").locator("input")).toHaveValue(
+      "Lenovo — Advanced AI Enterprise Engineer",
+      { timeout: 10_000 },
+    )
     await expect(
       page.getByPlaceholder("Paste the full job description here…"),
     ).toHaveValue(/Advanced AI Enterprise Engineer/, { timeout: 10_000 })

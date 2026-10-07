@@ -20,6 +20,20 @@ const resume: TailoredResumeOutput = {
   certifications: [],
 };
 
+describe("searchTermsForIssue", () => {
+  it("ignores stopwords like Many from bulk keyword prose", () => {
+    const issue: BlockingIssue = {
+      category: "keyword",
+      description: "Many must-have keywords absent from the resume.",
+      suggestion: "Add missing terms where you have evidence.",
+      impact: "high",
+      fix_effort: "one_click",
+    };
+    const terms = searchTermsForIssue(issue);
+    assert.ok(!terms.some((t) => t === "Many"));
+  });
+});
+
 describe("resolveIssueAnchor", () => {
   it("finds summary when JD tone mentions vocabulary not in bullets", () => {
     const issue: BlockingIssue = {

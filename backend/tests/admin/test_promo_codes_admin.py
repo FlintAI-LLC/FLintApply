@@ -187,6 +187,50 @@ async def test_admin_promo_codes_update_deactivate(
 
 
 @pytest.mark.asyncio
+async def test_admin_promo_codes_delete_when_zero_redemptions(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin, _ = await make_admin(
+        db_session,
+        email=f"promo-delete-{uuid.uuid4().hex[:6]}@example.com",
+        role=AdminRole.super_admin,
+    )
+    await db_session.commit()
+    _, headers = await issue_admin_session(admin.id)
+
+    create_resp = await app_client.post(
+        "/api/admin/promo-codes",
+        json={
+            "code": "DELETEME",
+            "grant_type": "extra_credits",
+            "payload": {"amount": 1, "credit_kind": "free"},
+        },
+        headers=headers,
+    )
+    assert create_resp.status_code == 201
+    promo_id = create_resp.json()["promo_code"]["id"]
+
+    await app_client.patch(
+        f"/api/admin/promo-codes/{promo_id}",
+        json={"is_active": False},
+        headers=headers,
+    )
+
+    del_resp = await app_client.delete(
+        f"/api/admin/promo-codes/{promo_id}",
+        headers=headers,
+    )
+    assert del_resp.status_code == 204
+
+    get_resp = await app_client.get(
+        f"/api/admin/promo-codes/{promo_id}",
+        headers=headers,
+    )
+    assert get_resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_admin_promo_codes_create_denied_for_support_agent(
     app_client: AsyncClient,
     db_session: AsyncSession,

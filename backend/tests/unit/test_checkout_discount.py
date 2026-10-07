@@ -18,6 +18,9 @@ from app.services.billing.promo import (
     PromoCodeWrongFlowError,
     redeem_promo_code,
 )
+import stripe
+
+from app.services.billing.exceptions import CheckoutSessionError
 from app.services.billing.subscription import CheckoutSessionResult, create_checkout_session
 
 pytestmark = pytest.mark.unit
@@ -305,3 +308,46 @@ async def test_create_checkout_session_invalid_promo_still_checkouts() -> None:
     assert result.discount_applied is False
     assert result.discount_message == "This offer has expired."
     assert "discounts" not in captured
+
+
+@pytest.mark.asyncio
+async def test_create_checkout_session_stripe_invalid_request_raises() -> None:
+    user = _user()
+    mock_session = AsyncMock()
+    with (
+        patch(
+            "app.services.billing.subscription.resolve_price_id",
+            new=AsyncMock(return_value="price_monthly_pro_test"),
+        ),
+        patch(
+            "app.services.billing.subscription.resolve_checkout_discount",
+            new=AsyncMock(
+                return_value=type(
+                    "R",
+                    (),
+                    {
+                        "stripe_promotion_code_id": "promo_bad",
+                        "applied": True,
+                        "message": None,
+                    },
+                )()
+            ),
+        ),
+        patch(
+            "app.services.billing.subscription.stripe.checkout.Session.create",
+            side_effect=stripe.error.InvalidRequestError(
+                "Promotion code not valid for customer",
+                param="discounts",
+            ),
+        ),
+    ):
+        with pytest.raises(CheckoutSessionError) as exc_info:
+            await create_checkout_session(
+                mock_session,
+                user=user,
+                code="monthly_pro",
+                success_url="http://localhost:3100/success",
+                cancel_url="http://localhost:3100/cancel",
+                promo_code="BAD",
+            )
+    assert exc_info.value.discount_message
