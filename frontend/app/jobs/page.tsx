@@ -24,6 +24,10 @@ import {
   type JobSearchFilters,
   type JobSearchMode,
 } from "@/lib/jobs"
+import { GuidanceModal } from "@/components/guidance/GuidanceModal"
+import { GUIDANCE_CONTENT, type GuidanceStepId } from "@/lib/guidance/content"
+import { markGuidanceSeen } from "@/lib/guidance/tutorial"
+import { nextJobsGuidanceStep } from "@/lib/guidance/jobsGuidance"
 
 const PAGE_SIZE = 20
 
@@ -73,6 +77,20 @@ function JobsPageContent() {
   const [savedJobsLoading, setSavedJobsLoading] = useState(false)
   const [offRamp, setOffRamp] = useState<string | null>(null)
   const [lastSearchQuery, setLastSearchQuery] = useState("")
+  const [guidanceStep, setGuidanceStep] = useState<GuidanceStepId | null>(null)
+
+  const queueJobsGuidance = useCallback(
+    (ctx: Parameters<typeof nextJobsGuidanceStep>[0]) => {
+      const next = nextJobsGuidanceStep(ctx)
+      if (next) setGuidanceStep(next)
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (status !== "authenticated" || hasSearched) return
+    queueJobsGuidance({ beforeFirstSearch: true })
+  }, [status, hasSearched, queueJobsGuidance])
 
   const loadPreferences = useCallback(async () => {
     if (!token) return
@@ -242,6 +260,10 @@ function JobsPageContent() {
       setStale(res.results_may_be_stale)
       setStaleMessage(res.message)
       setOffRamp(res.off_ramp ?? null)
+      queueJobsGuidance({
+        searchResultCount: res.total,
+        offRampShown: Boolean(res.off_ramp),
+      })
     } catch (e) {
       const err = e as Error & { code?: string }
       if (err.code === "subscription_required") {
@@ -284,6 +306,7 @@ function JobsPageContent() {
     try {
       if (shouldSave) {
         await saveJob(token, jobId)
+        queueJobsGuidance({ firstBookmark: true })
         setSavedIds((prev) => new Set(prev).add(jobId))
         setSavedJobsList((prev) => {
           const job = jobs.find((j) => j.id === jobId)
@@ -694,6 +717,14 @@ function JobsPageContent() {
           </div>
         )}
       </div>
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={() => {
+          if (guidanceStep) markGuidanceSeen(guidanceStep)
+          setGuidanceStep(null)
+        }}
+      />
     </div>
   )
 }

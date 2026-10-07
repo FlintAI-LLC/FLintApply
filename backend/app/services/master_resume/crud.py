@@ -785,6 +785,7 @@ def brick_summary(row: MasterResumeChunk) -> dict[str, Any]:
         "token_count": row.token_count,
         "source_doc_id": str(row.source_doc_id) if row.source_doc_id else None,
         "created_at": row.created_at.isoformat() if row.created_at else None,
+        "metadata": dict(row.chunk_metadata or {}),
     }
 
 

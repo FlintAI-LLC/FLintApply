@@ -12,11 +12,35 @@ import {
   SECTION_ORDER,
   createProfileBrick,
   deleteProfileBrick,
+  getProfileChunks,
+  groupExperienceChunksByJob,
   listProfileBricks,
+  liveChunkCount,
   patchProfileBrick,
   type ProfileBrick,
+  type ProfileChunk,
 } from "@/lib/profile"
+import { GuidanceModal } from "@/components/guidance/GuidanceModal"
+import { GUIDANCE_CONTENT, type GuidanceStepId } from "@/lib/guidance/content"
+import { markGuidanceSeen } from "@/lib/guidance/tutorial"
+import {
+  MASTER_RESUME_CHUNK_GOAL,
+  nextMasterResumeGuidanceStep,
+} from "@/lib/guidance/masterResumeGuidance"
 import { clsx } from "clsx"
+
+function brickAsChunk(brick: ProfileBrick): ProfileChunk {
+  return {
+    id: brick.id,
+    section_type: brick.section_type,
+    content: brick.content,
+    token_count: brick.token_count,
+    source_doc_id: brick.source_doc_id,
+    metadata: brick.metadata ?? {},
+    created_at: brick.created_at,
+    updated_at: null,
+  }
+}
 
 function BricksPageContent() {
   const { session, status } = useRequireAuth("/profile/bricks")
@@ -30,8 +54,19 @@ function BricksPageContent() {
   const [adding, setAdding] = useState(false)
   const [newContent, setNewContent] = useState("")
   const [savingNew, setSavingNew] = useState(false)
+  const [liveCount, setLiveCount] = useState(0)
+  const [bricksReviewComplete, setBricksReviewComplete] = useState(false)
+  const [guidanceStep, setGuidanceStep] = useState<GuidanceStepId | null>(null)
 
   const sectionTabs = useMemo(() => [...SECTION_ORDER], [])
+
+  const queueMasterResumeGuidance = useCallback(
+    (ctx: Parameters<typeof nextMasterResumeGuidanceStep>[0]) => {
+      const next = nextMasterResumeGuidanceStep(ctx)
+      if (next) setGuidanceStep(next)
+    },
+    [],
+  )
 
   const loadBricks = useCallback(async () => {
     if (!token) return
@@ -54,6 +89,22 @@ function BricksPageContent() {
     }, 0)
     return () => window.clearTimeout(t)
   }, [loadBricks])
+
+  useEffect(() => {
+    if (!token) return
+    void getProfileChunks(token).then((rows) => {
+      setLiveCount(liveChunkCount(rows))
+    })
+  }, [token])
+
+  useEffect(() => {
+    queueMasterResumeGuidance({
+      liveCount,
+      onBricksPage: true,
+      bricksReviewComplete,
+      dedupeAvailable: liveCount > 1,
+    })
+  }, [liveCount, bricksReviewComplete, queueMasterResumeGuidance])
 
   async function handleSave(id: string, content: string) {
     if (!token) return
@@ -159,14 +210,62 @@ function BricksPageContent() {
         </p>
       ) : (
         <div className="space-y-4">
-          {bricks.map((brick) => (
-            <BrickCard
-              key={brick.id}
-              brick={brick}
-              onSave={handleSave}
-              onDelete={handleDelete}
-            />
-          ))}
+          {activeSection === "experience" ? (
+            (() => {
+              const { groups, ungrouped } = groupExperienceChunksByJob(bricks.map(brickAsChunk))
+              const brickById = new Map(bricks.map((b) => [b.id, b]))
+              return (
+                <>
+                  {groups.map((group) => (
+                    <div
+                      key={group.key}
+                      className="space-y-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-3"
+                      data-testid="experience-job-group"
+                    >
+                      <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        {group.label}
+                      </h3>
+                      <div className="space-y-4">
+                        {group.chunks.map((chunk) => {
+                          const brick = brickById.get(chunk.id)
+                          if (!brick) return null
+                          return (
+                            <BrickCard
+                              key={brick.id}
+                              brick={brick}
+                              onSave={handleSave}
+                              onDelete={handleDelete}
+                            />
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  {ungrouped.map((chunk) => {
+                    const brick = brickById.get(chunk.id)
+                    if (!brick) return null
+                    return (
+                      <BrickCard
+                        key={brick.id}
+                        brick={brick}
+                        onSave={handleSave}
+                        onDelete={handleDelete}
+                      />
+                    )
+                  })}
+                </>
+              )
+            })()
+          ) : (
+            bricks.map((brick) => (
+              <BrickCard
+                key={brick.id}
+                brick={brick}
+                onSave={handleSave}
+                onDelete={handleDelete}
+              />
+            ))
+          )}
         </div>
       )}
 
@@ -212,6 +311,26 @@ function BricksPageContent() {
           Add brick
         </button>
       )}
+
+      {liveCount >= MASTER_RESUME_CHUNK_GOAL && (
+        <button
+          type="button"
+          data-testid="bricks-review-complete"
+          onClick={() => setBricksReviewComplete(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500"
+        >
+          I&apos;ve reviewed my bricks
+        </button>
+      )}
+
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={() => {
+          if (guidanceStep) markGuidanceSeen(guidanceStep)
+          setGuidanceStep(null)
+        }}
+      />
     </main>
   )
 }

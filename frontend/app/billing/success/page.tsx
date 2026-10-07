@@ -8,7 +8,7 @@ import { getSubscriptionCurrent, type SubscriptionCurrentResponse } from "@/lib/
 import { isSubscriptionActive } from "@/lib/billing"
 
 const POLL_INTERVAL_MS = 2_500
-const POLL_TIMEOUT_MS = 30_000
+const POLL_TIMEOUT_MS = 60_000
 
 export default function BillingSuccessPage() {
   const { data: session, status } = useSession()
@@ -73,8 +73,12 @@ export default function BillingSuccessPage() {
 
   if (status === "loading" || loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-center px-4">
         <Loader2 className="w-6 h-6 animate-spin text-slate-600 dark:text-slate-400" />
+        <p className="text-sm text-slate-600 dark:text-slate-400 max-w-sm">
+          Activating your plan… This usually takes a few seconds after checkout while we confirm
+          payment with Stripe.
+        </p>
       </div>
     )
   }

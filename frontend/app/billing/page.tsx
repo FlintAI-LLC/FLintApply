@@ -813,7 +813,8 @@ export default function BillingPage() {
             Discount code (subscription or pack checkout)
           </h2>
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            Applied on your next Subscribe or Buy credits click for the plan you choose.
+            Subscription or pack checkout only — not for free credit grants (use Redeem credit code
+            below). Applied on your next Subscribe or Buy credits click for the plan you choose.
           </p>
           <input
             type="text"
