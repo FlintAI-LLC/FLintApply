@@ -5,7 +5,8 @@ const PROMO_ERROR_MESSAGES: Record<string, string> = {
   promo_code_expired: "That code has expired.",
   promo_code_exhausted: "That code has already been used up.",
   promo_code_inactive: "That code is not valid.",
-  promo_code_wrong_flow: "This code applies at checkout, not for credits.",
+  promo_code_wrong_flow:
+    "This code applies at checkout — use the Discount code section above when you subscribe or buy credits, not Redeem credit code.",
   promo_misconfigured: "This code could not be applied. Please contact support.",
 }
 

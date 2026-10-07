@@ -18,6 +18,7 @@ import {
   getProfileChunks,
   getProfileResume,
   groupChunksBySection,
+  groupExperienceChunksByJob,
   liveChunkCount,
   reembedAllProfileResume,
   SECTION_LABELS,
@@ -31,6 +32,10 @@ import {
   type ProfileResume,
   type ResumeRoleConflict,
 } from "@/lib/profile"
+import { GuidanceModal } from "@/components/guidance/GuidanceModal"
+import { GUIDANCE_CONTENT, type GuidanceStepId } from "@/lib/guidance/content"
+import { markGuidanceSeen } from "@/lib/guidance/tutorial"
+import { nextMasterResumeGuidanceStep } from "@/lib/guidance/masterResumeGuidance"
 import { clsx } from "clsx"
 
 const REEMBED_THRESHOLD = 3
@@ -69,6 +74,15 @@ function ProfilePageContent() {
   const [panelCollapsed, setPanelCollapsed] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [uploadConflicts, setUploadConflicts] = useState<ResumeRoleConflict[]>([])
+  const [guidanceStep, setGuidanceStep] = useState<GuidanceStepId | null>(null)
+
+  const queueMasterResumeGuidance = useCallback(
+    (ctx: Parameters<typeof nextMasterResumeGuidanceStep>[0]) => {
+      const next = nextMasterResumeGuidanceStep(ctx)
+      if (next) setGuidanceStep(next)
+    },
+    [],
+  )
 
   const loadProfile = useCallback(async () => {
     if (!token) return
@@ -106,6 +120,14 @@ function ProfilePageContent() {
   const onboardingIncomplete = needsOnboarding(session?.backendUser)
   const showContinue =
     liveCount > 0 && (fromOnboarding || Boolean(returnUrl) || onboardingIncomplete)
+
+  useEffect(() => {
+    if (loadingProfile) return
+    queueMasterResumeGuidance({
+      liveCount,
+      dedupeAvailable: liveCount > 1,
+    })
+  }, [loadingProfile, liveCount, queueMasterResumeGuidance])
 
   function handleContinue() {
     if (!token) return
@@ -150,6 +172,11 @@ function ProfilePageContent() {
       const chunkRows = await getProfileChunks(token)
       setChunks(chunkRows)
       setEditedChunkIds(new Set())
+      queueMasterResumeGuidance({
+        liveCount: liveChunkCount(chunkRows),
+        ingestJustFinished: true,
+        dedupeAvailable: liveChunkCount(chunkRows) > 1,
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed")
       throw e
@@ -185,6 +212,10 @@ function ProfilePageContent() {
           `Removed ${result.deleted_count} duplicate chunk${result.deleted_count === 1 ? "" : "s"} (${parts}). ${result.live_chunk_count} remain.`,
         )
       }
+      queueMasterResumeGuidance({
+        liveCount: result.live_chunk_count,
+        dedupeAvailable: result.live_chunk_count > 1,
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : "Dedupe failed")
     } finally {
@@ -474,15 +505,67 @@ function ProfilePageContent() {
                       </p>
                     </div>
                     <div className="grid gap-3">
-                      {sectionChunks.map((chunk) => (
-                        <ChunkCard
-                          key={chunk.id}
-                          chunk={chunk}
-                          token={token!}
-                          onSaved={handleChunkSaved}
-                          onDeleted={handleChunkDeleted}
-                        />
-                      ))}
+                      {sectionKey === "experience" ? (
+                        (() => {
+                          const liveSection = sectionChunks.filter((c) => !c.deleted_at)
+                          const { groups, ungrouped } = groupExperienceChunksByJob(liveSection)
+                          const deleted = sectionChunks.filter((c) => c.deleted_at)
+                          return (
+                            <>
+                              {groups.map((group) => (
+                                <div
+                                  key={group.key}
+                                  className="space-y-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-3"
+                                  data-testid="experience-job-group"
+                                >
+                                  <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                    {group.label}
+                                  </h3>
+                                  <div className="grid gap-3">
+                                    {group.chunks.map((chunk) => (
+                                      <ChunkCard
+                                        key={chunk.id}
+                                        chunk={chunk}
+                                        token={token!}
+                                        onSaved={handleChunkSaved}
+                                        onDeleted={handleChunkDeleted}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                              {ungrouped.map((chunk) => (
+                                <ChunkCard
+                                  key={chunk.id}
+                                  chunk={chunk}
+                                  token={token!}
+                                  onSaved={handleChunkSaved}
+                                  onDeleted={handleChunkDeleted}
+                                />
+                              ))}
+                              {deleted.map((chunk) => (
+                                <ChunkCard
+                                  key={chunk.id}
+                                  chunk={chunk}
+                                  token={token!}
+                                  onSaved={handleChunkSaved}
+                                  onDeleted={handleChunkDeleted}
+                                />
+                              ))}
+                            </>
+                          )
+                        })()
+                      ) : (
+                        sectionChunks.map((chunk) => (
+                          <ChunkCard
+                            key={chunk.id}
+                            chunk={chunk}
+                            token={token!}
+                            onSaved={handleChunkSaved}
+                            onDeleted={handleChunkDeleted}
+                          />
+                        ))
+                      )}
                     </div>
                   </div>
                 )
@@ -510,6 +593,15 @@ function ProfilePageContent() {
           />
         </div>
       </div>
+
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={() => {
+          if (guidanceStep) markGuidanceSeen(guidanceStep)
+          setGuidanceStep(null)
+        }}
+      />
     </main>
   )
 }

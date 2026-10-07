@@ -49,6 +49,9 @@ import { DashboardStepStack } from "@/components/dashboard/DashboardStepStack"
 import { ExtensionHandoffBanner } from "@/components/dashboard/ExtensionHandoffBanner"
 import { summarizeMasterResume } from "@/lib/masterResumeSummary"
 import { dashboardSessionStep, sessionHref } from "@/lib/sessionStep"
+import { GuidanceModal } from "@/components/guidance/GuidanceModal"
+import { GUIDANCE_CONTENT, type GuidanceStepId } from "@/lib/guidance/content"
+import { isGuidanceSeen, markGuidanceSeen } from "@/lib/guidance/tutorial"
 
 const STATUS_OPTIONS: { value: ResumeRecordStatus | ""; label: string }[] = [
   { value: "", label: "All statuses" },
@@ -192,6 +195,13 @@ export function DashboardView({ token }: { token: string }) {
     offer: number
     total: number
   } | null>(null)
+  const [guidanceStep, setGuidanceStep] = useState<GuidanceStepId | null>(null)
+
+  useEffect(() => {
+    if (!isGuidanceSeen("dashboard.welcome")) {
+      setGuidanceStep("dashboard.welcome")
+    }
+  }, [])
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
 
   const masterChunkCount =
@@ -880,6 +890,14 @@ export function DashboardView({ token }: { token: string }) {
           </div>
         )}
       </section>
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={() => {
+          if (guidanceStep) markGuidanceSeen(guidanceStep)
+          setGuidanceStep(null)
+        }}
+      />
     </main>
   )
 }

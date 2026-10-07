@@ -146,10 +146,9 @@ export function applyKeywordToSummary(
   const summary = (tailored.summary ?? "").trim();
   if (keywordInText(summary, term)) return null;
   if (textHasEmDashChain(summary)) return null;
-  const addition = summary
-    ? `${summary.replace(/\.$/, "")} — includes ${term}.`
-    : `Experienced with ${term}.`;
-  return { ...tailored, summary: addition };
+  // Avoid "— includes {term}" summary tails (keyword stuffing); only seed an empty summary.
+  if (summary) return null;
+  return { ...tailored, summary: `Experienced professional with relevant ${term} experience.` };
 }
 
 export function applyKeywordToExperienceAt(
@@ -258,6 +257,8 @@ function previewReinforcement(
       const summary = (tailored.summary ?? "").trim();
       if (keywordInText(summary, keyword)) {
         unmet.push("already in summary");
+      } else if (summary) {
+        unmet.push("summary not auto-edited");
       } else {
         changes.push({ section: "Summary", label: `Include ${keyword}` });
         break;

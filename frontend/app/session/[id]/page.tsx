@@ -115,6 +115,12 @@ import {
 } from "@/lib/trackApplicationFlow";
 import { TrackerApiError } from "@/lib/tracker";
 import { dispatchCreditsExhausted } from "@/lib/offerPopup";
+import { GuidanceModal } from "@/components/guidance/GuidanceModal";
+import { GUIDANCE_CONTENT, type GuidanceStepId } from "@/lib/guidance/content";
+import {
+  markSessionGuidanceSeen,
+  nextSessionGuidanceStep,
+} from "@/lib/guidance/sessionGuidance";
 import {
   defaultSessionStep,
   normalizeSessionStep,
@@ -203,6 +209,9 @@ function SessionContent() {
   } | null>(null);
   const [coverLetterOpen, setCoverLetterOpen] = useState(false);
   const [coverLetter, setCoverLetter] = useState<CoverLetterOutput | null>(null);
+  const [guidanceStep, setGuidanceStep] = useState<GuidanceStepId | null>(null);
+  const [applyAllGuidancePending, setApplyAllGuidancePending] = useState(false);
+  const [continuingToExportGuidance, setContinuingToExportGuidance] = useState(false);
 
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [aiSettingsHighlight, setAiSettingsHighlight] = useState(false);
@@ -220,6 +229,23 @@ function SessionContent() {
     Record<string, QuickWinMechanicalOutcome>
   >({});
   const mechanicalUndoRef = useRef<Record<string, TailoredResumeOutput>>({});
+  const sessionWelcomeQueuedRef = useRef(false);
+  const firstAtsScoreShownRef = useRef(false);
+
+  const queueSessionGuidance = useCallback(
+    (ctx: Parameters<typeof nextSessionGuidanceStep>[0]) => {
+      const next = nextSessionGuidanceStep(ctx);
+      if (next) setGuidanceStep(next);
+    },
+    [],
+  );
+
+  const sessionGuidanceStep = useMemo((): "analysis" | "rewrite" | "export" | "other" => {
+    if (step === "analysis") return "analysis";
+    if (step === "rewrite") return "rewrite";
+    if (step === "export") return "export";
+    return "other";
+  }, [step]);
   const entryIssueBadges = useMemo(() => {
     const visible = (qa?.blocking_issues ?? []).filter(
       (issue) => !skippedAtsKeys.has(issueKey(issue)),
@@ -488,6 +514,7 @@ function SessionContent() {
       const out = phase4.output as QAOutput;
       if (typeof out.ats_score === "number") {
         setAtsScoreHistory([out.ats_score]);
+        firstAtsScoreShownRef.current = true;
       }
     }
     if (s.cover_letter) {
@@ -505,6 +532,59 @@ function SessionContent() {
     hydrateFromSession(snapshot);
     setStale(snapshot.stale ?? { "3": null, "4": null });
   }, [sessionId, hydrateFromSession]);
+
+  useEffect(() => {
+    if (!sessionLoaded) return;
+    if (sessionWelcomeQueuedRef.current) return;
+    sessionWelcomeQueuedRef.current = true;
+    queueSessionGuidance({
+      sessionId,
+      step: sessionGuidanceStep,
+      isNewSession: true,
+    });
+  }, [sessionLoaded, sessionId, sessionGuidanceStep, queueSessionGuidance]);
+
+  useEffect(() => {
+    if (!sessionLoaded) return;
+    queueSessionGuidance({
+      sessionId,
+      step: sessionGuidanceStep,
+      continuingToExport: continuingToExportGuidance,
+    });
+  }, [
+    sessionLoaded,
+    sessionId,
+    sessionGuidanceStep,
+    continuingToExportGuidance,
+    queueSessionGuidance,
+  ]);
+
+  useEffect(() => {
+    if (continuingToExportGuidance && step === "export") {
+      setContinuingToExportGuidance(false);
+    }
+  }, [continuingToExportGuidance, step]);
+
+  useEffect(() => {
+    if (!qa?.ats_score) return;
+    if (firstAtsScoreShownRef.current) return;
+    firstAtsScoreShownRef.current = true;
+    queueSessionGuidance({
+      sessionId,
+      step: "export",
+      firstAtsScore: true,
+    });
+  }, [qa?.ats_score, sessionId, queueSessionGuidance]);
+
+  useEffect(() => {
+    if (!applyAllGuidancePending) return;
+    queueSessionGuidance({
+      sessionId,
+      step: sessionGuidanceStep,
+      applyAllJustFinished: true,
+    });
+    setApplyAllGuidancePending(false);
+  }, [applyAllGuidancePending, sessionId, sessionGuidanceStep, queueSessionGuidance]);
 
   const persistTailoredBeforeExport = useCallback(async () => {
     if (!tailored) return;
@@ -528,8 +608,11 @@ function SessionContent() {
         return;
       }
     }
+    if (step === "rewrite") {
+      setContinuingToExportGuidance(true);
+    }
     goTo("export");
-  }, [tailored, persistTailoredBeforeExport]);
+  }, [tailored, persistTailoredBeforeExport, step]);
 
   const runPhaseByNumber = useCallback(
     async (phase: number, options?: { force?: boolean; scope?: PhaseRunScope }) => {
@@ -1104,6 +1187,9 @@ function SessionContent() {
       }
 
       setApplyAllRoundsUsed((n) => n + 1);
+      if (appliedIssueCount > 0) {
+        setApplyAllGuidancePending(true);
+      }
     } catch (err) {
       const errorCode = err instanceof ApiError ? err.code : undefined;
       setRunErrorCode(errorCode ?? null);
@@ -2305,6 +2391,17 @@ function SessionContent() {
           )}
         </div>
       </div>
+
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={() => {
+          if (guidanceStep?.startsWith("session.")) {
+            markSessionGuidanceSeen(sessionId, guidanceStep);
+          }
+          setGuidanceStep(null);
+        }}
+      />
 
       <CoverLetterPanel
         sessionId={sessionId}

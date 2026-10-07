@@ -660,6 +660,10 @@ export function ATSGuidancePanel({
               {applyAllRoundsRemaining(applyAllRoundsUsed) === 1 ? "" : "es"} left before a full
               re-analysis.
             </p>
+            <p className="text-[11px] text-amber-900/90 dark:text-amber-200/90 mt-1 leading-relaxed">
+              Apply all can stuff keywords and hurt readability — dismiss fixes for skills you do
+              not have, and clear export blockers on Rewrite before relying on batch apply.
+            </p>
           </div>
           <button
             type="button"

@@ -30,6 +30,7 @@ import { clsx } from "clsx"
 import { NotificationBell } from "@/components/nav/NotificationBell"
 import { UsageWidget } from "@/components/nav/UsageWidget"
 import { ThemeToggle } from "@/components/theme/ThemeToggle"
+import { TutorialMenu } from "@/components/guidance/TutorialMenu"
 
 export function NavBar() {
   const pathname = usePathname()
@@ -235,6 +236,7 @@ export function NavBar() {
         )}
 
         <div className="flex items-center gap-2 shrink-0 ml-auto md:ml-0">
+          {renderUserMenu && <TutorialMenu />}
           <ThemeToggle />
           {renderUserMenu && (
             <>

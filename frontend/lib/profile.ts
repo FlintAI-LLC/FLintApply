@@ -153,6 +153,57 @@ export function liveChunkCount(chunks: ProfileChunk[]): number {
   return chunks.filter((c) => !c.deleted_at).length
 }
 
+export function experienceJobGroupKey(metadata: Record<string, unknown>): string {
+  const company = String(metadata.company ?? metadata.employer ?? "")
+    .trim()
+    .toLowerCase()
+  const title = String(metadata.title ?? metadata.role ?? "").trim().toLowerCase()
+  const dates = String(metadata.dates ?? metadata.year ?? "").trim().toLowerCase()
+  if (!company && !title) return ""
+  return `${company}|${title}|${dates}`
+}
+
+export interface ExperienceJobGroup {
+  key: string
+  label: string
+  chunks: ProfileChunk[]
+}
+
+/** Group experience bullets under company/title metadata (ST-007). */
+export function groupExperienceChunksByJob(chunks: ProfileChunk[]): {
+  groups: ExperienceJobGroup[]
+  ungrouped: ProfileChunk[]
+} {
+  const groups = new Map<string, ExperienceJobGroup>()
+  const ungrouped: ProfileChunk[] = []
+
+  for (const chunk of chunks) {
+    if (chunk.deleted_at) continue
+    const key = experienceJobGroupKey(chunk.metadata ?? {})
+    if (!key) {
+      ungrouped.push(chunk)
+      continue
+    }
+    let group = groups.get(key)
+    if (!group) {
+      const meta = chunk.metadata ?? {}
+      const company = String(meta.company ?? "").trim()
+      const title = String(meta.title ?? meta.role ?? "").trim()
+      const dates = String(meta.dates ?? meta.year ?? "").trim()
+      const labelParts = [title, company, dates].filter(Boolean)
+      group = {
+        key,
+        label: labelParts.join(" · ") || "Experience",
+        chunks: [],
+      }
+      groups.set(key, group)
+    }
+    group.chunks.push(chunk)
+  }
+
+  return { groups: [...groups.values()], ungrouped }
+}
+
 export function buildPatchChunkUrl(chunkId: string): string {
   return `${BASE}/api/profile/resume/chunks/${chunkId}`
 }
@@ -309,6 +360,7 @@ export interface ProfileBrick {
   token_count: number
   source_doc_id: string | null
   created_at: string | null
+  metadata?: Record<string, unknown>
 }
 
 export async function listProfileBricks(

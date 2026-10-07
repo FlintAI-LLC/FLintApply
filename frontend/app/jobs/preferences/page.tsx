@@ -16,6 +16,10 @@ import {
   type AlertFrequency,
   type SavedSearch,
 } from "@/lib/jobs"
+import { GuidanceModal } from "@/components/guidance/GuidanceModal"
+import { GUIDANCE_CONTENT, type GuidanceStepId } from "@/lib/guidance/content"
+import { markGuidanceSeen } from "@/lib/guidance/tutorial"
+import { nextJobsGuidanceStep } from "@/lib/guidance/jobsGuidance"
 
 const MAX_SAVED_SEARCHES = 10
 const MAX_ALERT_SEARCHES = 5
@@ -35,6 +39,7 @@ function PreferencesPageContent() {
   const [loading, setLoading] = useState(true)
   const [savingPrefs, setSavingPrefs] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [guidanceStep, setGuidanceStep] = useState<GuidanceStepId | null>(null)
 
   const [newName, setNewName] = useState("")
   const [newQuery, setNewQuery] = useState("")
@@ -65,6 +70,12 @@ function PreferencesPageContent() {
   useEffect(() => {
     if (token) void loadData()
   }, [token, loadData])
+
+  useEffect(() => {
+    if (status !== "authenticated") return
+    const next = nextJobsGuidanceStep({ onPreferencesPage: true })
+    if (next) setGuidanceStep(next)
+  }, [status])
 
   const handleCreateSearch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -317,6 +328,15 @@ function PreferencesPageContent() {
           </div>
         )}
       </div>
+
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={() => {
+          if (guidanceStep) markGuidanceSeen(guidanceStep)
+          setGuidanceStep(null)
+        }}
+      />
     </div>
   )
 }

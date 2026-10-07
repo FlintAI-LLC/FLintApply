@@ -2,6 +2,7 @@
  * E2E: search → results appear → Tailor Resume navigates to /session/new with JD prefilled.
  */
 import { test, expect, type Page, type Route } from "@playwright/test"
+import { suppressTutorial } from "./helpers/guidance"
 
 const BASE = "http://localhost:3000"
 const API = "http://localhost:8000"
@@ -42,6 +43,7 @@ const MOCK_JOB = {
 }
 
 async function mockAuth(page: Page) {
+  await suppressTutorial(page)
   await page.route(`${API}/api/auth/me`, (route: Route) =>
     route.fulfill({
       status: 200,
