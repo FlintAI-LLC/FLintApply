@@ -18,6 +18,7 @@ export function GuidanceModal({ content, open, onAcknowledge }: Props) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="guidance-modal-title"
+      data-testid="guidance-modal"
     >
       <div className="w-full max-w-md rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-6 space-y-4">
         <div>
@@ -37,6 +38,7 @@ export function GuidanceModal({ content, open, onAcknowledge }: Props) {
         ) : null}
         <button
           type="button"
+          data-testid="guidance-modal-dismiss"
           onClick={onAcknowledge}
           className="w-full rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold text-sm py-2.5 transition-colors"
         >
