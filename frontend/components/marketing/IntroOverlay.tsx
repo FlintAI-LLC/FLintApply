@@ -5,6 +5,10 @@ import Image from "next/image";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { INTRO_GREETING, INTRO_SEEN_KEY, WORDMARK_LIGHT_SRC } from "@/lib/brand";
 import {
+  dispatchIntroDismissed,
+  isFounderFirstRunComplete,
+} from "@/lib/marketing/founderVideo";
+import {
   INTRO_DISMISS_SLACK_MS,
   INTRO_FADE_MS,
   INTRO_FALLBACK_TICK_MS,
@@ -77,13 +81,20 @@ export function IntroOverlay() {
       // Private browsing may block storage; still dismiss.
     }
     setFading(true);
-    fadeRef.current = window.setTimeout(() => setActive(false), INTRO_FADE_MS);
+    fadeRef.current = window.setTimeout(() => {
+      setActive(false);
+      dispatchIntroDismissed();
+    }, INTRO_FADE_MS);
   }, [clearDrivers]);
 
   useEffect(() => {
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const forceReplay =
       new URLSearchParams(window.location.search).get("intro") === "1";
+
+    if (isFounderFirstRunComplete() && !forceReplay) {
+      return;
+    }
 
     let alreadyPlayed = false;
     try {
