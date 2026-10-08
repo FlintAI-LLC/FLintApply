@@ -9,6 +9,7 @@ import {
   INTRO_FADE_MS,
   INTRO_TOTAL_MS,
 } from "@/lib/marketing/intro";
+import { suppressIntro } from "./helpers/intro";
 
 const INTRO_DISMISS_DEADLINE_MS =
   INTRO_TOTAL_MS + INTRO_DISMISS_SLACK_MS + INTRO_FADE_MS + 500;
@@ -32,9 +33,7 @@ test.describe("landing intro backstop", () => {
 
 test.describe("hero scroll messages", () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      sessionStorage.setItem("flintapply:intro-seen", "1");
-    });
+    await suppressIntro(page);
     await page.goto("/");
   });
 
