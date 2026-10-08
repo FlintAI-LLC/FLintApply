@@ -3,7 +3,9 @@ import { CheckupInvite } from "@/components/marketing/CheckupInvite";
 import { ClosingCta } from "@/components/marketing/ClosingCta";
 import { ComparisonSection } from "@/components/marketing/ComparisonSection";
 import { FaqSection } from "@/components/marketing/FaqSection";
+import { FounderVideoSection } from "@/components/marketing/FounderVideoSection";
 import { IntroOverlay } from "@/components/marketing/IntroOverlay";
+import { LandingFounderVideoGate } from "@/components/marketing/LandingFounderVideoGate";
 import { JourneySection } from "@/components/marketing/JourneySection";
 import { KeywordScanDemo } from "@/components/marketing/KeywordScanDemo";
 import { MarketingHero } from "@/components/marketing/MarketingHero";
@@ -33,6 +35,7 @@ export default async function LandingPage() {
       />
       <MarketingHero />
       <IntroOverlay />
+      <LandingFounderVideoGate />
       {/*
         Scroll band: one horizontal amber → neutral → sky wash carries the
         eye from the post-hero handoff through the comparison, the pinned
@@ -47,6 +50,7 @@ export default async function LandingPage() {
         <KeywordScanDemo />
         <CheckupInvite />
       </div>
+      <FounderVideoSection />
       <ScrollReveal>
         <PricingSection pricing={pricing} startingCredits={startingCredits} />
       </ScrollReveal>

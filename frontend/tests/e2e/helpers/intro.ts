@@ -3,6 +3,9 @@ import type { Page } from "@playwright/test"
 /** Must match `INTRO_SEEN_KEY` in `lib/brand.ts`. */
 const INTRO_SEEN_KEY = "flintapply:intro-seen"
 
+/** Must match `FOUNDER_FIRST_RUN_COMPLETE_KEY` in `lib/marketing/founderVideo.ts`. */
+const FOUNDER_FIRST_RUN_COMPLETE_KEY = "flintapply:first-run-complete"
+
 /**
  * Mark the landing intro as already played, before any page script runs.
  *
@@ -15,11 +18,16 @@ const INTRO_SEEN_KEY = "flintapply:intro-seen"
  * Call before `page.goto`.
  */
 export async function suppressIntro(page: Page): Promise<void> {
-  await page.addInitScript((key) => {
-    try {
-      sessionStorage.setItem(key, "1")
-    } catch {
-      // Storage can be unavailable; the intro stays dismissable by other means.
-    }
-  }, INTRO_SEEN_KEY)
+  await page.addInitScript(
+    (introKey, firstRunKey) => {
+      try {
+        sessionStorage.setItem(introKey, "1")
+        localStorage.setItem(firstRunKey, "1")
+      } catch {
+        // Storage can be unavailable; the intro stays dismissable by other means.
+      }
+    },
+    INTRO_SEEN_KEY,
+    FOUNDER_FIRST_RUN_COMPLETE_KEY,
+  )
 }
