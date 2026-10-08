@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0046_daily_product_metrics"
-down_revision = "0045_chunk_embedding_model"
+down_revision = "0045"
 branch_labels = None
 depends_on = None
 
