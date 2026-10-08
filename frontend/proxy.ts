@@ -184,6 +184,6 @@ export const config = {
     // extension this pattern already skips, so without them every crawler hit
     // would run auth() to reach a file that is public by definition.
     // `opengraph-image.png` is already covered by the `.png` case.
-    "/((?!api/auth/callback|api/auth/session|api/auth/providers|api/auth/csrf|api/auth/error|api/auth/signout|_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|eot|css|js|mp4|webm|m4v|mov)$).*)",
+    "/((?!api/auth/callback|api/auth/session|api/auth/providers|api/auth/csrf|api/auth/error|api/auth/signout|_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff2?|ttf|otf|eot|css|js|mp3|wav|ogg|m4a|mp4|webm|m4v|mov)$).*)",
   ],
 }

@@ -26,6 +26,10 @@ export const INTRO_EMERGE_MS =
   INTRO_TIMING.wordmarkInMs +
   INTRO_TIMING.greetingInMs;
 
+/** Icon + wordmark fully revealed — intro chime runs until this point (6s). */
+export const INTRO_WORDMARK_COMPLETE_MS =
+  INTRO_TIMING.logoInMs + INTRO_TIMING.wordmarkInMs;
+
 export const INTRO_TOTAL_MS = INTRO_EMERGE_MS + INTRO_TIMING.holdMs;
 
 /**

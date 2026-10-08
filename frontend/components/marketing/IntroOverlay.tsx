@@ -8,12 +8,14 @@ import {
   dispatchIntroDismissed,
   isFounderFirstRunComplete,
 } from "@/lib/marketing/founderVideo";
+import { startIntroChime, stopIntroChime } from "@/lib/marketing/introChime";
 import {
   INTRO_DISMISS_SLACK_MS,
   INTRO_FADE_MS,
   INTRO_FALLBACK_TICK_MS,
   INTRO_SCROLL_LOCK_CLASS,
   INTRO_TOTAL_MS,
+  INTRO_WORDMARK_COMPLETE_MS,
   introMotionAt,
   shouldDismissOnScroll,
   shouldPlayIntro,
@@ -55,6 +57,7 @@ export function IntroOverlay() {
   const backstopRef = useRef<number | null>(null);
   const fadeRef = useRef<number | null>(null);
   const dismissedRef = useRef(false);
+  const chimeEnabledRef = useRef(false);
 
   const clearDrivers = useCallback(() => {
     if (frameRef.current !== null) {
@@ -75,6 +78,7 @@ export function IntroOverlay() {
     if (dismissedRef.current) return;
     dismissedRef.current = true;
     clearDrivers();
+    stopIntroChime();
     try {
       sessionStorage.setItem(INTRO_SEEN_KEY, "1");
     } catch {
@@ -114,6 +118,7 @@ export function IntroOverlay() {
     }
 
     let started = false;
+    chimeEnabledRef.current = !motionQuery.matches;
 
     /** Recompute from wall clock. Returns true once the timeline is over. */
     const sample = (): boolean => {
@@ -139,6 +144,9 @@ export function IntroOverlay() {
       startRef.current = performance.now();
       setActive(true);
       setMotion(introMotionAt(0));
+      if (chimeEnabledRef.current) {
+        startIntroChime(INTRO_WORDMARK_COMPLETE_MS);
+      }
       frameRef.current = requestAnimationFrame(tick);
       intervalRef.current = window.setInterval(sample, INTRO_FALLBACK_TICK_MS);
       backstopRef.current = window.setTimeout(
@@ -171,6 +179,7 @@ export function IntroOverlay() {
     return () => {
       if (fadeRef.current !== null) window.clearTimeout(fadeRef.current);
       clearDrivers();
+      stopIntroChime();
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
       window.removeEventListener("keydown", onKeyDown);
