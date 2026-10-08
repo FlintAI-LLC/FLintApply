@@ -284,6 +284,56 @@ async function login(page: Page) {
   await page.waitForURL(/\/dashboard/, { timeout: 15_000 })
 }
 
+test("keyword search POST includes role query", async ({ page }) => {
+  let searchBody: Record<string, unknown> | null = null
+
+  await mockAuth(page)
+  await mockSubscription(page)
+  await mockJobPreferences(page)
+  await page.route(`${API}/api/jobs/saved`, (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([]),
+    }),
+  )
+  await page.route(`${API}/api/profile/resume`, (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ chunk_count: 1, chunks: [] }),
+    }),
+  )
+  await page.route(`${API}/api/jobs/search`, async (route: Route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue()
+      return
+    }
+    searchBody = route.request().postDataJSON() as Record<string, unknown>
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        jobs: [MOCK_JOB],
+        total: 1,
+        page: 1,
+        page_size: 20,
+        results_may_be_stale: false,
+        message: null,
+      }),
+    })
+  })
+
+  await login(page)
+  await page.goto(`${BASE}/jobs`)
+  await page.getByTestId("jobs-search-role").fill("Python engineer")
+  await page.getByTestId("jobs-search-submit").click()
+
+  await expect(page.getByText("Senior Python Engineer")).toBeVisible({ timeout: 10_000 })
+  expect(searchBody).not.toBeNull()
+  expect(searchBody?.query).toBe("Python engineer")
+})
+
 test("search results tailor resume navigates with jd prefilled", async ({ page }) => {
   await mockAuth(page)
   await mockSubscription(page)

@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { PRODUCT_NAME, WORDMARK_LIGHT_SRC } from "@/lib/brand";
+import { PRODUCT_NAME, WORDMARK_DARK_SRC, WORDMARK_LIGHT_SRC } from "@/lib/brand";
 
 const MARK_SRC = "/brand/mark.png";
 const MARK_SIZE = 512;
@@ -23,15 +23,26 @@ export function BrandLogo({
 }: BrandLogoProps) {
   if (showWordmark) {
     return (
-      <Image
-        src={WORDMARK_LIGHT_SRC}
-        alt={PRODUCT_NAME}
-        width={WORDMARK_W}
-        height={WORDMARK_H}
-        className={className}
-        priority={priority}
-        unoptimized
-      />
+      <>
+        <Image
+          src={WORDMARK_LIGHT_SRC}
+          alt={PRODUCT_NAME}
+          width={WORDMARK_W}
+          height={WORDMARK_H}
+          className={`${className} dark:hidden`}
+          priority={priority}
+          unoptimized
+        />
+        <Image
+          src={WORDMARK_DARK_SRC}
+          alt={PRODUCT_NAME}
+          width={WORDMARK_W}
+          height={WORDMARK_H}
+          className={`${className} hidden dark:block`}
+          priority={priority}
+          unoptimized
+        />
+      </>
     );
   }
 

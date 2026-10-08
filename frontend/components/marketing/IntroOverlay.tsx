@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { BrandLogo } from "@/components/brand/BrandLogo";
-import { INTRO_GREETING, INTRO_SEEN_KEY, WORDMARK_LIGHT_SRC } from "@/lib/brand";
+import {
+  INTRO_GREETING,
+  INTRO_SEEN_KEY,
+  WORDMARK_DARK_SRC,
+  WORDMARK_LIGHT_SRC,
+} from "@/lib/brand";
 import {
   dispatchIntroDismissed,
   isFounderFirstRunComplete,
@@ -278,7 +283,16 @@ export function IntroOverlay() {
               alt=""
               width={WORDMARK_W}
               height={WORDMARK_H}
-              className="h-16 w-auto sm:h-20"
+              className="h-16 w-auto sm:h-20 dark:hidden"
+              priority
+              unoptimized
+            />
+            <Image
+              src={WORDMARK_DARK_SRC}
+              alt=""
+              width={WORDMARK_W}
+              height={WORDMARK_H}
+              className="hidden h-16 w-auto sm:h-20 dark:block"
               priority
               unoptimized
             />

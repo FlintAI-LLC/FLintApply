@@ -189,6 +189,7 @@ export default function CareerWatchPage() {
         <button
           type="submit"
           disabled={submitting || !url.trim()}
+          data-testid="career-watch-add-submit"
           className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
         >
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -199,11 +200,17 @@ export default function CareerWatchPage() {
       <section className="space-y-3">
         <h2 className="font-medium">Watched companies</h2>
         {watches.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No companies watched yet.</p>
+          <p className="text-sm text-muted-foreground" data-testid="career-watch-empty">
+            No companies watched yet.
+          </p>
         ) : (
-          <ul className="divide-y rounded-lg border">
+          <ul className="divide-y rounded-lg border" data-testid="career-watch-list">
             {watches.map((watch) => (
-              <li key={watch.id} className="flex items-start justify-between gap-4 p-4">
+              <li
+                key={watch.id}
+                data-testid={`career-watch-entry-${watch.id}`}
+                className="flex items-start justify-between gap-4 p-4"
+              >
                 <div>
                   <p className="font-medium">{watch.company_name}</p>
                   <p className="text-xs text-muted-foreground">{watch.ats_type}</p>
