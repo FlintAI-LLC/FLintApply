@@ -2556,6 +2556,80 @@ _REPORT_ROLES = (
 )
 
 
+def _report_date_params(from_date: str, to_date: str) -> tuple[str, str]:
+    return from_date.strip(), to_date.strip()
+
+
+@router.get("/reports/activity")
+@limiter.limit("120/minute")
+async def admin_reports_activity(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_admin_role(*_REPORT_ROLES))],
+    from_date: str,
+    to_date: str,
+) -> dict[str, Any]:
+    from app.services.admin.reporting import build_activity_metrics
+
+    try:
+        metrics = await build_activity_metrics(db, *_report_date_params(from_date, to_date))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"metrics": metrics}
+
+
+@router.get("/reports/funnel")
+@limiter.limit("120/minute")
+async def admin_reports_funnel(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_admin_role(*_REPORT_ROLES))],
+    from_date: str,
+    to_date: str,
+) -> dict[str, Any]:
+    from app.services.admin.reporting import build_funnel_metrics
+
+    try:
+        return await build_funnel_metrics(db, *_report_date_params(from_date, to_date))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/reports/channels")
+@limiter.limit("120/minute")
+async def admin_reports_channels(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_admin_role(*_REPORT_ROLES))],
+    from_date: str,
+    to_date: str,
+) -> dict[str, Any]:
+    from app.services.admin.reporting import build_channel_metrics
+
+    try:
+        channels = await build_channel_metrics(db, *_report_date_params(from_date, to_date))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"channels": channels}
+
+
+@router.get("/reports/monitoring-summary")
+@limiter.limit("120/minute")
+async def admin_reports_monitoring_summary(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    admin: Annotated[AdminUser, Depends(require_admin_role(*_REPORT_ROLES))],
+    from_date: str,
+    to_date: str,
+) -> dict[str, Any]:
+    from app.services.admin.reporting import build_monitoring_summary
+
+    try:
+        return await build_monitoring_summary(db, *_report_date_params(from_date, to_date))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/reports/overview")
 @limiter.limit("120/minute")
 async def admin_reports_overview(

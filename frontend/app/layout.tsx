@@ -15,6 +15,7 @@ import { NonceProvider } from "@/components/NonceProvider";
 import { SessionProvider } from "@/components/nav/SessionProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { ThemeScript } from "@/components/theme/ThemeScript";
+import { ProductAnalyticsBeacon } from "@/components/analytics/ProductAnalyticsBeacon";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -49,6 +50,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <NonceProvider nonce={nonce}>
           <ThemeProvider>
             <SessionProvider session={session}>
+              <ProductAnalyticsBeacon />
               <AppChrome>{children}</AppChrome>
             </SessionProvider>
           </ThemeProvider>

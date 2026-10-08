@@ -42,7 +42,9 @@ import type {
   RefundListResponse,
   AuditLogEntry,
   ActivityMetrics,
+  ChannelMetrics,
   FunnelMetrics,
+  MonitoringSummary,
   RevenueByPlan,
   LLMCostMargin,
   ChurnMetrics,
@@ -908,21 +910,46 @@ export async function denyRefund(
 }
 
 // ── Reports ───────────────────────────────────────────────────────────────────
-// The backend has overview/registrations/revenue/churn/system-health.
-// activity & funnel don't exist yet — return empty so charts render blank.
+
+function reportQuery(params: { from: string; to: string }): string {
+  return `from_date=${encodeURIComponent(params.from)}&to_date=${encodeURIComponent(params.to)}`
+}
 
 export async function getActivityMetrics(
-  _token: string,
-  _params: { from: string; to: string },
+  token: string,
+  params: { from: string; to: string },
 ): Promise<{ metrics: ActivityMetrics[] }> {
-  return { metrics: [] }
+  return req<{ metrics: ActivityMetrics[] }>(
+    `/api/admin/reports/activity?${reportQuery(params)}`,
+    token,
+  )
 }
 
 export async function getFunnelMetrics(
-  _token: string,
-  _params: { from: string; to: string },
+  token: string,
+  params: { from: string; to: string },
 ): Promise<FunnelMetrics> {
-  return { registered: 0, email_verified: 0, first_build: 0, first_export: 0, subscribed: 0 }
+  return req<FunnelMetrics>(`/api/admin/reports/funnel?${reportQuery(params)}`, token)
+}
+
+export async function getChannelMetrics(
+  token: string,
+  params: { from: string; to: string },
+): Promise<{ channels: ChannelMetrics[] }> {
+  return req<{ channels: ChannelMetrics[] }>(
+    `/api/admin/reports/channels?${reportQuery(params)}`,
+    token,
+  )
+}
+
+export async function getMonitoringSummary(
+  token: string,
+  params: { from: string; to: string },
+): Promise<MonitoringSummary> {
+  return req<MonitoringSummary>(
+    `/api/admin/reports/monitoring-summary?${reportQuery(params)}`,
+    token,
+  )
 }
 
 export async function getRevenueByPlan(

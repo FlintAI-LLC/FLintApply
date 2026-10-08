@@ -41,6 +41,7 @@ from app.routers import (
     profile,
     promo,
     public_config,
+    public_metrics,
     resume,
     sessions,
     tracker,
@@ -269,6 +270,7 @@ app.include_router(llm.router)
 # Step 35 - admin domain
 app.include_router(admin.router)
 app.include_router(public_config.router)
+app.include_router(public_metrics.router)
 app.include_router(legal.router)
 
 

@@ -22,25 +22,31 @@ import { clsx } from "clsx"
 import { useAdminSession } from "@/app/admin/layout"
 import {
   getActivityMetrics,
+  getChannelMetrics,
   getFunnelMetrics,
+  getMonitoringSummary,
   getRevenueByPlan,
   getLLMCostMargin,
   getChurnMetrics,
   exportReportCSV,
 } from "@/lib/admin/api"
+import { buildFunnelData, hasActivityData, signupConversionPct } from "@/lib/admin/reporting"
 import type {
   ActivityMetrics,
+  ChannelMetrics,
   FunnelMetrics,
+  MonitoringSummary,
   RevenueByPlan,
   LLMCostMargin,
   ChurnMetrics,
 } from "@/lib/admin/types"
 
-type ReportTab = "activity" | "funnel" | "revenue" | "llm_cost" | "churn"
+type ReportTab = "activity" | "channels" | "funnel" | "revenue" | "llm_cost" | "churn"
 
 const TABS: Array<{ id: ReportTab; label: string }> = [
-  { id: "activity", label: "DAU/WAU/MAU" },
-  { id: "funnel", label: "Registration Funnel" },
+  { id: "activity", label: "Usage & traffic" },
+  { id: "channels", label: "Web vs extension" },
+  { id: "funnel", label: "Signup funnel" },
   { id: "revenue", label: "Revenue by Plan" },
   { id: "llm_cost", label: "LLM Cost vs Margin" },
   { id: "churn", label: "Churn" },
@@ -101,6 +107,8 @@ export default function AdminReportsPage() {
         </div>
       </div>
 
+      <MonitoringSummaryPanel token={token} dateParams={dateParams} />
+
       {/* Tabs */}
       <div className="flex flex-wrap gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1">
         {TABS.map((t) => (
@@ -122,6 +130,7 @@ export default function AdminReportsPage() {
       {/* Chart area */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 min-h-96">
         {tab === "activity" && <ActivityChart token={token} dateParams={dateParams} />}
+        {tab === "channels" && <ChannelsChart token={token} dateParams={dateParams} />}
         {tab === "funnel" && <FunnelChartView token={token} dateParams={dateParams} />}
         {tab === "revenue" && <RevenueChart token={token} dateParams={dateParams} />}
         {tab === "llm_cost" && <LLMCostChart token={token} dateParams={dateParams} />}
@@ -171,6 +180,95 @@ function ExportButton({
   )
 }
 
+// ── Summary KPIs ──────────────────────────────────────────────────────────────
+
+function MonitoringSummaryPanel({
+  token,
+  dateParams,
+}: {
+  token: string
+  dateParams: { from: string; to: string }
+}) {
+  const [summary, setSummary] = useState<MonitoringSummary | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    getMonitoringSummary(token, dateParams)
+      .then(setSummary)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [token, dateParams.from, dateParams.to]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="h-20 bg-slate-900 border border-slate-800 rounded-xl animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+  if (error || !summary) {
+    return (
+      <div className="text-sm text-red-400 bg-slate-900 border border-slate-800 rounded-xl p-4">
+        {error ?? "Could not load summary."}
+      </div>
+    )
+  }
+
+  const conversion = signupConversionPct(summary)
+  const cards: Array<{ label: string; value: string; hint?: string }> = [
+    { label: "Total users", value: summary.users_total.toLocaleString() },
+    { label: "New signups", value: summary.signups_in_range.toLocaleString(), hint: "in range" },
+    {
+      label: "Landing views",
+      value: summary.landing_views.toLocaleString(),
+      hint: "anonymous beacon",
+    },
+    {
+      label: "Signup rate",
+      value: conversion === null ? "—" : `${conversion.toFixed(1)}%`,
+      hint: "signups ÷ landing",
+    },
+    {
+      label: "Logged-in users",
+      value: summary.unique_users_logged_in.toLocaleString(),
+      hint: `${summary.unique_users_web_login} web · ${summary.unique_users_extension_login} ext`,
+    },
+    {
+      label: "Product opens",
+      value: (
+        summary.web_app_beacon_views + summary.extension_beacon_opens
+      ).toLocaleString(),
+      hint: `${summary.web_app_beacon_views} web · ${summary.extension_beacon_opens} extension`,
+    },
+    { label: "Active subs", value: summary.active_subscriptions.toLocaleString() },
+    {
+      label: "Tracker",
+      value: summary.applications_total.toLocaleString(),
+      hint: `${summary.job_searches_total.toLocaleString()} job searches (all time)`,
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {cards.map((card) => (
+        <div
+          key={card.label}
+          className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3"
+        >
+          <p className="text-xs text-slate-500 uppercase tracking-wide">{card.label}</p>
+          <p className="text-2xl font-semibold text-white mt-1">{card.value}</p>
+          {card.hint ? <p className="text-xs text-slate-500 mt-1">{card.hint}</p> : null}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Activity Chart ────────────────────────────────────────────────────────────
 
 function ActivityChart({
@@ -195,11 +293,13 @@ function ActivityChart({
 
   if (loading) return <ChartSpinner />
   if (error) return <ChartError msg={error} />
-  if (data.length === 0) return <ChartEmpty label="No activity data in range." />
+  if (!hasActivityData(data)) return <ChartEmpty label="No activity data in range." />
 
   return (
     <>
-      <h2 className="text-sm font-medium text-slate-200 mb-5">Daily / Weekly / Monthly Active Users</h2>
+      <h2 className="text-sm font-medium text-slate-200 mb-5">
+        Active users (login-based) &amp; landing traffic
+      </h2>
       <ResponsiveContainer width="100%" height={350}>
         <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -207,12 +307,73 @@ function ActivityChart({
           <YAxis tick={{ fill: "#64748b", fontSize: 11 }} />
           <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: 8 }} labelStyle={{ color: "#f1f5f9" }} itemStyle={{ color: "#94a3b8" }} />
           <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
-          <Line type="monotone" dataKey="dau" name="DAU" stroke={COLORS.amber} dot={false} strokeWidth={2} />
-          <Line type="monotone" dataKey="wau" name="WAU" stroke={COLORS.blue} dot={false} strokeWidth={2} />
-          <Line type="monotone" dataKey="mau" name="MAU" stroke={COLORS.emerald} dot={false} strokeWidth={2} />
-          <Line type="monotone" dataKey="new_registrations" name="Registrations" stroke={COLORS.violet} dot={false} strokeWidth={1.5} strokeDasharray="4 2" />
+          <Line type="monotone" dataKey="dau" name="DAU (all)" stroke={COLORS.amber} dot={false} strokeWidth={2} />
+          <Line type="monotone" dataKey="dau_web" name="DAU web" stroke={COLORS.blue} dot={false} strokeWidth={1.5} />
+          <Line type="monotone" dataKey="dau_extension" name="DAU extension" stroke={COLORS.violet} dot={false} strokeWidth={1.5} />
+          <Line type="monotone" dataKey="wau" name="WAU" stroke={COLORS.slate} dot={false} strokeWidth={1.5} strokeDasharray="6 3" />
+          <Line type="monotone" dataKey="mau" name="MAU" stroke={COLORS.emerald} dot={false} strokeWidth={1.5} strokeDasharray="6 3" />
+          <Line type="monotone" dataKey="new_registrations" name="Registrations" stroke={COLORS.red} dot={false} strokeWidth={1.5} strokeDasharray="4 2" />
+          <Line type="monotone" dataKey="landing_views" name="Landing views" stroke="#38bdf8" dot={false} strokeWidth={1.5} />
         </LineChart>
       </ResponsiveContainer>
+    </>
+  )
+}
+
+// ── Web vs extension ──────────────────────────────────────────────────────────
+
+function ChannelsChart({
+  token,
+  dateParams,
+}: {
+  token: string
+  dateParams: { from: string; to: string }
+}) {
+  const [data, setData] = useState<ChannelMetrics[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    getChannelMetrics(token, dateParams)
+      .then((r) => setData(r.channels))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [token, dateParams.from, dateParams.to]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) return <ChartSpinner />
+  if (error) return <ChartError msg={error} />
+  const hasData = data.some(
+    (d) =>
+      d.logins_web > 0 ||
+      d.logins_extension > 0 ||
+      d.beacon_web_app > 0 ||
+      d.beacon_extension > 0,
+  )
+  if (!hasData) return <ChartEmpty label="No web/extension activity in range." />
+
+  return (
+    <>
+      <h2 className="text-sm font-medium text-slate-200 mb-5">
+        Web app vs Chrome extension (logins &amp; daily opens)
+      </h2>
+      <ResponsiveContainer width="100%" height={350}>
+        <BarChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 11 }} tickFormatter={(d) => d.slice(5)} />
+          <YAxis tick={{ fill: "#64748b", fontSize: 11 }} />
+          <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: 8 }} labelStyle={{ color: "#f1f5f9" }} itemStyle={{ color: "#94a3b8" }} />
+          <Legend wrapperStyle={{ fontSize: 12, color: "#94a3b8" }} />
+          <Bar dataKey="logins_web" name="Web logins" fill={COLORS.blue} stackId="logins" />
+          <Bar dataKey="logins_extension" name="Extension logins" fill={COLORS.violet} stackId="logins" />
+          <Bar dataKey="beacon_web_app" name="Web opens (beacon)" fill={COLORS.emerald} stackId="opens" />
+          <Bar dataKey="beacon_extension" name="Extension opens" fill={COLORS.amber} stackId="opens" />
+        </BarChart>
+      </ResponsiveContainer>
+      <p className="text-xs text-slate-500 mt-4">
+        Logins come from auth audit logs. Opens are once-per-day anonymous beacons (no PII).
+      </p>
     </>
   )
 }
@@ -243,13 +404,10 @@ function FunnelChartView({
   if (error) return <ChartError msg={error} />
   if (!data) return null
 
-  const funnelData = [
-    { name: "Registered", value: data.registered, fill: COLORS.amber },
-    { name: "Email verified", value: data.email_verified, fill: COLORS.blue },
-    { name: "First build", value: data.first_build, fill: COLORS.emerald },
-    { name: "First export", value: data.first_export, fill: COLORS.violet },
-    { name: "Subscribed", value: data.subscribed, fill: COLORS.red },
-  ]
+  const funnelData = buildFunnelData(data).map((row, index) => ({
+    ...row,
+    fill: [COLORS.amber, COLORS.blue, COLORS.emerald, COLORS.violet, COLORS.red][index],
+  }))
   if (funnelData.every((d) => d.value <= 0)) {
     return <ChartEmpty label="No funnel data in range." />
   }
