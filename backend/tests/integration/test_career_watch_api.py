@@ -69,3 +69,16 @@ async def test_career_watch_create_and_list(app_client: AsyncClient) -> None:
     limits = limits_resp.json()
     assert limits["active_watches"] == 1
     assert limits["max_companies"] >= 1
+
+    delete_resp = await app_client.delete(
+        f"/api/career-watch/watches/{body['id']}",
+        headers=headers,
+    )
+    assert delete_resp.status_code == 204, delete_resp.text
+
+    list_after = await app_client.get("/api/career-watch/watches", headers=headers)
+    assert list_after.status_code == 200
+    assert list_after.json() == []
+
+    limits_after = await app_client.get("/api/career-watch/limits", headers=headers)
+    assert limits_after.json()["active_watches"] == 0

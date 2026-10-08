@@ -30,8 +30,9 @@ export const PRIVACY_EMAIL = "privacy@flintapply.com" as const;
 /** Customized / enterprise plan inquiries from the public pricing grid. */
 export const SALES_INQUIRY_EMAIL = "privacy@flintapply.com" as const;
 
-/** FlintApply text wordmark PNGs — replace in place when art updates. */
+/** FlintApply text wordmark PNGs — run `scripts/generate-flintapply-brand-assets.py` after art changes. */
 export const WORDMARK_LIGHT_SRC = "/brand/flintapply-wordmark-light.png" as const;
+/** Navy “Apply” letters lightened to brand blue for dark backgrounds (generated). */
 export const WORDMARK_DARK_SRC = "/brand/flintapply-wordmark-dark.png" as const;
 
 /** FlintApply square app icon (`mark.png` is the canonical path used by `BrandLogo`). */

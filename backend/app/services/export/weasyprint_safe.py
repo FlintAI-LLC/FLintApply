@@ -80,6 +80,10 @@ def blocked_url_fetcher(
     raise BlockedResourceError(url, scheme)
 
 
+# WeasyPrint 70+ reads this on callable fetchers when a fetch raises (see urls.fetch).
+blocked_url_fetcher._fail_on_errors = False  # type: ignore[attr-defined]
+
+
 def safe_html(html: str, *, base_url: str | None = None):
     """Build a WeasyPrint ``HTML`` document with external fetching disabled."""
     from weasyprint import HTML

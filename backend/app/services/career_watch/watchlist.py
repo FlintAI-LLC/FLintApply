@@ -58,6 +58,7 @@ async def list_watchlist(
     stmt = (
         select(UserWatchedCompany)
         .where(UserWatchedCompany.user_id == user_id)
+        .where(UserWatchedCompany.is_active.is_(True))
         .options(selectinload(UserWatchedCompany.watched_company))
         .order_by(UserWatchedCompany.created_at.desc())
     )
