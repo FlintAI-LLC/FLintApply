@@ -17,7 +17,8 @@ export const FOUNDER_VIDEO_SRC = "/marketing/founder-intro.mp4" as const;
 export const FOUNDER_VIDEO_POSTER_SRC =
   "/marketing/founder-intro-poster.jpg" as const;
 
-export const FOUNDER_VIDEO_DURATION_LABEL = "~2½ min" as const;
+/** Shown in UI; keep in sync with `founder-intro.mp4` runtime (~4:15). */
+export const FOUNDER_VIDEO_DURATION_LABEL = "~4:15" as const;
 
 export const INTRO_DISMISSED_EVENT = "flintapply:intro-dismissed" as const;
 

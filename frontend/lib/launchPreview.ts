@@ -15,6 +15,8 @@ export function previewCookieValue(secret: string): string {
 export function isLaunchPublicPath(pathname: string): boolean {
   if (pathname === "/") return true;
   if (pathname === "/launch-preview") return true;
+  if (pathname.startsWith("/marketing/")) return true;
+  if (pathname.startsWith("/brand/")) return true;
   if (pathname.startsWith("/legal")) return true;
   if (pathname.startsWith("/admin")) return true;
   if (pathname.startsWith("/api/launch-preview")) return true;
