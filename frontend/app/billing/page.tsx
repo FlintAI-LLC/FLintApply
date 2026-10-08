@@ -455,6 +455,13 @@ export default function BillingPage() {
 
   async function handleCancel() {
     if (!token || busyAction) return
+    if (
+      !window.confirm(
+        "Cancel at the end of your current billing period? You keep access until then.",
+      )
+    ) {
+      return
+    }
     setBusyAction("cancel")
     setError(null)
     try {
@@ -483,6 +490,13 @@ export default function BillingPage() {
 
   async function handlePause() {
     if (!token || busyAction) return
+    if (
+      !window.confirm(
+        "Pause billing for 30 days? Your plan stays active until Stripe processes the pause (usually within a minute).",
+      )
+    ) {
+      return
+    }
     setBusyAction("pause")
     setError(null)
     try {
