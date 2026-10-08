@@ -19,7 +19,7 @@ const FOUNDER_FIRST_RUN_COMPLETE_KEY = "flintapply:first-run-complete"
  */
 export async function suppressIntro(page: Page): Promise<void> {
   await page.addInitScript(
-    (introKey, firstRunKey) => {
+    ({ introKey, firstRunKey }: { introKey: string; firstRunKey: string }) => {
       try {
         sessionStorage.setItem(introKey, "1")
         localStorage.setItem(firstRunKey, "1")
@@ -27,7 +27,9 @@ export async function suppressIntro(page: Page): Promise<void> {
         // Storage can be unavailable; the intro stays dismissable by other means.
       }
     },
-    INTRO_SEEN_KEY,
-    FOUNDER_FIRST_RUN_COMPLETE_KEY,
+    {
+      introKey: INTRO_SEEN_KEY,
+      firstRunKey: FOUNDER_FIRST_RUN_COMPLETE_KEY,
+    },
   )
 }
