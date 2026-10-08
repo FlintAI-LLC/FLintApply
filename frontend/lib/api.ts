@@ -685,39 +685,61 @@ export async function createCheckoutSessionByCode(
   })
 }
 
-export async function createPortalSession(token: string): Promise<{ portal_url: string }> {
-  return request("/api/subscriptions/portal", {
+export async function createPortalSession(
+  token: string,
+  returnUrl?: string,
+): Promise<{ portal_url: string }> {
+  const return_url =
+    returnUrl ??
+    (typeof window !== "undefined"
+      ? `${window.location.origin}/billing`
+      : "https://flintapply.com/billing");
+  const data = await request<{ url: string }>("/api/subscriptions/portal", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
-  })
+    body: JSON.stringify({ return_url }),
+  });
+  return { portal_url: data.url };
+}
+
+/** Default pause window on billing page (backend allows 7–90 days). */
+export const DEFAULT_SUBSCRIPTION_PAUSE_DAYS = 30;
+
+function subscriptionPost<T>(
+  token: string,
+  path: string,
+  body: Record<string, unknown> = {},
+): Promise<T> {
+  return request(path, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
 }
 
 export async function cancelSubscription(token: string): Promise<{ ok: boolean }> {
-  return request("/api/subscriptions/cancel", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  return subscriptionPost(token, "/api/subscriptions/cancel");
 }
 
 export async function resumeSubscription(token: string): Promise<{ ok: boolean }> {
-  return request("/api/subscriptions/resume", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  return subscriptionPost(token, "/api/subscriptions/resume");
 }
 
-export async function pauseSubscription(token: string): Promise<{ ok: boolean }> {
-  return request("/api/subscriptions/pause", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  })
+export async function pauseSubscription(
+  token: string,
+  options?: { days?: number; pauseUntil?: string },
+): Promise<{ ok: boolean }> {
+  const body: { days?: number; pause_until?: string } = {};
+  if (options?.pauseUntil) {
+    body.pause_until = options.pauseUntil;
+  } else {
+    body.days = options?.days ?? DEFAULT_SUBSCRIPTION_PAUSE_DAYS;
+  }
+  return subscriptionPost(token, "/api/subscriptions/pause", body);
 }
 
 export async function unpauseSubscription(token: string): Promise<{ ok: boolean }> {
-  return request("/api/subscriptions/unpause", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  return subscriptionPost(token, "/api/subscriptions/unpause");
 }
 
 export interface PromoRedeemResponse {
