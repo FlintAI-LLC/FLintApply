@@ -100,9 +100,10 @@ export function NavBar() {
   }
 
   useEffect(() => {
-    if (!openPillarId) return
+    if (openPillarId === null) return
+    const pillarId = openPillarId
     function onLayout() {
-      updatePillarMenuPosition(openPillarId)
+      updatePillarMenuPosition(pillarId)
     }
     window.addEventListener("resize", onLayout)
     window.addEventListener("scroll", onLayout, true)
