@@ -2,14 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth/guards";
 import {
   fetchNotificationPreferences,
   NOTIFICATION_CATEGORIES,
   patchNotificationPreferences,
-  sendSmsVerification,
-  verifySmsCode,
   type NotificationPreferences,
 } from "@/lib/notifications";
 import { registerWebPush } from "@/lib/notifications/web-push";
@@ -28,9 +26,6 @@ export default function NotificationSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
-  const [phone, setPhone] = useState("");
-  const [smsCode, setSmsCode] = useState("");
-  const [smsStep, setSmsStep] = useState<"idle" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
   const [pushMessage, setPushMessage] = useState<string | null>(null);
   const [notificationPermission, setNotificationPermission] =
@@ -48,7 +43,6 @@ export default function NotificationSettingsPage() {
     try {
       const p = await fetchNotificationPreferences(token);
       setPrefs(p);
-      if (p.sms_phone) setPhone(p.sms_phone);
     } finally {
       setLoading(false);
     }
@@ -119,30 +113,6 @@ export default function NotificationSettingsPage() {
     }
   }
 
-  async function sendSms() {
-    if (!token || !phone.trim()) return;
-    setError(null);
-    try {
-      await sendSmsVerification(token, phone.trim());
-      setSmsStep("sent");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "SMS send failed");
-    }
-  }
-
-  async function confirmSms() {
-    if (!token) return;
-    setError(null);
-    try {
-      await verifySmsCode(token, smsCode.trim());
-      await load();
-      setSmsStep("idle");
-      setSmsCode("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Invalid code");
-    }
-  }
-
   if (status === "loading" || !token || loading || !prefs) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -151,8 +121,6 @@ export default function NotificationSettingsPage() {
     );
   }
 
-  const smsVerified = Boolean(prefs.sms_phone_verified_at);
-
   return (
     <main className="max-w-2xl mx-auto px-4 py-8">
       <Link href="/notifications" className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-300">
@@ -160,7 +128,8 @@ export default function NotificationSettingsPage() {
       </Link>
       <h1 className="text-2xl font-semibold text-slate-900 dark:text-white mt-4 mb-2">Notification preferences</h1>
       <p className="text-sm text-slate-600 dark:text-slate-400 mb-8">
-        Choose how we reach you for each category. SMS is limited to interview reminders.
+        Choose how we reach you for each category. Interview reminders are sent by email and
+        in-app when you add a scheduled interview on an application in the tracker.
       </p>
 
       {error && (
@@ -250,53 +219,13 @@ export default function NotificationSettingsPage() {
         </button>
       </section>
 
-      <section className="mb-10 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
-        <h2 className="font-medium text-slate-800 dark:text-slate-200 mb-2">SMS (interview reminders)</h2>
-        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-          Verify your phone to receive interview reminder texts.
+      <section className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 mb-10">
+        <h2 className="font-medium text-slate-800 dark:text-slate-200 mb-2">Interview reminders</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          When you schedule an interview round on an application, we send reminders about 24 hours
+          and 1 hour before — to your account email and in-app inbox. Turn them off by unchecking{" "}
+          <strong>Interview reminders</strong> under Email or In-app above.
         </p>
-        {smsVerified ? (
-          <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
-            <Check className="w-4 h-4" />
-            Verified {prefs.sms_phone}
-          </p>
-        ) : (
-          <div className="space-y-3">
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+15551234567"
-              className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-sm"
-            />
-            {smsStep === "idle" ? (
-              <button
-                type="button"
-                onClick={sendSms}
-                className="text-sm text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
-              >
-                Send verification code
-              </button>
-            ) : (
-              <>
-                <input
-                  type="text"
-                  value={smsCode}
-                  onChange={(e) => setSmsCode(e.target.value)}
-                  placeholder="6-digit code"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={confirmSms}
-                  className="px-4 py-2 rounded-lg bg-amber-400 text-slate-900 text-sm font-medium hover:bg-amber-300"
-                >
-                  Verify code
-                </button>
-              </>
-            )}
-          </div>
-        )}
       </section>
 
       <section className="border border-slate-200 dark:border-slate-800 rounded-xl p-4">
