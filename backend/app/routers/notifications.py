@@ -30,6 +30,7 @@ from app.services.notifications.sms_verify import (
     store_pending_code,
     verify_code,
 )
+from app.services.notifications.vapid_public import application_server_key
 
 router = APIRouter(tags=["notifications"])
 
@@ -307,6 +308,22 @@ async def patch_preferences(
 # ---------------------------------------------------------------------------
 # Web push
 # ---------------------------------------------------------------------------
+
+
+class WebPushPublicKeyResponse(BaseModel):
+    public_key: str
+
+
+@router.get("/api/notifications/web-push/public-key", response_model=WebPushPublicKeyResponse)
+async def web_push_public_key() -> WebPushPublicKeyResponse:
+    """Browser-visible VAPID key (not secret); used when the client bundle has no build-time key."""
+    key = application_server_key()
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Web push is not configured",
+        )
+    return WebPushPublicKeyResponse(public_key=key)
 
 
 @router.post("/api/notifications/web-push/subscribe", status_code=200)

@@ -8,6 +8,7 @@ import {
   ChevronDown,
   CreditCard,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   Settings,
   UserCircle,
@@ -122,9 +123,10 @@ export function NavBar() {
 
   return (
     <nav className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm sticky top-0 z-50">
-      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
         <Link href={renderUserMenu ? "/dashboard" : "/"} className="flex items-center hover:opacity-90 transition-opacity shrink-0 py-1">
-          <BrandLogo className="h-10 w-auto max-w-[200px] sm:max-w-[240px]" />
+          <BrandLogo className="h-10 w-auto max-w-[140px] sm:max-w-[200px] md:max-w-[240px]" />
         </Link>
 
         {!renderUserMenu && (
@@ -143,7 +145,7 @@ export function NavBar() {
         )}
 
         {renderUserMenu && (
-          <div className="hidden md:flex items-center gap-0.5 text-sm text-slate-600 dark:text-slate-400 min-w-0">
+          <div className="hidden md:flex items-center gap-0.5 text-sm text-slate-600 dark:text-slate-400 flex-1 min-w-0 overflow-x-auto overflow-y-visible scrollbar-none px-1">
             {NAV_PILLARS.map((pillar) => {
               const active = pillarIsActive(pillar)
               const open = openPillarId === pillar.id
@@ -190,7 +192,7 @@ export function NavBar() {
                     />
                   </button>
                   {open && (
-                    <div className="absolute left-0 mt-2 min-w-[11rem] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden z-50">
+                    <div className="absolute left-0 mt-2 min-w-[11rem] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden z-[80]">
                       {pillar.links.map((link) =>
                         pillar.comingSoon || link.href === "#" ? (
                           <span
@@ -234,9 +236,14 @@ export function NavBar() {
             </Link>
           </div>
         )}
+        </div>
 
-        <div className="flex items-center gap-2 shrink-0 ml-auto md:ml-0">
-          {renderUserMenu && <TutorialMenu />}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {renderUserMenu && (
+            <div className="hidden xl:block">
+              <TutorialMenu />
+            </div>
+          )}
           <ThemeToggle />
           {renderUserMenu && (
             <>
@@ -489,6 +496,13 @@ function UserMenu({
               onNavigate={() => setDropdownOpen(false)}
             >
               Billing
+            </DropdownItem>
+            <DropdownItem
+              href="/settings#help-feedback"
+              icon={<LifeBuoy className="w-4 h-4" />}
+              onNavigate={() => setDropdownOpen(false)}
+            >
+              Help &amp; report a bug
             </DropdownItem>
           </div>
 

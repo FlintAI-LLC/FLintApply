@@ -1,5 +1,18 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const VAPID_PUBLIC = process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY ?? "";
+const VAPID_PUBLIC_BUILD = process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY ?? "";
+
+async function resolveVapidPublicKey(): Promise<string> {
+  if (VAPID_PUBLIC_BUILD) return VAPID_PUBLIC_BUILD;
+  const res = await fetch(`${BASE}/api/notifications/web-push/public-key`);
+  if (!res.ok) {
+    throw new Error("Web push is not configured (missing VAPID public key)");
+  }
+  const body = (await res.json()) as { public_key?: string };
+  if (!body.public_key) {
+    throw new Error("Web push is not configured (missing VAPID public key)");
+  }
+  return body.public_key;
+}
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -11,28 +24,48 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 export async function registerWebPush(accessToken: string): Promise<boolean> {
-  if (!VAPID_PUBLIC) {
-    throw new Error("Web push is not configured (missing VAPID public key)");
-  }
+  const vapidPublic = await resolveVapidPublicKey();
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     throw new Error("This browser does not support web push");
   }
 
-  const permission = await Notification.requestPermission();
+  let permission = Notification.permission;
+  if (permission === "default") {
+    permission = await Notification.requestPermission();
+  }
+  if (permission === "denied") {
+    throw new Error(
+      "Notifications are blocked for flintapply.com. Open the lock icon in the address bar → Site settings → Notifications → Allow, then try again."
+    );
+  }
   if (permission !== "granted") {
-    return false;
+    throw new Error("Notification permission was not granted. Choose Allow when the browser prompts you.");
   }
 
-  const registration = await navigator.serviceWorker.register("/sw.js", {
-    scope: "/",
-  });
-  await navigator.serviceWorker.ready;
+  let registration: ServiceWorkerRegistration;
+  try {
+    registration = await navigator.serviceWorker.register("/sw.js", {
+      scope: "/",
+    });
+    await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<never>((_, reject) => {
+        window.setTimeout(
+          () => reject(new Error("Service worker registration timed out. Hard-refresh and try again.")),
+          20_000
+        );
+      }),
+    ]);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Service worker failed";
+    throw new Error(msg);
+  }
 
   let subscription = await registration.pushManager.getSubscription();
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC) as unknown as BufferSource,
+      applicationServerKey: urlBase64ToUint8Array(vapidPublic) as unknown as BufferSource,
     });
   }
 

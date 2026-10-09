@@ -4,7 +4,11 @@
 
 export const PRODUCT_NAME = "FlintApply" as const;
 
-export const COMPANY_LINE = "by The Flint AI" as const;
+/** Mid-sentence attribution (e.g. “…desktop app by Flint AI”). */
+export const COMPANY_LINE = "by Flint AI" as const;
+
+/** Footer and other standalone bylines — title case. */
+export const FOOTER_COMPANY_BYLINE = "By Flint AI" as const;
 
 export const COMPANY_NAME = "The Flint AI" as const;
 
@@ -26,6 +30,9 @@ export const FLINT_MARK_SRC = "/brand/flintguide-mark.png" as const;
 export const FLINT_HANDOFF_ENABLED = false as const;
 
 export const PRIVACY_EMAIL = "privacy@flintapply.com" as const;
+
+/** Bugs, product feedback, and general support (same inbox as privacy/DPO for v1). */
+export const SUPPORT_EMAIL = "privacy@flintapply.com" as const;
 
 /** Customized / enterprise plan inquiries from the public pricing grid. */
 export const SALES_INQUIRY_EMAIL = "privacy@flintapply.com" as const;

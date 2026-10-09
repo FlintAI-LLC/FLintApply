@@ -21,9 +21,36 @@ import type {
 } from "@/lib/admin/types"
 
 export const ACTIVITY_FIXTURE: ActivityMetrics[] = [
-  { date: "2026-05-01", dau: 120, wau: 540, mau: 1200, new_registrations: 15 },
-  { date: "2026-05-02", dau: 135, wau: 570, mau: 1220, new_registrations: 18 },
-  { date: "2026-05-03", dau: 110, wau: 520, mau: 1210, new_registrations: 10 },
+  {
+    date: "2026-05-01",
+    dau: 120,
+    dau_web: 100,
+    dau_extension: 20,
+    wau: 540,
+    mau: 1200,
+    new_registrations: 15,
+    landing_views: 400,
+  },
+  {
+    date: "2026-05-02",
+    dau: 135,
+    dau_web: 110,
+    dau_extension: 25,
+    wau: 570,
+    mau: 1220,
+    new_registrations: 18,
+    landing_views: 420,
+  },
+  {
+    date: "2026-05-03",
+    dau: 110,
+    dau_web: 95,
+    dau_extension: 15,
+    wau: 520,
+    mau: 1210,
+    new_registrations: 10,
+    landing_views: 380,
+  },
 ]
 
 export const FUNNEL_FIXTURE: FunnelMetrics = {
@@ -62,23 +89,12 @@ export function filterLLMCostByTier(
   return tier === "all" ? data : data.filter((d) => d.tier === tier)
 }
 
-/** Build funnel data array for recharts FunnelChart. */
-export function buildFunnelData(metrics: FunnelMetrics) {
-  return [
-    { name: "Registered", value: metrics.registered },
-    { name: "Email verified", value: metrics.email_verified },
-    { name: "First build", value: metrics.first_build },
-    { name: "First export", value: metrics.first_export },
-    { name: "Subscribed", value: metrics.subscribed },
-  ]
-}
-
-/** Return default date range: last 30 days. */
-export function defaultDateRange(): { from: string; to: string } {
-  const today = new Date().toISOString().slice(0, 10)
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
-  return { from: thirtyDaysAgo, to: today }
-}
+import {
+  buildFunnelData,
+  defaultDateRange,
+  hasActivityData,
+  signupConversionPct,
+} from "@/lib/admin/reporting"
 
 /** Compute total revenue across all plans. */
 export function totalRevenue(data: RevenueByPlan[]): number {

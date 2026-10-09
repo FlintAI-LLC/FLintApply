@@ -20,7 +20,7 @@ const FOOTER_PAGES = [
   { href: "/legal/privacy", title: "Privacy Policy" },
   { href: "/legal/sub-processors", title: "Sub-processors" },
   { href: "/legal/ccpa", title: "Do Not Sell My Personal Information" },
-  { href: "/legal/contact", title: "Contact our DPO" },
+  { href: "/legal/contact", title: "Contact us" },
 ]
 
 test.describe("/legal pages — footer link check", () => {
@@ -45,6 +45,7 @@ test.describe("footer", () => {
     const footer = page.getByRole("contentinfo")
     await expect(footer).toBeVisible()
     await expect(footer).toContainText(`© ${new Date().getFullYear()} The Flint AI`)
+    await expect(footer).toContainText("By Flint AI")
     await expect(footer).toContainText("BSL 1.1")
     await expect(
       footer.getByRole("link", { name: PRIVACY_EMAIL }),
@@ -71,9 +72,9 @@ test.describe("/legal/contact form", () => {
     await page.goto(`${BASE}/legal/contact`)
 
     await page.getByLabel("Your name").fill("Jane Doe")
-    await page.getByLabel("Reply-to email").fill("jane@example.com")
+    await page.getByLabel("Your email").fill("jane@example.com")
     await page.getByLabel("Message").fill("too short")
-    await page.getByRole("button", { name: /send to dpo/i }).click()
+    await page.getByRole("button", { name: /send message/i }).click()
 
     // Browser-level constraint validation should prevent submission.
     const message = page.getByLabel("Message")

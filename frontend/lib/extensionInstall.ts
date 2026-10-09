@@ -8,6 +8,11 @@ const STORE_URL =
 
 const BETA_ZIP_PATH = "/downloads/flintapply-extension-beta.zip";
 
+/** True when the public site is the production deploy (Chrome Web Store is the install path). */
+export function isProductionAppEnv(): boolean {
+  return process.env.NEXT_PUBLIC_APP_ENV === "production";
+}
+
 function sanitizeChromeWebStoreUrl(raw: string | undefined): string {
   const candidate = raw?.trim() || STORE_URL;
   try {
@@ -41,8 +46,12 @@ export function chromeWebStoreUrl(): string | null {
   return sanitizeChromeWebStoreUrl(process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL);
 }
 
-/** Hosted .zip for private beta (unpacked load in Chrome). */
+/** Hosted .zip for private beta (unpacked load in Chrome). Hidden on production. */
 export function extensionBetaDownloadUrl(): string | null {
+  if (isProductionAppEnv()) return null;
+  if (process.env.NEXT_PUBLIC_EXTENSION_BETA_DOWNLOAD_ENABLED === "false") {
+    return null;
+  }
   const site = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "") || "";
   const configured = sanitizeBetaDownloadUrl(
     process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL,
@@ -57,7 +66,7 @@ export function extensionBetaDownloadUrl(): string | null {
 
 export function chromeWebStoreExtensionVersion(): string | null {
   const v = process.env.NEXT_PUBLIC_CHROME_WEB_STORE_EXTENSION_VERSION?.trim();
-  return v || "0.1.28";
+  return v || "0.1.35";
 }
 
 export function extensionBetaVersion(): string | null {

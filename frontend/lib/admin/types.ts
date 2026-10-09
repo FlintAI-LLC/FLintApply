@@ -388,9 +388,37 @@ export interface RefundListResponse {
 export interface ActivityMetrics {
   date: string
   dau: number
+  dau_web: number
+  dau_extension: number
   wau: number
   mau: number
   new_registrations: number
+  landing_views: number
+}
+
+export interface ChannelMetrics {
+  date: string
+  logins_web: number
+  logins_extension: number
+  beacon_web_app: number
+  beacon_extension: number
+}
+
+export interface MonitoringSummary {
+  from: string
+  to: string
+  users_total: number
+  signups_in_range: number
+  unique_users_logged_in: number
+  unique_users_web_login: number
+  unique_users_extension_login: number
+  active_subscriptions: number
+  landing_views: number
+  auth_page_views: number
+  web_app_beacon_views: number
+  extension_beacon_opens: number
+  applications_total: number
+  job_searches_total: number
 }
 
 export interface FunnelMetrics {

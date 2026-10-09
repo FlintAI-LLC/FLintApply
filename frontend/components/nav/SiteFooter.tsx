@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
-  COMPANY_LINE,
   COMPANY_NAME,
+  FOOTER_COMPANY_BYLINE,
   COMPANY_URL,
   PRIVACY_EMAIL,
   PRODUCT_NAME,
@@ -20,7 +20,12 @@ const LEGAL_LINKS: {
     label: "CCPA",
     title: "Do Not Sell My Personal Information",
   },
-  { href: "/legal/contact", label: "DPO Contact" },
+  { href: "/legal/contact", label: "Contact us" },
+  {
+    href: "/legal/contact?topic=bug_report",
+    label: "Report a bug",
+    title: "Tell us what went wrong — we read every report",
+  },
 ];
 
 const FOOTER_LINK =
@@ -65,7 +70,7 @@ export function SiteFooter() {
               rel="noreferrer noopener"
               className={FOOTER_LINK}
             >
-              {COMPANY_LINE}
+              {FOOTER_COMPANY_BYLINE}
             </a>
           </p>
           <p className={FOOTER_META}>

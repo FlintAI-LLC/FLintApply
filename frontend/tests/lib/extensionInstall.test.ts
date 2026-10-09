@@ -5,6 +5,7 @@ import {
   chromeWebStoreUrl,
   extensionBetaDownloadUrl,
   extensionInstallMode,
+  isProductionAppEnv,
 } from "@/lib/extensionInstall";
 
 const DEFAULT_STORE =
@@ -105,6 +106,23 @@ describe("extensionInstall", () => {
       else delete process.env.NEXT_PUBLIC_SITE_URL;
       if (prevZip !== undefined) process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL = prevZip;
       else delete process.env.NEXT_PUBLIC_EXTENSION_DOWNLOAD_URL;
+    }
+  });
+
+  it("hides beta download on production app env", () => {
+    const prevEnv = process.env.NEXT_PUBLIC_APP_ENV;
+    const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
+    process.env.NEXT_PUBLIC_APP_ENV = "production";
+    process.env.NEXT_PUBLIC_SITE_URL = "https://flintapply.com";
+    try {
+      assert.equal(isProductionAppEnv(), true);
+      assert.equal(extensionBetaDownloadUrl(), null);
+      assert.equal(extensionInstallMode(), "store");
+    } finally {
+      if (prevEnv !== undefined) process.env.NEXT_PUBLIC_APP_ENV = prevEnv;
+      else delete process.env.NEXT_PUBLIC_APP_ENV;
+      if (prevSite !== undefined) process.env.NEXT_PUBLIC_SITE_URL = prevSite;
+      else delete process.env.NEXT_PUBLIC_SITE_URL;
     }
   });
 
