@@ -45,6 +45,7 @@ export function NavBar() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const pillarRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const pillarButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const pillarDropdownRef = useRef<HTMLDivElement | null>(null)
   const [pillarMenuPos, setPillarMenuPos] = useState<{
     left: number
     top: number
@@ -142,10 +143,14 @@ export function NavBar() {
     if (!openPillarId) return
     const activePillarId = openPillarId
     function handleClick(e: MouseEvent) {
+      const target = e.target as Node
       const root = pillarRefs.current[activePillarId]
-      if (root && !root.contains(e.target as Node)) {
-        setOpenPillarId(null)
+      const menu = pillarDropdownRef.current
+      if (root?.contains(target) || menu?.contains(target)) {
+        return
       }
+      setOpenPillarId(null)
+      setPillarMenuPos(null)
     }
     document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
@@ -295,6 +300,7 @@ export function NavBar() {
 
       {openPillar && pillarMenuPos && (
         <PillarDropdownMenu
+          menuRef={pillarDropdownRef}
           pillar={openPillar}
           position={pillarMenuPos}
           isActive={isActive}
@@ -388,11 +394,13 @@ function PillarNavControl({
 }
 
 function PillarDropdownMenu({
+  menuRef,
   pillar,
   position,
   isActive,
   onNavigate,
 }: {
+  menuRef: React.RefObject<HTMLDivElement | null>
   pillar: NavPillar
   position: { left: number; top: number }
   isActive: (href: string) => boolean
@@ -400,9 +408,11 @@ function PillarDropdownMenu({
 }) {
   return (
     <div
+      ref={menuRef}
       className="fixed z-[85] min-w-[11rem] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden"
       style={{ left: position.left, top: position.top }}
       role="menu"
+      onMouseDown={(e) => e.stopPropagation()}
     >
       {pillar.links.map((link) =>
         pillar.comingSoon || link.href === "#" ? (
