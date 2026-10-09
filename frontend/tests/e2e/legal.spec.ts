@@ -45,6 +45,7 @@ test.describe("footer", () => {
     const footer = page.getByRole("contentinfo")
     await expect(footer).toBeVisible()
     await expect(footer).toContainText(`© ${new Date().getFullYear()} The Flint AI`)
+    await expect(footer).toContainText("By Flint AI")
     await expect(footer).toContainText("BSL 1.1")
     await expect(
       footer.getByRole("link", { name: PRIVACY_EMAIL }),
@@ -71,7 +72,7 @@ test.describe("/legal/contact form", () => {
     await page.goto(`${BASE}/legal/contact`)
 
     await page.getByLabel("Your name").fill("Jane Doe")
-    await page.getByLabel("Reply-to email").fill("jane@example.com")
+    await page.getByLabel("Your email").fill("jane@example.com")
     await page.getByLabel("Message").fill("too short")
     await page.getByRole("button", { name: /send message/i }).click()
 

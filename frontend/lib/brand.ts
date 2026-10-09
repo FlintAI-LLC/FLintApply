@@ -4,7 +4,11 @@
 
 export const PRODUCT_NAME = "FlintApply" as const;
 
-export const COMPANY_LINE = "by The Flint AI" as const;
+/** Mid-sentence attribution (e.g. “…desktop app by Flint AI”). */
+export const COMPANY_LINE = "by Flint AI" as const;
+
+/** Footer and other standalone bylines — title case. */
+export const FOOTER_COMPANY_BYLINE = "By Flint AI" as const;
 
 export const COMPANY_NAME = "The Flint AI" as const;
 

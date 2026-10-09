@@ -26,6 +26,7 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
   const betaVersion = extensionBetaVersion();
   const showBeta = Boolean(downloadUrl);
   const showStore = Boolean(storeUrl);
+  const storeIsPrimary = showStore && !showBeta;
 
   return (
     <div className={compact ? "space-y-4" : "space-y-8"}>
@@ -48,18 +49,52 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
         </div>
       </div>
 
+      {showStore && (
+        <div
+          className={
+            storeIsPrimary
+              ? "rounded-2xl border border-amber-400/40 bg-amber-500/10 dark:bg-amber-400/5 p-5 space-y-3"
+              : "rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-5 space-y-3"
+          }
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+              {storeIsPrimary ? "Recommended" : "Easiest install"}
+            </p>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white mt-1">
+              Chrome Web Store
+              {storeVersion ? ` (v${storeVersion})` : ""}
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
+              {storeIsPrimary
+                ? "Official listing with one-click install and automatic updates. Sign in with the same account you use on flintapply.com."
+                : "One-click install with automatic updates. Use this if you prefer not to use Developer mode."}
+            </p>
+          </div>
+          <a
+            href={storeUrl!}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl text-sm"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Add to Chrome
+          </a>
+        </div>
+      )}
+
       {showBeta && (
         <div className="rounded-2xl border border-emerald-500/35 bg-emerald-50/80 dark:bg-emerald-950/25 p-5 space-y-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-              Recommended — private beta
+              Private beta (developer mode)
             </p>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white mt-1">
               Latest build
               {betaVersion ? ` (v${betaVersion})` : ""}
             </h2>
             <p className="text-sm text-slate-700 dark:text-slate-300 mt-2 leading-relaxed">
-              For the newest capture and autofill fixes, install the beta zip in Chrome Developer
+              For pre-release capture and autofill fixes, install the beta zip in Chrome Developer
               mode. The Chrome Web Store build updates automatically but may lag by a release or
               two{storeVersion ? ` (Store is v${storeVersion} today)` : ""}.
             </p>
@@ -79,33 +114,6 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
               </li>
             ))}
           </ol>
-        </div>
-      )}
-
-      {showStore && (
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-5 space-y-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Easiest install
-            </p>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white mt-1">
-              Chrome Web Store
-              {storeVersion ? ` (v${storeVersion})` : ""}
-            </h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
-              One-click install with automatic updates. Use this if you prefer not to use Developer
-              mode. When you need the newest features, switch to the beta zip above.
-            </p>
-          </div>
-          <a
-            href={storeUrl!}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl text-sm"
-          >
-            <ExternalLink className="w-4 h-4" />
-            Add to Chrome
-          </a>
         </div>
       )}
 

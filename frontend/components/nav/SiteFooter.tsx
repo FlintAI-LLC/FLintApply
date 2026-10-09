@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
-  COMPANY_LINE,
   COMPANY_NAME,
+  FOOTER_COMPANY_BYLINE,
   COMPANY_URL,
   PRIVACY_EMAIL,
   PRODUCT_NAME,
@@ -70,7 +70,7 @@ export function SiteFooter() {
               rel="noreferrer noopener"
               className={FOOTER_LINK}
             >
-              {COMPANY_LINE}
+              {FOOTER_COMPANY_BYLINE}
             </a>
           </p>
           <p className={FOOTER_META}>

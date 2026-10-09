@@ -2659,7 +2659,7 @@ requires-dist = [
     { name = "tiktoken", specifier = ">=0.9.0" },
     { name = "twilio", specifier = ">=9.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.48.0" },
-    { name = "weasyprint", specifier = ">=68.1" },
+    { name = "weasyprint", specifier = ">=70.0" },
     { name = "zxcvbn", specifier = ">=4.5.0" },
 ]
 

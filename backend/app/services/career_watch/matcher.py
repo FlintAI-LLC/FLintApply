@@ -43,7 +43,7 @@ def keyword_match_score(keywords: list[str], job: CareerJobCache) -> tuple[float
     return score, f"matched keywords: {', '.join(hits)}"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class MatchStats:
     watches_scanned: int = 0
     alerts_created: int = 0

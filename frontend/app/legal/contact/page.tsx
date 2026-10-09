@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { LegalPageShell } from "@/components/legal/LegalPageShell"
 import { PRIVACY_EMAIL } from "@/lib/brand"
@@ -47,6 +47,7 @@ function DpoContactForm() {
   const [topic, setTopic] = useState("data_subject_request")
   const [message, setMessage] = useState("")
   const [status, setStatus] = useState<ContactStatus>({ kind: "idle" })
+  const formRef = useRef<HTMLFormElement>(null)
 
   useEffect(() => {
     const fromQuery = searchParams.get("topic")
@@ -73,8 +74,8 @@ function DpoContactForm() {
       setStatus({ kind: "success" })
       setName("")
       setEmail("")
-      setTopic("data_subject_request")
       setMessage("")
+      formRef.current?.reset()
     } catch (err) {
       setStatus({
         kind: "error",
@@ -96,6 +97,7 @@ function DpoContactForm() {
       </p>
 
       <form
+        ref={formRef}
         onSubmit={onSubmit}
         className="not-prose mt-6 space-y-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/60 p-6"
       >
@@ -112,6 +114,7 @@ function DpoContactForm() {
             required
             maxLength={120}
             disabled={submitting}
+            autoComplete="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-amber-400 focus:outline-none"
@@ -123,7 +126,7 @@ function DpoContactForm() {
             htmlFor="dpo-email"
             className="block text-xs font-medium uppercase tracking-widest text-slate-600 dark:text-slate-400"
           >
-            Reply-to email
+            Your email
           </label>
           <input
             id="dpo-email"
@@ -131,11 +134,17 @@ function DpoContactForm() {
             name="email"
             required
             maxLength={254}
+            autoComplete="email"
+            inputMode="email"
+            placeholder="you@example.com"
             disabled={submitting}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-amber-400 focus:outline-none"
           />
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            We&apos;ll reply to this address.
+          </p>
         </div>
 
         <div className="space-y-2">

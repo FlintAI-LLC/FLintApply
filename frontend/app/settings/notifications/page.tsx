@@ -26,6 +26,15 @@ export default function NotificationSettingsPage() {
   const [smsCode, setSmsCode] = useState("");
   const [smsStep, setSmsStep] = useState<"idle" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
+  const [notificationPermission, setNotificationPermission] =
+    useState<NotificationPermission | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setNotificationPermission(Notification.permission);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -72,12 +81,31 @@ export default function NotificationSettingsPage() {
   }
 
   async function enablePush() {
-    if (!token) return;
+    if (!token) {
+      setError("Your session is missing an API token. Sign out and sign in again, then retry.");
+      return;
+    }
+    if (typeof window !== "undefined" && !("Notification" in window)) {
+      setError("This browser does not support web notifications.");
+      return;
+    }
+    if (typeof window !== "undefined" && Notification.permission === "denied") {
+      setError(
+        "Notifications are blocked for this site. Use the lock icon in the address bar → Site settings → Notifications → Allow, then click Enable again."
+      );
+      return;
+    }
     setPushBusy(true);
     setError(null);
+    setPushMessage(null);
     try {
       const ok = await registerWebPush(token);
-      if (ok) await save({ web_push_enabled: true });
+      if (!ok) {
+        setError("Could not enable browser notifications. Try again and choose Allow in the prompt.");
+        return;
+      }
+      await save({ web_push_enabled: true });
+      setPushMessage("Browser notifications are on. You may need to keep this tab open once for the service worker to finish registering.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Web push failed");
     } finally {
@@ -186,10 +214,21 @@ export default function NotificationSettingsPage() {
         <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
           Optional web push alerts when you are not on the site.
         </p>
+        {notificationPermission === "denied" && !prefs.web_push_enabled && (
+          <p className="text-sm text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-lg px-3 py-2 mb-4">
+            Chrome has notifications blocked for this site. Reset them in site settings (lock icon in the address bar), then click Enable again.
+          </p>
+        )}
+        {pushMessage && (
+          <p className="text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded-lg px-3 py-2 mb-4">
+            {pushMessage}
+          </p>
+        )}
         <button
           type="button"
-          onClick={enablePush}
+          onClick={() => void enablePush()}
           disabled={pushBusy || prefs.web_push_enabled}
+          data-testid="enable-web-push"
           className={cn(
             "px-4 py-2 rounded-lg text-sm font-medium",
             prefs.web_push_enabled
