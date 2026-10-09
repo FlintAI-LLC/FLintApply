@@ -45,6 +45,10 @@ import {
   patchStoryDraft,
 } from "@/lib/storyDraft";
 import { cn } from "@/lib/utils";
+import { GuidanceModal } from "@/components/guidance/GuidanceModal";
+import { GUIDANCE_CONTENT } from "@/lib/guidance/content";
+import { nextCoachGuidanceStep } from "@/lib/guidance/coachGuidance";
+import { useGuidanceModal } from "@/lib/guidance/useGuidanceModal";
 
 const MAX_SEGMENTS = 30;
 const SEGMENT_DURATION_MS = 60_000;
@@ -723,6 +727,11 @@ export function StoryRecorder({ token, onSaved }: Props) {
             patchStoryDraft({ storyMode: mode });
           }}
         />
+        <StoryCoachGuidance
+          onModeSelector
+          coachPanelOpened={false}
+          wholeStoryCoachVisible={false}
+        />
       </div>
     );
   }
@@ -1033,6 +1042,48 @@ export function StoryRecorder({ token, onSaved }: Props) {
           void handleSubmit();
         }}
       />
+      <StoryCoachGuidance
+        onModeSelector={false}
+        coachPanelOpened={openCoachIndex !== null}
+        wholeStoryCoachVisible={
+          isFreeUser &&
+          segments.length >= 1 &&
+          openCoachIndex === null &&
+          !isRecordingAnything &&
+          Boolean(storyBuildSessionId)
+        }
+      />
     </div>
+  );
+}
+
+function StoryCoachGuidance({
+  onModeSelector,
+  coachPanelOpened,
+  wholeStoryCoachVisible,
+}: {
+  onModeSelector: boolean;
+  coachPanelOpened: boolean;
+  wholeStoryCoachVisible: boolean;
+}) {
+  const pick = useCallback(
+    () =>
+      nextCoachGuidanceStep({
+        onModeSelector,
+        coachPanelOpened,
+        wholeStoryCoachVisible,
+      }),
+    [onModeSelector, coachPanelOpened, wholeStoryCoachVisible],
+  );
+  const { guidanceStep, onAcknowledge, refresh } = useGuidanceModal(pick);
+  useEffect(() => {
+    refresh();
+  }, [onModeSelector, coachPanelOpened, wholeStoryCoachVisible, refresh]);
+  return (
+    <GuidanceModal
+      open={guidanceStep !== null}
+      content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+      onAcknowledge={onAcknowledge}
+    />
   );
 }

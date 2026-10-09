@@ -2,6 +2,10 @@
 
 import Link from "next/link"
 import { FormEvent, useCallback, useEffect, useState } from "react"
+import { GuidanceModal } from "@/components/guidance/GuidanceModal"
+import { GUIDANCE_CONTENT } from "@/lib/guidance/content"
+import { nextCareerWatchGuidanceStep } from "@/lib/guidance/careerWatchGuidance"
+import { useGuidanceModal } from "@/lib/guidance/useGuidanceModal"
 import { Loader2, Plus, Trash2, ExternalLink } from "lucide-react"
 import { useRequireAuth } from "@/lib/auth/guards"
 import {
@@ -30,6 +34,22 @@ export default function CareerWatchPage() {
   const [companyName, setCompanyName] = useState("")
   const [detectedAts, setDetectedAts] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [keywordsFieldFocused, setKeywordsFieldFocused] = useState(false)
+
+  const pickCareerWatchGuidance = useCallback(
+    () =>
+      nextCareerWatchGuidanceStep({
+        watchCount: watches.length,
+        keywordsFieldFocused,
+        alertCount: alerts.length,
+      }),
+    [watches.length, keywordsFieldFocused, alerts.length],
+  )
+  const { guidanceStep, onAcknowledge, refresh } = useGuidanceModal(pickCareerWatchGuidance)
+
+  useEffect(() => {
+    refresh()
+  }, [watches.length, alerts.length, keywordsFieldFocused, refresh])
 
   const load = useCallback(async () => {
     if (!token) return
@@ -184,6 +204,7 @@ export default function CareerWatchPage() {
             placeholder="python, backend, remote"
             value={keywords}
             onChange={(e) => setKeywords(e.target.value)}
+            onFocus={() => setKeywordsFieldFocused(true)}
           />
         </div>
         <button
@@ -279,6 +300,11 @@ export default function CareerWatchPage() {
           </ul>
         )}
       </section>
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={onAcknowledge}
+      />
     </div>
   )
 }

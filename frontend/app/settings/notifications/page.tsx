@@ -14,8 +14,14 @@ import {
 } from "@/lib/notifications";
 import { registerWebPush } from "@/lib/notifications/web-push";
 import { cn } from "@/lib/utils";
+import { GuidanceModal } from "@/components/guidance/GuidanceModal";
+import { GUIDANCE_CONTENT } from "@/lib/guidance/content";
+import { nextNotificationsGuidanceStep } from "@/lib/guidance/notificationsGuidance";
+import { useGuidanceModal } from "@/lib/guidance/useGuidanceModal";
 
 export default function NotificationSettingsPage() {
+  const pickNotificationsGuidance = useCallback(() => nextNotificationsGuidanceStep(), []);
+  const { guidanceStep, onAcknowledge } = useGuidanceModal(pickNotificationsGuidance);
   const { session, status } = useRequireAuth("/settings/notifications");
   const token = session?.backendAccessToken;
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
@@ -311,6 +317,11 @@ export default function NotificationSettingsPage() {
           Daily digest
         </label>
       </section>
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={onAcknowledge}
+      />
     </main>
   );
 }

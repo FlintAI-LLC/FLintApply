@@ -1,6 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { GuidanceModal } from "@/components/guidance/GuidanceModal";
+import { GUIDANCE_CONTENT } from "@/lib/guidance/content";
+import { nextCoverLetterGuidanceStep } from "@/lib/guidance/coverLetterGuidance";
+import { useGuidanceModal } from "@/lib/guidance/useGuidanceModal";
 import { useSearchParams } from "next/navigation";
 import { CoverLetterPanel } from "@/components/session/CoverLetterPanel";
 import { useRequireAuth } from "@/lib/auth/guards";
@@ -12,6 +16,20 @@ function CoverLetterNewContent() {
   const [recent, setRecent] = useState<RecentSessionEntry[]>([]);
   const [sessionId, setSessionId] = useState(searchParams.get("session_id") ?? "");
   const [panelOpen, setPanelOpen] = useState(false);
+
+  const pickCoverLetterGuidance = useCallback(
+    () =>
+      nextCoverLetterGuidanceStep({
+        hasRecentSessions: recent.length > 0,
+        panelOpen,
+      }),
+    [recent.length, panelOpen],
+  );
+  const { guidanceStep, onAcknowledge, refresh } = useGuidanceModal(pickCoverLetterGuidance);
+
+  useEffect(() => {
+    refresh();
+  }, [recent.length, panelOpen, refresh]);
 
   useEffect(() => {
     setRecent(getRecentSessions());
@@ -79,6 +97,12 @@ function CoverLetterNewContent() {
           </button>
         )}
       </div>
+
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={onAcknowledge}
+      />
 
       {sessionId && (
         <CoverLetterPanel

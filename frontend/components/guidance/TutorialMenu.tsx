@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { GraduationCap } from "lucide-react";
 import { clsx } from "clsx";
@@ -72,6 +73,13 @@ export function TutorialMenu({ showLabel = true }: TutorialMenuProps) {
             />
             Show step tips
           </label>
+          <Link
+            href="/guide"
+            className="block w-full text-left text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-xs"
+            onClick={() => setOpen(false)}
+          >
+            Browse all tips
+          </Link>
           <button
             type="button"
             className="w-full text-left text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-xs"
