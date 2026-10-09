@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -10,9 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin_grant import AdminGrantType, AdminUserGrant
 from app.models.billing import Subscription, SubscriptionStatus
-from app.models.user import User
+from app.models.user import User, UserTier
 from app.services.billing.plan_code import resolve_plan_code_for_subscription
 from app.services.billing.price_resolver import reverse_lookup_code
+from app.services.billing.public_prices import display_name_for_plan_code
+from app.services.billing.tier_limits_lookup import get_active_tier_limits
 
 
 def _within_period(sub: Subscription, *, now: datetime) -> bool:
@@ -100,7 +103,54 @@ async def resolve_plan_code_for_subscription_row(
     return resolve_plan_code_for_subscription(sub, plan_config_code=plan_config_code)
 
 
+@dataclass(frozen=True)
+class AdminUserBillingSnapshot:
+    """Admin UI: tier badge + subscription plan line derived from billing truth."""
+
+    display_tier: str
+    plan_label: str | None
+    resumes_used: int | None
+    resumes_limit: int | None
+    stripe_customer_id: str | None
+
+
+async def admin_user_billing_snapshot_for_user(
+    session: AsyncSession,
+    user: User,
+    *,
+    now: datetime | None = None,
+) -> AdminUserBillingSnapshot:
+    """Align admin tier/plan columns with :func:`resolve_plan_code_for_user`."""
+    plan_code = await resolve_plan_code_for_user(session, user, now=now)
+    raw_tier = user.tier.value if hasattr(user.tier, "value") else str(user.tier)
+    display_tier = UserTier.pro.value if plan_code != "free" else raw_tier
+
+    if plan_code == "free":
+        return AdminUserBillingSnapshot(
+            display_tier=display_tier,
+            plan_label=None,
+            resumes_used=None,
+            resumes_limit=None,
+            stripe_customer_id=None,
+        )
+
+    sub = await _active_subscription_for(session, user_id=user.id)
+    limits = await get_active_tier_limits(session, plan_code)
+    label = display_name_for_plan_code(plan_code)
+    if sub is not None:
+        label = f"{label} ({sub.status.value})"
+    return AdminUserBillingSnapshot(
+        display_tier=display_tier,
+        plan_label=label,
+        resumes_used=sub.resumes_used if sub is not None else None,
+        resumes_limit=limits.resumes_per_period,
+        stripe_customer_id=sub.stripe_customer_id if sub is not None else None,
+    )
+
+
 __all__ = [
+    "AdminUserBillingSnapshot",
+    "admin_user_billing_snapshot_for_user",
     "resolve_plan_code_for_subscription_row",
     "resolve_plan_code_for_user",
 ]

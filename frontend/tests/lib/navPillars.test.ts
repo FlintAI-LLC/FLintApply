@@ -27,9 +27,7 @@ describe("navPillars", () => {
     assert.equal(home?.label, "Dashboard")
   })
 
-  it("marks Prepare pillar as coming soon without mobile links", () => {
-    const prepare = NAV_PILLARS.find((p) => p.id === "prepare")
-    assert.equal(prepare?.comingSoon, true)
+  it("does not expose placeholder nav links on mobile", () => {
     assert.ok(!MOBILE_NAV_LINKS.some((l) => l.href === "#"))
   })
 
@@ -58,6 +56,18 @@ describe("navPillars", () => {
     const jobs = NAV_PILLARS.find((p) => p.id === "jobs")!
     assert.equal(navPillarIsActive("/tracker", jobs), true)
     assert.equal(navPillarIsActive("/billing", jobs), false)
+  })
+
+  it("highlights only the resume pillar on profile, not dashboard", () => {
+    const home = NAV_PILLARS.find((p) => p.id === "home")!
+    const resume = NAV_PILLARS.find((p) => p.id === "resume")!
+    assert.equal(navPillarIsActive("/profile", home), false)
+    assert.equal(navPillarIsActive("/profile", resume), true)
+  })
+
+  it("does not treat live session pages as Tailor for a job", () => {
+    assert.equal(navPathIsActive("/session/abc-123", "/session/new"), false)
+    assert.equal(navPathIsActive("/session/new", "/session/new"), true)
   })
 
   it("landing nav highlights only the matching hash anchor", () => {

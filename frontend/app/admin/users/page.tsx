@@ -788,6 +788,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 function TierBadge({ tier }: { tier: string }) {
   const colors: Record<string, string> = {
     free: "bg-slate-700 text-slate-300",
+    pro: "bg-amber-900/60 text-amber-300",
     standard: "bg-slate-700 text-slate-200",
     better: "bg-amber-900/60 text-amber-300",
     best: "bg-violet-900/60 text-violet-300",

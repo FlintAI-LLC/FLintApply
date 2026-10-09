@@ -38,12 +38,6 @@ export const NAV_PILLARS: readonly NavPillar[] = [
       { href: "/career-watch", label: "Career Watch" },
     ],
   },
-  {
-    id: "prepare",
-    label: "Prepare",
-    comingSoon: true,
-    links: [{ href: "#", label: "Interview prep (coming soon)" }],
-  },
 ] as const
 
 /** Flat list for mobile scroll bar — excludes /dashboard (fixed pill in header). */
@@ -101,6 +95,12 @@ export function navPathIsActive(
     return pathname === "/dashboard" && normalizedHash !== "#tailored-resumes"
   }
   if (href === "/jobs/setup") return pathname.startsWith("/jobs/setup")
+  if (href === "/session/new") {
+    return pathname === "/session/new" || pathname.startsWith("/session/new/")
+  }
+  if (href === "/profile") {
+    return pathname === "/profile" || pathname.startsWith("/profile/")
+  }
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 

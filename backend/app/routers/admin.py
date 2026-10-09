@@ -83,10 +83,7 @@ from app.services.auth.password import (
     verify_password,
 )
 from app.services.billing.credits import get_balance, grant_credit, _refresh_user_credit_balance_cache
-from app.services.billing.plan_code import resolve_plan_code_for_subscription
-from app.services.billing.price_resolver import reverse_lookup_code
-from app.services.billing.public_prices import display_name_for_plan_code
-from app.services.billing.tier_limits_lookup import get_active_tier_limits
+from app.services.billing.plan_code_resolver import admin_user_billing_snapshot_for_user
 from app.services.export.closure import (
     execute_closure,
     schedule_closure,
@@ -1853,19 +1850,17 @@ async def admin_users_list(
     total = int((await db.execute(count_stmt)).scalar() or 0)
     user_ids = [u.id for u in rows]
     balances = await _ledger_balances_for_users(db, user_ids)
-    subs_by_user = await _latest_subscriptions_for_users(db, user_ids)
     items = []
     for u in rows:
-        sub = subs_by_user.get(u.id)
-        plan_label, _, _, _ = await _subscription_admin_fields(db, sub)
+        billing = await admin_user_billing_snapshot_for_user(db, u)
         items.append(
             AdminUserSummary(
                 id=u.id,
                 email=u.email,
                 display_name=u.display_name,
-                tier=u.tier.value if hasattr(u.tier, "value") else str(u.tier),
+                tier=billing.display_tier,
                 credit_balance=balances.get(u.id, 0),
-                subscription_status=plan_label,
+                subscription_status=billing.plan_label,
                 suspended_at=u.suspended_at,
                 closure_requested_at=u.closure_requested_at,
                 created_at=u.created_at,
@@ -1902,43 +1897,6 @@ async def _ledger_balances_for_users(
     return {uid: int(total or 0) for uid, total in rows}
 
 
-async def _latest_subscriptions_for_users(
-    db: AsyncSession, user_ids: list[uuid.UUID]
-) -> dict[uuid.UUID, Subscription]:
-    if not user_ids:
-        return {}
-    rows = list(
-        (
-            await db.execute(
-                select(Subscription)
-                .where(Subscription.user_id.in_(user_ids))
-                .where(Subscription.status != SubscriptionStatus.expired)
-                .order_by(desc(Subscription.created_at))
-            )
-        )
-        .scalars()
-        .all()
-    )
-    by_user: dict[uuid.UUID, Subscription] = {}
-    for sub in rows:
-        if sub.user_id not in by_user:
-            by_user[sub.user_id] = sub
-    return by_user
-
-
-async def _subscription_admin_fields(
-    db: AsyncSession, sub: Subscription | None
-) -> tuple[str | None, int | None, int | None, str | None]:
-    if sub is None:
-        return None, None, None, None
-    plan_code = resolve_plan_code_for_subscription(
-        sub, plan_config_code=await reverse_lookup_code(db, sub.stripe_price_id)
-    )
-    limits = await get_active_tier_limits(db, plan_code)
-    label = f"{display_name_for_plan_code(plan_code)} ({sub.status.value})"
-    return label, sub.resumes_used, limits.resumes_per_period, sub.stripe_customer_id
-
-
 @router.get("/users/{user_id}", response_model=AdminUserDetail)
 @limiter.limit("120/minute")
 async def admin_users_detail(
@@ -1961,20 +1919,17 @@ async def admin_users_detail(
     ledger_balance = await get_balance(
         db, user_id=u.id, credit_kind=CreditKind.free, for_share=False
     )
-    subs_by_user = await _latest_subscriptions_for_users(db, [u.id])
-    sub = subs_by_user.get(u.id)
-    plan_label, resumes_used, resumes_limit, stripe_customer_id = (
-        await _subscription_admin_fields(db, sub)
-    )
+    billing = await admin_user_billing_snapshot_for_user(db, u)
+    stripe_customer_id = billing.stripe_customer_id
     if admin.role == AdminRole.read_only_analyst:
         stripe_customer_id = None
     return AdminUserDetail(
         id=u.id,
         email=u.email,
         display_name=u.display_name,
-        tier=u.tier.value if hasattr(u.tier, "value") else str(u.tier),
+        tier=billing.display_tier,
         credit_balance=ledger_balance,
-        subscription_status=plan_label,
+        subscription_status=billing.plan_label,
         email_verified_at=u.email_verified_at,
         has_totp=u.has_totp,
         auth_provider=u.auth_provider.value if hasattr(u.auth_provider, "value") else str(u.auth_provider),
@@ -1988,9 +1943,9 @@ async def admin_users_detail(
         signup_abuse_review_flag=u.signup_abuse_review_flag,
         created_at=u.created_at,
         stripe_customer_id=stripe_customer_id,
-        subscription_resumes_used=resumes_used,
-        subscription_resumes_limit=resumes_limit,
-        resume_count=resumes_used,
+        subscription_resumes_used=billing.resumes_used,
+        subscription_resumes_limit=billing.resumes_limit,
+        resume_count=billing.resumes_used,
     )
 
 

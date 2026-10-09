@@ -9,7 +9,12 @@ import {
   setTutorialEnabled,
 } from "@/lib/guidance/tutorial";
 
-export function TutorialMenu() {
+type TutorialMenuProps = {
+  /** Icon-only control (e.g. nav bar next to theme toggle). */
+  showLabel?: boolean;
+};
+
+export function TutorialMenu({ showLabel = true }: TutorialMenuProps) {
   const [enabled, setEnabled] = useState(true);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -35,16 +40,19 @@ export function TutorialMenu() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          "flex items-center gap-1.5 text-xs font-medium px-2 py-1.5 rounded-lg border transition-colors",
+          "flex items-center justify-center text-xs font-medium rounded-lg border transition-colors",
+          showLabel ? "gap-1.5 px-2 py-1.5" : "p-1.5",
           enabled
             ? "border-amber-400/50 text-amber-800 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-950/30"
             : "border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400",
         )}
         aria-expanded={open}
         aria-haspopup="true"
+        aria-label="Tutorial tips"
+        title="Tutorial tips"
       >
-        <GraduationCap className="w-3.5 h-3.5" aria-hidden />
-        <span className="hidden sm:inline">Tutorial</span>
+        <GraduationCap className="w-4 h-4 shrink-0" aria-hidden />
+        {showLabel ? <span className="hidden sm:inline">Tutorial</span> : null}
       </button>
       {open && (
         <div
