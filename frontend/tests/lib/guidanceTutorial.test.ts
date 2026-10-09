@@ -27,6 +27,10 @@ import {
 import { nextMasterResumeGuidanceStep } from "@/lib/guidance/masterResumeGuidance";
 import { nextJobsGuidanceStep } from "@/lib/guidance/jobsGuidance";
 import { nextSessionGuidanceStep } from "@/lib/guidance/sessionGuidance";
+import { nextCareerWatchGuidanceStep } from "@/lib/guidance/careerWatchGuidance";
+import { nextNotificationsGuidanceStep } from "@/lib/guidance/notificationsGuidance";
+import { GUIDANCE_CONTENT } from "@/lib/guidance/content";
+import { GUIDE_TOPIC_GROUPS } from "@/lib/guidance/guideTopics";
 
 describe("tutorial storage", () => {
   beforeEach(() => {
@@ -89,5 +93,56 @@ describe("nextSessionGuidanceStep", () => {
       nextSessionGuidanceStep({ sessionId: "abc", step: "other", isNewSession: true }),
       "session.jt1",
     );
+  });
+});
+
+describe("nextCareerWatchGuidanceStep", () => {
+  beforeEach(() => {
+    guidanceStore.clear();
+    setTutorialEnabled(true);
+    restartTutorial();
+  });
+
+  it("returns cw1 on empty watchlist", () => {
+    assert.equal(
+      nextCareerWatchGuidanceStep({ watchCount: 0, alertCount: 0 }),
+      "career_watch.cw1",
+    );
+  });
+
+  it("returns cw2 after cw1 when keywords field focused", () => {
+    markGuidanceSeen("career_watch.cw1");
+    assert.equal(
+      nextCareerWatchGuidanceStep({
+        watchCount: 0,
+        keywordsFieldFocused: true,
+        alertCount: 0,
+      }),
+      "career_watch.cw2",
+    );
+  });
+});
+
+describe("nextNotificationsGuidanceStep", () => {
+  beforeEach(() => {
+    guidanceStore.clear();
+    setTutorialEnabled(true);
+    restartTutorial();
+  });
+
+  it("chains no1 through no5", () => {
+    assert.equal(nextNotificationsGuidanceStep(), "notifications.no1");
+    markGuidanceSeen("notifications.no1");
+    assert.equal(nextNotificationsGuidanceStep(), "notifications.no2");
+  });
+});
+
+describe("guide topic coverage", () => {
+  it("every grouped step has content", () => {
+    for (const group of GUIDE_TOPIC_GROUPS) {
+      for (const id of group.steps) {
+        assert.ok(GUIDANCE_CONTENT[id], `missing content for ${id}`);
+      }
+    }
   });
 });

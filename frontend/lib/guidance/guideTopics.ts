@@ -1,0 +1,75 @@
+import type { GuidanceStepId } from "@/lib/guidance/content";
+
+export const GUIDE_TOPIC_GROUPS: { label: string; steps: GuidanceStepId[] }[] = [
+  {
+    label: "Master resume & Career coach",
+    steps: [
+      "master_resume.mr1",
+      "master_resume.mr2",
+      "master_resume.mr3",
+      "master_resume.mr4",
+      "master_resume.mr5",
+      "coach.cc1",
+      "coach.cc2",
+      "coach.cc3",
+    ],
+  },
+  {
+    label: "Jobs & Career Watch",
+    steps: [
+      "job_roles.jr1",
+      "job_roles.jr2",
+      "jobs.js1",
+      "jobs.js2",
+      "jobs.js3",
+      "jobs.js4",
+      "jobs.js5",
+      "career_watch.cw1",
+      "career_watch.cw2",
+      "career_watch.cw3",
+      "career_watch.cw4",
+      "career_watch.cw5",
+    ],
+  },
+  {
+    label: "Tailoring, job fit & cover letters",
+    steps: [
+      "session.jt1",
+      "session.jt1b",
+      "session.jt2a",
+      "session.jt2b",
+      "session.jt2c",
+      "session.jt2d",
+      "session.jt3",
+      "session.jt4",
+      "session.jt5",
+      "fit.ft1",
+      "fit.ft2",
+      "fit.ft3",
+      "cover_letter.cl1",
+      "cover_letter.cl2",
+      "cover_letter.cl3",
+    ],
+  },
+  {
+    label: "Applications tracker",
+    steps: ["tracker.tr1", "tracker.tr2", "tracker.tr3", "tracker.tr4"],
+  },
+  {
+    label: "Notifications & browser extension",
+    steps: [
+      "notifications.no1",
+      "notifications.no2",
+      "notifications.no3",
+      "notifications.no4",
+      "notifications.no5",
+      "extension.ex1",
+      "extension.ex2",
+      "extension.ex3",
+    ],
+  },
+  {
+    label: "Settings",
+    steps: ["settings.se1"],
+  },
+];

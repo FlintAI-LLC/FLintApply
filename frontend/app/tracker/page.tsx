@@ -2,6 +2,10 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { GuidanceModal } from "@/components/guidance/GuidanceModal"
+import { GUIDANCE_CONTENT } from "@/lib/guidance/content"
+import { nextTrackerGuidanceStep } from "@/lib/guidance/trackerGuidance"
+import { useGuidanceModal } from "@/lib/guidance/useGuidanceModal"
 import {
   Archive,
   ArchiveRestore,
@@ -73,6 +77,21 @@ export default function TrackerPage() {
   const [resumes, setResumes] = useState<
     { id: string; jd_title: string; jd_company: string }[]
   >([])
+
+  const pickTrackerGuidance = useCallback(
+    () =>
+      nextTrackerGuidanceStep({
+        ready: !loading,
+        formOpen: showForm,
+        duplicateWarningShown: duplicateWarning !== null,
+      }),
+    [loading, showForm, duplicateWarning],
+  )
+  const { guidanceStep, onAcknowledge, refresh } = useGuidanceModal(pickTrackerGuidance)
+
+  useEffect(() => {
+    refresh()
+  }, [loading, showForm, duplicateWarning, refresh])
 
   const load = useCallback(async () => {
     if (!token) return
@@ -618,6 +637,11 @@ export default function TrackerPage() {
           })}
         </div>
       )}
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={onAcknowledge}
+      />
     </div>
   )
 }

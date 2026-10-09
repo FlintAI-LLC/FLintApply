@@ -4,6 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Bug, Check, GraduationCap, Loader2, Mail, MessageCircle } from "lucide-react";
 import { SUPPORT_EMAIL } from "@/lib/brand";
+import { GuidanceModal } from "@/components/guidance/GuidanceModal";
+import { GUIDANCE_CONTENT } from "@/lib/guidance/content";
+import { nextSettingsGuidanceStep } from "@/lib/guidance/settingsGuidance";
+import { useGuidanceModal } from "@/lib/guidance/useGuidanceModal";
 import { restartTutorial, setTutorialEnabled, isTutorialEnabled } from "@/lib/guidance/tutorial";
 import { useRequireAuth } from "@/lib/auth/guards";
 import { fetchMe, forgotPassword } from "@/lib/auth/api";
@@ -27,6 +31,11 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [verifySending, setVerifySending] = useState(false);
   const [tutorialTipsEnabled, setTutorialTipsEnabled] = useState(true);
+  const pickSettingsGuidance = useCallback(() => nextSettingsGuidanceStep(), []);
+  const { guidanceStep, onAcknowledge } = useGuidanceModal(
+    pickSettingsGuidance,
+    !loading,
+  );
 
   useEffect(() => {
     setTutorialTipsEnabled(isTutorialEnabled());
@@ -274,9 +283,16 @@ export default function SettingsPage() {
           Tutorial tips
         </h2>
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          Step-by-step hints on the dashboard and job flows. Turn them off anytime or start over from
-          the beginning.
+          Step-by-step hints the first time you hit a page or action. Turn them off, start over, or
+          browse everything in one place.
         </p>
+        <ul className="list-disc space-y-1.5 pl-4 text-sm text-slate-600 dark:text-slate-400">
+          <li>Master resume & Career coach — base content</li>
+          <li>Jobs, Career Watch, job roles — search and keyword alerts</li>
+          <li>Tailoring, job fit, cover letters — per-job pipeline</li>
+          <li>Applications tracker — your pipeline board</li>
+          <li>Notifications & browser extension — alerts and capturing JDs</li>
+        </ul>
         <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 dark:text-slate-300">
           <input
             type="checkbox"
@@ -288,17 +304,25 @@ export default function SettingsPage() {
             }}
             className="rounded border-slate-400 text-amber-600 focus:ring-amber-400"
           />
-          Show step tips on dashboard and job flows
+          Show step tips across the app
         </label>
-        <button
-          type="button"
-          className="text-sm font-medium text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
-          onClick={() => {
-            restartTutorial();
-          }}
-        >
-          Restart tutorial
-        </button>
+        <div className="flex flex-wrap items-center gap-4">
+          <button
+            type="button"
+            className="text-sm font-medium text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
+            onClick={() => {
+              restartTutorial();
+            }}
+          >
+            Restart tutorial
+          </button>
+          <Link
+            href="/guide"
+            className="text-sm font-medium text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+          >
+            Browse all tips →
+          </Link>
+        </div>
       </section>
 
       <section className="mb-8 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
@@ -323,6 +347,11 @@ export default function SettingsPage() {
           Open danger zone →
         </Link>
       </section>
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={onAcknowledge}
+      />
     </main>
   );
 }

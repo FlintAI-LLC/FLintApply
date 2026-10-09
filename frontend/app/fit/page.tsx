@@ -28,6 +28,10 @@ import {
 } from "@/lib/api";
 import { bulkInsertProfileChunks } from "@/lib/profile";
 import { clsx } from "clsx";
+import { GuidanceModal } from "@/components/guidance/GuidanceModal";
+import { GUIDANCE_CONTENT } from "@/lib/guidance/content";
+import { nextFitGuidanceStep } from "@/lib/guidance/fitGuidance";
+import { useGuidanceModal } from "@/lib/guidance/useGuidanceModal";
 
 type InputTab = "paste" | "upload" | "url";
 type PageTab = "analyze" | "history";
@@ -391,6 +395,20 @@ function FitPageContent() {
 
   const token = session?.backendAccessToken ?? "";
 
+  const pickFitGuidance = useCallback(
+    () =>
+      nextFitGuidanceStep({
+        pageTab,
+        hasResult: result !== null,
+      }),
+    [pageTab, result],
+  );
+  const { guidanceStep, onAcknowledge, refresh } = useGuidanceModal(pickFitGuidance);
+
+  useEffect(() => {
+    refresh();
+  }, [pageTab, result, refresh]);
+
   const loadSubscription = useCallback(async () => {
     if (!token) return;
     try {
@@ -691,6 +709,11 @@ function FitPageContent() {
           </>
         )}
       </div>
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={onAcknowledge}
+      />
     </div>
   );
 }

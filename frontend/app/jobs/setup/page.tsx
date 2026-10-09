@@ -1,6 +1,10 @@
 "use client"
 
-import { Suspense } from "react"
+import { Suspense, useCallback } from "react"
+import { GuidanceModal } from "@/components/guidance/GuidanceModal"
+import { GUIDANCE_CONTENT } from "@/lib/guidance/content"
+import { nextJobRolesGuidanceStep } from "@/lib/guidance/jobRolesGuidance"
+import { useGuidanceModal } from "@/lib/guidance/useGuidanceModal"
 import Link from "next/link"
 import { ArrowLeft, Search } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -18,6 +22,8 @@ function SetupContent() {
   const returnTo = safeReturnPath(searchParams.get("return"), "/jobs")
   const { session, status } = useRequireAuth("/jobs/setup")
   const token = session?.backendAccessToken ?? ""
+  const pickJobRolesGuidance = useCallback(() => nextJobRolesGuidanceStep(), [])
+  const { guidanceStep, onAcknowledge } = useGuidanceModal(pickJobRolesGuidance)
 
   if (status === "loading" || !session) {
     return (
@@ -70,6 +76,11 @@ function SetupContent() {
           when you tailor.
         </p>
       </div>
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={onAcknowledge}
+      />
     </div>
   )
 }

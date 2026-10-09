@@ -5,8 +5,14 @@ import { Loader2 } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth/guards";
 import { extensionInstallHeadline } from "@/lib/extensionInstall";
 import { ExtensionInstallGuide } from "@/components/extension/ExtensionInstallGuide";
+import { GuidanceModal } from "@/components/guidance/GuidanceModal";
+import { GUIDANCE_CONTENT } from "@/lib/guidance/content";
+import { nextExtensionGuidanceStep } from "@/lib/guidance/extensionGuidance";
+import { useGuidanceModal } from "@/lib/guidance/useGuidanceModal";
 
 export default function ExtensionInstallPage() {
+  const pickExtensionGuidance = () => nextExtensionGuidanceStep();
+  const { guidanceStep, onAcknowledge } = useGuidanceModal(pickExtensionGuidance);
   const { status } = useRequireAuth("/extension");
 
   if (status === "loading") {
@@ -32,6 +38,11 @@ export default function ExtensionInstallPage() {
         Use Chrome on job boards to capture postings, or skip straight to paste / in-app search below.
       </p>
       <ExtensionInstallGuide />
+      <GuidanceModal
+        open={guidanceStep !== null}
+        content={guidanceStep ? GUIDANCE_CONTENT[guidanceStep] : null}
+        onAcknowledge={onAcknowledge}
+      />
     </main>
   );
 }
