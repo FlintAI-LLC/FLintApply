@@ -203,6 +203,14 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         "/api/billing/offers/{code}",
     ): "public offer metadata for marketing popups; stripe_promotion_code_id omitted",
     ("GET", "/api/llm/providers"): "static provider catalogue",
+    (
+        "GET",
+        "/api/notifications/web-push/public-key",
+    ): "browser-visible VAPID public key; subscribe remains authenticated",
+    (
+        "POST",
+        "/api/public/metrics/beacon",
+    ): "anonymous daily surface counters; IP rate limited; no PII",
     # --- marketing / legal ----------------------------------------------
     ("POST", "/api/legal/dpo-contact"): "public DPO contact form",
     ("GET", "/api/interview-questions"): "public marketing content",

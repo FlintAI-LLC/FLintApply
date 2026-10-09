@@ -9,9 +9,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.billing import CreditKind, Subscription, SubscriptionStatus
+from app.models.billing import CreditKind
 from app.models.user import CreditTransaction, CreditTransactionAction, User
 from app.services.billing.credits import get_balance, grant_credit
+from app.services.billing.effective_entitlement import is_free_entitlement
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,18 +20,6 @@ class ExhaustionTopUpEligibility:
     eligible: bool
     amount: int
     reason: str | None = None
-
-
-async def _has_active_subscription(session: AsyncSession, user_id: uuid.UUID) -> bool:
-    row = (
-        await session.execute(
-            select(Subscription.id)
-            .where(Subscription.user_id == user_id)
-            .where(Subscription.status != SubscriptionStatus.expired)
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    return row is not None
 
 
 async def _top_up_already_used(
@@ -66,9 +55,7 @@ async def get_exhaustion_top_up_eligibility(
     user: User,
 ) -> ExhaustionTopUpEligibility:
     amount = settings.EXHAUSTION_TOP_UP_CREDITS
-    if user.tier.value != "free":
-        return ExhaustionTopUpEligibility(False, amount, "paid_tier")
-    if await _has_active_subscription(session, user.id):
+    if not await is_free_entitlement(session, user):
         return ExhaustionTopUpEligibility(False, amount, "has_subscription")
     if not user.is_email_verified:
         return ExhaustionTopUpEligibility(False, amount, "email_unverified")

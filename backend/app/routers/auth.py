@@ -352,13 +352,19 @@ def _clear_refresh_cookie(response: Response) -> None:
     )
 
 
-def _me(user: User, *, credit_balance: int | None = None) -> MeResponse:
+def _me(
+    user: User,
+    *,
+    credit_balance: int | None = None,
+    tier: UserTier | None = None,
+) -> MeResponse:
     balance = credit_balance if credit_balance is not None else user.credit_balance
+    effective_tier = tier if tier is not None else user.tier
     return MeResponse(
         id=user.id,
         email=user.email,
         display_name=user.display_name,
-        tier=user.tier,
+        tier=effective_tier,
         credit_balance=balance,
         spendable_credit_balance=spendable_free_credits(user, balance=balance),
         credits_locked_until_verification=credits_locked_until_verification(
@@ -384,12 +390,19 @@ async def _trust_sso_email_if_needed(db: AsyncSession, user: User) -> None:
 
 async def _me_from_ledger(db: AsyncSession, user: User) -> MeResponse:
     """Return profile fields with the authoritative free-credit ledger balance."""
+    from app.services.billing.effective_entitlement import (
+        effective_user_tier,
+        sync_user_tier_cache,
+    )
+
     await _trust_sso_email_if_needed(db, user)
     balance = await get_balance(db, user_id=user.id, credit_kind=CreditKind.free)
     if user.credit_balance != balance:
         user.credit_balance = max(0, balance)
         await db.flush()
-    return _me(user, credit_balance=balance)
+    await sync_user_tier_cache(db, user.id)
+    tier = await effective_user_tier(db, user)
+    return _me(user, credit_balance=balance, tier=tier)
 
 
 async def _issue_session(

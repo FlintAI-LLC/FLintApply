@@ -122,8 +122,9 @@ async def admin_user_billing_snapshot_for_user(
 ) -> AdminUserBillingSnapshot:
     """Align admin tier/plan columns with :func:`resolve_plan_code_for_user`."""
     plan_code = await resolve_plan_code_for_user(session, user, now=now)
-    raw_tier = user.tier.value if hasattr(user.tier, "value") else str(user.tier)
-    display_tier = UserTier.pro.value if plan_code != "free" else raw_tier
+    display_tier = (
+        UserTier.pro.value if plan_code != "free" else UserTier.free.value
+    )
 
     if plan_code == "free":
         return AdminUserBillingSnapshot(
