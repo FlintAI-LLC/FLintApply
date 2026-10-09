@@ -75,9 +75,14 @@ services:
       - |
         while true; do
           if [ -n "$$INTERNAL_SCHEDULER_SECRET" ]; then
-            curl -sf -X DELETE \
+            curl -sf -X POST \
               -H "X-Scheduler-Secret: $$INTERNAL_SCHEDULER_SECRET" \
-              "$$API_URL/api/account" || true
+              "$$API_URL/api/notifications/scheduler/dispatch" || true
+            if [ "$$(date +%M)" = "00" ]; then
+              curl -sf -X DELETE \
+                -H "X-Scheduler-Secret: $$INTERNAL_SCHEDULER_SECRET" \
+                "$$API_URL/api/account" || true
+            fi
           fi
-          sleep 3600
+          sleep 300
         done

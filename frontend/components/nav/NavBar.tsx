@@ -25,6 +25,8 @@ import {
   navPillarIsActive,
 } from "@/components/nav/navPillars"
 import { fetchMe, logoutUser } from "@/lib/auth/api"
+import { getSubscriptionCurrent } from "@/lib/api"
+import { isSubscriptionActive } from "@/lib/billing"
 import { liveBackendAccessToken } from "@/lib/auth/accessToken"
 import { shouldShowUserMenu } from "@/lib/auth/navIdentity"
 import { isSessionDead } from "@/lib/auth/refreshBackendSession"
@@ -480,28 +482,40 @@ function UserMenu({
   dropdownRef,
   onLogout,
 }: UserMenuProps) {
-  const [liveCredits, setLiveCredits] = useState<number | undefined>(creditBalance)
+  const [usageSummary, setUsageSummary] = useState<string | null>(null)
   const fetchedForOpenRef = useRef(false)
-
-  useEffect(() => {
-    setLiveCredits(creditBalance)
-  }, [creditBalance])
 
   useEffect(() => {
     if (!dropdownOpen) {
       fetchedForOpenRef.current = false
+      setUsageSummary(null)
       return
     }
     if (!accessToken || fetchedForOpenRef.current) return
     fetchedForOpenRef.current = true
 
     let cancelled = false
-    void fetchMe(accessToken)
-      .then((user) => {
-        if (!cancelled) setLiveCredits(user.credit_balance)
+    void Promise.all([fetchMe(accessToken), getSubscriptionCurrent(accessToken)])
+      .then(([user, subCurrent]) => {
+        if (cancelled) return
+        const sub = subCurrent.subscription
+        if (sub && isSubscriptionActive(sub.status)) {
+          const label = sub.plan_display_name ?? sub.plan
+          const cap = subCurrent.credit_cap ?? sub.resumes_limit
+          const used = subCurrent.credits_used ?? sub.resumes_used
+          setUsageSummary(`${label}: ${used}/${cap} resumes this period`)
+          return
+        }
+        const credits =
+          subCurrent.spendable_credit_balance ??
+          subCurrent.credit_balance ??
+          user.credit_balance
+        setUsageSummary(`${credits} credit${credits !== 1 ? "s" : ""} remaining`)
       })
       .catch(() => {
-        if (!cancelled) setLiveCredits(creditBalance)
+        if (!cancelled && creditBalance !== undefined) {
+          setUsageSummary(`${creditBalance} credit${creditBalance !== 1 ? "s" : ""} remaining`)
+        }
       })
 
     return () => {
@@ -559,9 +573,9 @@ function UserMenu({
                 </Link>
               </p>
             )}
-            {liveCredits !== undefined && (
+            {usageSummary && (
               <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                {liveCredits} credit{liveCredits !== 1 ? "s" : ""} remaining
+                {usageSummary}
               </p>
             )}
           </div>

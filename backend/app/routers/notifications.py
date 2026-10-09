@@ -6,7 +6,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Security, status
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,8 +32,11 @@ from app.services.notifications.sms_verify import (
     verify_code,
 )
 from app.services.notifications.vapid_public import application_server_key
+from app.services.notifications.scheduler import dispatch_pending_notifications
+from app.config import settings
 
 router = APIRouter(tags=["notifications"])
+_scheduler_header = APIKeyHeader(name="X-Scheduler-Secret", auto_error=False)
 
 
 # ---------------------------------------------------------------------------
@@ -435,6 +439,25 @@ async def sms_verify(
     prefs.updated_at = datetime.now(timezone.utc)
     await db.flush()
     return {"ok": True, "verified": True}
+
+
+@router.post("/api/notifications/scheduler/dispatch", include_in_schema=False)
+async def scheduler_dispatch_notifications(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    x_scheduler_secret: Annotated[str | None, Security(_scheduler_header)] = None,
+) -> dict[str, int]:
+    """Internal: deliver pending email / push rows (EventBridge or VM cron)."""
+    secret = settings.INTERNAL_SCHEDULER_SECRET
+    if not secret or x_scheduler_secret != secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    result = await dispatch_pending_notifications(db)
+    return {
+        "ok": 1,
+        "inspected": result.inspected,
+        "dispatched": result.dispatched,
+        "failed": result.failed,
+    }
 
 
 @router.post("/api/notifications/webhooks/resend", include_in_schema=False)
