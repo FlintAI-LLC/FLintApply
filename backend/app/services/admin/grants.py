@@ -12,6 +12,7 @@ from app.models.billing import CreditKind
 from app.models.user import CreditTransaction
 from app.services.admin.feature_unlocks import is_supported_feature_unlock, normalize_feature_name
 from app.services.billing.credits import grant_credit
+from app.services.billing.effective_entitlement import sync_user_tier_cache
 
 
 class InvalidGrantPayloadError(ValueError):
@@ -129,6 +130,8 @@ async def apply_grant_side_effects(
     """Run immediate side effects for a newly created grant."""
     if grant.grant_type == AdminGrantType.extra_credits:
         return await apply_extra_credits_grant(session, grant=grant, admin_id=admin_id)
+    if grant.grant_type == AdminGrantType.tier_override:
+        await sync_user_tier_cache(session, grant.user_id)
     return None
 
 

@@ -92,3 +92,19 @@ async def test_admin_snapshot_stays_free_without_entitlement() -> None:
 
     assert snap.display_tier == "free"
     assert snap.plan_label is None
+
+
+@pytest.mark.asyncio
+async def test_admin_snapshot_free_even_when_stale_pro_column() -> None:
+    user = _user()
+    user.tier = UserTier.pro
+    session = AsyncMock()
+
+    with patch(
+        "app.services.billing.plan_code_resolver.resolve_plan_code_for_user",
+        new_callable=AsyncMock,
+        return_value="free",
+    ):
+        snap = await admin_user_billing_snapshot_for_user(session, user)
+
+    assert snap.display_tier == "free"

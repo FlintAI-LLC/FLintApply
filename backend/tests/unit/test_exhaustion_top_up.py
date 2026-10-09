@@ -43,8 +43,8 @@ async def test_not_eligible_when_credits_remain(
 
     user = _user(email_verified_at=datetime.now(timezone.utc))
     monkeypatch.setattr(
-        "app.services.billing.exhaustion_top_up._has_active_subscription",
-        AsyncMock(return_value=False),
+        "app.services.billing.exhaustion_top_up.is_free_entitlement",
+        AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
         "app.services.billing.exhaustion_top_up.get_balance",
@@ -64,8 +64,8 @@ async def test_eligible_when_verified_and_exhausted(
     session = AsyncMock()
     user = _user(email_verified_at=datetime.now(timezone.utc))
     monkeypatch.setattr(
-        "app.services.billing.exhaustion_top_up._has_active_subscription",
-        AsyncMock(return_value=False),
+        "app.services.billing.exhaustion_top_up.is_free_entitlement",
+        AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
         "app.services.billing.exhaustion_top_up.get_balance",

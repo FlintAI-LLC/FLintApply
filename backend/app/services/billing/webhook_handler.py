@@ -55,6 +55,7 @@ from app.services.billing.credit_packs import (
     is_one_time_purchase_code,
 )
 from app.services.billing.credits import grant_credit
+from app.services.billing.effective_entitlement import sync_user_tier_cache
 from app.services.billing.exceptions import WebhookPayloadError
 from app.services.billing.price_resolver import reverse_lookup_code
 from app.services.billing.promo_offers import record_checkout_promo_redemption
@@ -342,6 +343,7 @@ async def handle_subscription_created(
         existing.updated_at = datetime.now(timezone.utc)
 
     await session.flush()
+    await sync_user_tier_cache(session, user.id)
 
 
 async def handle_subscription_updated(
@@ -390,6 +392,7 @@ async def handle_subscription_updated(
     existing.last_event_created_at = _event_created_at(event)
     existing.updated_at = datetime.now(timezone.utc)
     await session.flush()
+    await sync_user_tier_cache(session, existing.user_id)
 
 
 async def handle_subscription_deleted(
@@ -420,6 +423,7 @@ async def handle_subscription_deleted(
     existing.last_event_created_at = _event_created_at(event)
     existing.updated_at = datetime.now(timezone.utc)
     await session.flush()
+    await sync_user_tier_cache(session, existing.user_id)
 
 
 async def handle_invoice_succeeded(
@@ -461,6 +465,7 @@ async def handle_invoice_succeeded(
     existing.last_event_created_at = _event_created_at(event)
     existing.updated_at = datetime.now(timezone.utc)
     await session.flush()
+    await sync_user_tier_cache(session, existing.user_id)
     if was_grace:
         # §7.6 row 2 — emit a payment_recovered notification on the
         # transition.  Both in_app and email so the user sees it

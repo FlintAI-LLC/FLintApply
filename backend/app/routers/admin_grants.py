@@ -17,6 +17,7 @@ from app.limiter import limiter
 from app.models.admin import AdminRole, AdminUser
 from app.models.admin_grant import AdminGrantType, AdminUserGrant
 from app.models.user import User
+from app.services.billing.effective_entitlement import sync_user_tier_cache
 from app.services.admin.grants import (
     InvalidGrantPayloadError,
     apply_grant_side_effects,
@@ -196,6 +197,8 @@ async def admin_grants_revoke(
     now = datetime.now(timezone.utc)
     grant.revoked_at = now
     await db.flush()
+    if grant.grant_type == AdminGrantType.tier_override:
+        await sync_user_tier_cache(db, grant.user_id)
 
     audit_row = await write_admin_audit(
         db,
