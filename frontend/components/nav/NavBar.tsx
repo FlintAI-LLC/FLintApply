@@ -80,7 +80,8 @@ export function NavBar() {
     setPillarMenuPos(null)
   }, [pathname, locationHash])
 
-  function updatePillarMenuPosition(pillarId: string) {
+  function updatePillarMenuPosition(pillarId: string | null) {
+    if (!pillarId) return
     const btn = pillarButtonRefs.current[pillarId]
     if (!btn) return
     const rect = btn.getBoundingClientRect()
@@ -100,10 +101,9 @@ export function NavBar() {
   }
 
   useEffect(() => {
-    if (openPillarId === null) return
-    const pillarId = openPillarId
+    if (!openPillarId) return
     function onLayout() {
-      updatePillarMenuPosition(pillarId)
+      updatePillarMenuPosition(openPillarId)
     }
     window.addEventListener("resize", onLayout)
     window.addEventListener("scroll", onLayout, true)
