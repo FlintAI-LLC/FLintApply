@@ -25,7 +25,7 @@
     "@radix-ui/react-separator": "^1.1.15",
     "@types/zxcvbn": "^4.4.5",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.48.0",
+    "lucide-react": "^1.51.0",
     "next": "16.3.8",
     "next-auth": "5.0.0-beta.32",
     "react": "19.3.0",
@@ -42,7 +42,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.6",
+    "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
