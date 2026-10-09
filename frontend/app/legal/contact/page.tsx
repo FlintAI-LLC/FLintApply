@@ -1,8 +1,19 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { LegalPageShell } from "@/components/legal/LegalPageShell"
 import { PRIVACY_EMAIL } from "@/lib/brand"
+
+const TOPIC_QUERY_VALUES = new Set([
+  "data_subject_request",
+  "sub_processor_objection",
+  "security_disclosure",
+  "ccpa_inquiry",
+  "bug_report",
+  "product_feedback",
+  "other",
+])
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 const LAST_UPDATED = "2026-05-31"
@@ -14,11 +25,35 @@ type ContactStatus =
   | { kind: "error"; message: string }
 
 export default function DpoContactPage() {
+  return (
+    <Suspense fallback={<ContactPageFallback />}>
+      <DpoContactForm />
+    </Suspense>
+  )
+}
+
+function ContactPageFallback() {
+  return (
+    <LegalPageShell title="Contact us" lastUpdated={LAST_UPDATED}>
+      <p className="text-slate-600 dark:text-slate-400">Loading form…</p>
+    </LegalPageShell>
+  )
+}
+
+function DpoContactForm() {
+  const searchParams = useSearchParams()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [topic, setTopic] = useState("data_subject_request")
   const [message, setMessage] = useState("")
   const [status, setStatus] = useState<ContactStatus>({ kind: "idle" })
+
+  useEffect(() => {
+    const fromQuery = searchParams.get("topic")
+    if (fromQuery && TOPIC_QUERY_VALUES.has(fromQuery)) {
+      setTopic(fromQuery)
+    }
+  }, [searchParams])
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -52,14 +87,12 @@ export default function DpoContactPage() {
   const submitting = status.kind === "submitting"
 
   return (
-    <LegalPageShell title="Contact our DPO" lastUpdated={LAST_UPDATED}>
+    <LegalPageShell title="Contact us" lastUpdated={LAST_UPDATED}>
       <p>
-        Use this form to reach our Data Protection Officer.  Submissions are
-        delivered to{" "}
+        Submissions are delivered to{" "}
         <a href={`mailto:${PRIVACY_EMAIL}`}>{PRIVACY_EMAIL}</a>{" "}
-        via Resend.  Please use this channel for GDPR / CCPA requests,
-        sub-processor change inquiries, and privacy concerns.  For account or
-        billing support, use in-product help.
+        via Resend. Use <strong>Report a bug</strong> or <strong>Product feedback</strong> for
+        app issues; privacy and GDPR topics are listed below as well.
       </p>
 
       <form
@@ -121,6 +154,8 @@ export default function DpoContactPage() {
             onChange={(e) => setTopic(e.target.value)}
             className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-amber-400 focus:outline-none"
           >
+            <option value="bug_report">Report a bug</option>
+            <option value="product_feedback">Product feedback</option>
             <option value="data_subject_request">
               Data subject request (access / erasure / portability)
             </option>
@@ -162,7 +197,7 @@ export default function DpoContactPage() {
           disabled={submitting}
           className="rounded-md bg-amber-500 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {submitting ? "Sending…" : "Send to DPO"}
+          {submitting ? "Sending…" : "Send message"}
         </button>
 
         {status.kind === "success" ? (

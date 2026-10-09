@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, Loader2, Mail } from "lucide-react";
+import { Bug, Check, GraduationCap, Loader2, Mail, MessageCircle } from "lucide-react";
+import { SUPPORT_EMAIL } from "@/lib/brand";
+import { restartTutorial, setTutorialEnabled, isTutorialEnabled } from "@/lib/guidance/tutorial";
 import { useRequireAuth } from "@/lib/auth/guards";
 import { fetchMe, forgotPassword } from "@/lib/auth/api";
 import { patchDisplayName, sendEmailVerification } from "@/lib/account";
@@ -24,6 +26,11 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [verifySending, setVerifySending] = useState(false);
+  const [tutorialTipsEnabled, setTutorialTipsEnabled] = useState(true);
+
+  useEffect(() => {
+    setTutorialTipsEnabled(isTutorialEnabled());
+  }, []);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -210,6 +217,68 @@ export default function SettingsPage() {
         >
           Install or update the extension →
         </Link>
+      </section>
+
+      <section
+        id="help-feedback"
+        className="mb-8 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3 scroll-mt-24"
+      >
+        <h2 className="font-medium text-slate-800 dark:text-slate-200">Help &amp; feedback</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          Found a bug or something confusing? Tell us what you were doing and what went wrong — we read
+          every report.
+        </p>
+        <div className="flex flex-col gap-2 text-sm">
+          <Link
+            href="/legal/contact?topic=bug_report"
+            className="inline-flex items-center gap-2 text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 font-medium"
+          >
+            <Bug className="w-4 h-4 shrink-0" aria-hidden />
+            Report a bug
+          </Link>
+          <Link
+            href="/legal/contact?topic=product_feedback"
+            className="inline-flex items-center gap-2 text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 font-medium"
+          >
+            <MessageCircle className="w-4 h-4 shrink-0" aria-hidden />
+            Send product feedback
+          </Link>
+          <a
+            href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("FlintApply support")}`}
+            className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+          >
+            <Mail className="w-4 h-4 shrink-0" aria-hidden />
+            Email {SUPPORT_EMAIL}
+          </a>
+        </div>
+        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            <GraduationCap className="w-3.5 h-3.5" aria-hidden />
+            Tutorial tips
+          </p>
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={tutorialTipsEnabled}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setTutorialEnabled(next);
+                setTutorialTipsEnabled(next);
+              }}
+              className="rounded border-slate-400 text-amber-600 focus:ring-amber-400"
+            />
+            Show step tips on dashboard and job flows
+          </label>
+          <button
+            type="button"
+            className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+            onClick={() => {
+              restartTutorial();
+            }}
+          >
+            Restart tutorial
+          </button>
+        </div>
       </section>
 
       <section className="mb-8 border border-slate-200 dark:border-slate-800 rounded-xl p-4">

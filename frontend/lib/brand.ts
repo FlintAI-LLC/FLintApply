@@ -27,6 +27,9 @@ export const FLINT_HANDOFF_ENABLED = false as const;
 
 export const PRIVACY_EMAIL = "privacy@flintapply.com" as const;
 
+/** Bugs, product feedback, and general support (same inbox as privacy/DPO for v1). */
+export const SUPPORT_EMAIL = "privacy@flintapply.com" as const;
+
 /** Customized / enterprise plan inquiries from the public pricing grid. */
 export const SALES_INQUIRY_EMAIL = "privacy@flintapply.com" as const;
 

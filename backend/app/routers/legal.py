@@ -38,6 +38,8 @@ _VALID_TOPICS = {
     "sub_processor_objection",
     "security_disclosure",
     "ccpa_inquiry",
+    "bug_report",
+    "product_feedback",
     "other",
 }
 

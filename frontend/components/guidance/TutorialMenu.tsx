@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GraduationCap } from "lucide-react";
 import { clsx } from "clsx";
 import {
@@ -12,13 +12,25 @@ import {
 export function TutorialMenu() {
   const [enabled, setEnabled] = useState(true);
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setEnabled(isTutorialEnabled());
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div className="relative" ref={rootRef}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -36,7 +48,7 @@ export function TutorialMenu() {
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full mt-1 w-56 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg p-3 z-50 text-sm space-y-3"
+          className="absolute right-0 top-full mt-1 w-56 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg p-3 z-[90] text-sm space-y-3"
           role="menu"
         >
           <label className="flex items-center gap-2 cursor-pointer text-slate-800 dark:text-slate-200">

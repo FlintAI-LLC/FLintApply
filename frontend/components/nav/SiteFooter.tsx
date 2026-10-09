@@ -20,7 +20,12 @@ const LEGAL_LINKS: {
     label: "CCPA",
     title: "Do Not Sell My Personal Information",
   },
-  { href: "/legal/contact", label: "DPO Contact" },
+  { href: "/legal/contact", label: "Contact us" },
+  {
+    href: "/legal/contact?topic=bug_report",
+    label: "Report a bug",
+    title: "Tell us what went wrong — we read every report",
+  },
 ];
 
 const FOOTER_LINK =

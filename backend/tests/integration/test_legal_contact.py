@@ -88,3 +88,20 @@ async def test_dpo_contact_validates_email(
     payload = {**_VALID_PAYLOAD, "email": "not-an-email"}
     r = await app_client.post("/api/legal/dpo-contact", json=payload)
     assert r.status_code == 422, r.text
+
+
+async def test_dpo_contact_accepts_bug_report_topic(
+    app_client: AsyncClient,
+) -> None:
+    payload = {
+        **_VALID_PAYLOAD,
+        "topic": "bug_report",
+        "message": "The export button spins forever on Safari 17.",
+    }
+
+    with patch("app.routers.legal.settings") as mock_settings:
+        mock_settings.RESEND_API_KEY = ""
+        mock_settings.RESEND_FROM_EMAIL = "noreply@zanganehai.com"
+        r = await app_client.post("/api/legal/dpo-contact", json=payload)
+
+    assert r.status_code == 200, r.text
