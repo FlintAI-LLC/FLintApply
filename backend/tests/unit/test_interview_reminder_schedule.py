@@ -30,6 +30,7 @@ async def test_sync_interview_round_reminders_creates_email_and_in_app(
         accepted_tos_version="test",
     )
     db_session.add(user)
+    await db_session.flush()
     app = Application(
         id=uuid.uuid4(),
         user_id=user.id,
