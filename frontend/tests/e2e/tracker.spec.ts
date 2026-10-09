@@ -4,6 +4,7 @@
  * Run: pnpm exec playwright test tests/e2e/tracker.spec.ts
  */
 import { test, expect, type Page, type Route } from "@playwright/test"
+import { suppressTutorial } from "./helpers/guidance"
 
 const BASE = "http://localhost:3000"
 const API = "http://localhost:8000"
@@ -244,6 +245,7 @@ test.describe("tracker route guard", () => {
 
 test.describe("tracker kanban (mocked API)", () => {
   test.beforeEach(async ({ page }) => {
+    await suppressTutorial(page)
     await mockAuth(page)
     await mockTrackerApis(page)
     await login(page)
@@ -281,6 +283,7 @@ test.describe("tracker kanban (mocked API)", () => {
 
 test.describe("tracker detail (mocked API)", () => {
   test.beforeEach(async ({ page }) => {
+    await suppressTutorial(page)
     await mockAuth(page)
     await mockTrackerApis(page)
     await login(page)
