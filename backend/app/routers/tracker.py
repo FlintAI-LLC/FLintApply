@@ -698,7 +698,7 @@ async def delete_interview_round(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict[str, bool]:
-    app = await get_owned_application(db, user.id, application_id)
+    await get_owned_application(db, user.id, application_id)
     await cancel_interview_round_reminders(
         db, user_id=user.id, round_id=round_id
     )

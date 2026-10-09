@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from app.models.notifications import Notification, NotificationChannel
 from app.models.tracker import Application, ApplicationStatus, InterviewFormat, InterviewRound
-from app.models.user import User
+from app.models.user import AuthProvider, User, UserTier
 from app.services.tracker.notifications import sync_interview_round_reminders
 
 
@@ -21,8 +21,12 @@ async def test_sync_interview_round_reminders_creates_email_and_in_app(
     user = User(
         id=uuid.uuid4(),
         email="interview@test.com",
-        password_hash="x",
+        email_canonical="interview@test.com",
         display_name="Test",
+        auth_provider=AuthProvider.email,
+        password_hash="x",
+        tier=UserTier.free,
+        accepted_tos_version="test",
     )
     db_session.add(user)
     app = Application(
@@ -62,6 +66,4 @@ async def test_sync_interview_round_reminders_creates_email_and_in_app(
     channels = {n.channel for n in rows}
     assert channels == {NotificationChannel.in_app, NotificationChannel.email}
     assert all(n.category == "application_interview" for n in rows)
-    assert all(
-        str(n.data.get("interview_round_id")) == str(rnd.id) for n in rows
-    )
+    assert all(str(n.data.get("interview_round_id")) == str(rnd.id) for n in rows)
