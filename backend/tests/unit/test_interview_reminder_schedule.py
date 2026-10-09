@@ -14,6 +14,7 @@ from app.models.user import AuthProvider, User, UserTier
 from app.services.tracker.notifications import sync_interview_round_reminders
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_sync_interview_round_reminders_creates_email_and_in_app(
     db_session,
