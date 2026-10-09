@@ -129,11 +129,12 @@ async def _registrations_by_day(
 ) -> dict[date, int]:
     start_dt = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
     end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+    reg_day = func.date_trunc("day", User.created_at).label("reg_day")
     rows = (
         await db.execute(
-            select(func.date_trunc("day", User.created_at), func.count())
+            select(reg_day, func.count())
             .where(User.created_at >= start_dt, User.created_at < end_dt)
-            .group_by(func.date_trunc("day", User.created_at))
+            .group_by(reg_day)
         )
     ).all()
     return {row[0].date(): int(row[1]) for row in rows}
