@@ -45,9 +45,11 @@ from app.services.tracker import (
     validate_attachment_upload,
 )
 from app.services.tracker.notifications import (
+    cancel_interview_round_reminders,
     create_custom_reminder,
     emit_status_change_notifications,
     schedule_follow_up_reminder,
+    sync_interview_round_reminders,
 )
 from app.services.tracker.s3 import (
     AttachmentStorageError,
@@ -639,6 +641,8 @@ async def add_interview_round(
         append_status_history(app, status=ApplicationStatus.interviewing)
     app.updated_at = _utcnow()
     await db.flush()
+    await sync_interview_round_reminders(db, app=app, rnd=rnd)
+    await db.flush()
     return _round_to_dict(rnd)
 
 
@@ -678,6 +682,9 @@ async def patch_interview_round(
         rnd.notes = body.notes
     if body.outcome is not None:
         rnd.outcome = body.outcome
+    app = await get_owned_application(db, user.id, application_id)
+    await db.flush()
+    await sync_interview_round_reminders(db, app=app, rnd=rnd)
     await db.flush()
     return _round_to_dict(rnd)
 
@@ -692,6 +699,9 @@ async def delete_interview_round(
     user: Annotated[User, Depends(get_current_user)],
 ) -> dict[str, bool]:
     await get_owned_application(db, user.id, application_id)
+    await cancel_interview_round_reminders(
+        db, user_id=user.id, round_id=round_id
+    )
     result = await db.execute(
         delete(InterviewRound).where(
             InterviewRound.id == round_id,

@@ -230,7 +230,7 @@ export const GUIDANCE_CONTENT: Record<GuidanceStepId, GuidanceContent> = {
     id: "notifications.no1",
     title: "How notifications work here",
     body:
-      "You can get in-app, email, and optional browser push alerts, grouped by category (resume, applications, job alerts, and more). Turn each category on or off per channel below.",
+      "You can get in-app, email, and optional browser push alerts, grouped by category (resume, applications, job alerts, and more). Turn each category on or off per channel below. Interview reminders use email and in-app — not text messages.",
   },
   "notifications.no2": {
     id: "notifications.no2",
@@ -246,9 +246,9 @@ export const GUIDANCE_CONTENT: Record<GuidanceStepId, GuidanceContent> = {
   },
   "notifications.no4": {
     id: "notifications.no4",
-    title: "SMS is interview reminders only",
+    title: "Interview reminders are email + in-app",
     body:
-      "Text messages are limited to interview reminders. Verify your number once; it is reused for later reminders.",
+      "Add a scheduled interview round on an application in the tracker — we email you about 24 hours and 1 hour before. Keep Interview reminders checked under Email (and In-app if you want the bell).",
   },
   "notifications.no5": {
     id: "notifications.no5",

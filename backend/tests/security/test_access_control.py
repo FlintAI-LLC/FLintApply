@@ -192,6 +192,10 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         "POST",
         "/api/auth/scheduler/unverified-cleanup",
     ): "X-Scheduler-Secret shared secret; covered below",
+    (
+        "POST",
+        "/api/notifications/scheduler/dispatch",
+    ): "X-Scheduler-Secret shared secret; notification outbox dispatch",
     # --- public runtime config (no user data) ---------------------------
     ("GET", "/api/auth/register-config"): "public Turnstile site key",
     ("GET", "/api/feature-flags"): "public runtime config",
@@ -259,6 +263,7 @@ HIDDEN_FROM_SCHEMA: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/api/webhooks/stripe"),
         ("POST", "/api/billing/webhook"),
         ("POST", "/api/notifications/webhooks/resend"),
+        ("POST", "/api/notifications/scheduler/dispatch"),
     }
 )
 
