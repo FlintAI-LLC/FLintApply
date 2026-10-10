@@ -74,6 +74,18 @@ async function mockAuth(page: Page) {
       }),
     }),
   )
+  await page.route(`${API}/api/auth/refresh`, (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        access_token: MOCK_ACCESS,
+        token_type: "bearer",
+        expires_in: 900,
+        user: MOCK_USER,
+      }),
+    }),
+  )
 }
 
 async function mockSubscription(page: Page) {
@@ -212,7 +224,9 @@ test("add company watch for notifications then remove", async ({ page }) => {
 
   await page.locator("#cw-url").fill(CAREERS_URL)
   await page.getByRole("button", { name: "Detect ATS" }).click()
-  await expect(page.getByText("Detected ATS: greenhouse")).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId("career-watch-detected-ats")).toContainText("greenhouse", {
+    timeout: 10_000,
+  })
 
   await page.locator("#cw-name").fill("Acme Corp")
   await page.locator("#cw-keywords").fill("python, backend")
@@ -220,9 +234,12 @@ test("add company watch for notifications then remove", async ({ page }) => {
 
   await expect(page.getByTestId("career-watch-list")).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText("Acme Corp")).toBeVisible()
-  await expect(page.getByText(/Keywords: python, backend/)).toBeVisible()
-  await expect(page.getByText("0 / 10 companies watched")).not.toBeVisible()
-  await expect(page.getByText("1 / 10 companies watched")).toBeVisible()
+  const entry = page.getByTestId(`career-watch-entry-${WATCH_ID}`)
+  await expect(entry.getByTestId(`career-watch-keywords-${WATCH_ID}`)).toContainText("python")
+  await expect(entry.getByTestId(`career-watch-keywords-${WATCH_ID}`)).toContainText("backend")
+  await expect(page.getByTestId("career-watch-limits-summary")).toHaveText(
+    "1 / 10 companies watched",
+  )
 
   await page.getByLabel("Remove watch").click()
   await expect(page.getByTestId("career-watch-empty")).toBeVisible({ timeout: 10_000 })
