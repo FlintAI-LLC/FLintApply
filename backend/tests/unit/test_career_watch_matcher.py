@@ -6,7 +6,10 @@ import uuid
 from datetime import datetime, timezone
 
 from app.models.career_watch import CareerJobCache
-from app.services.career_watch.matcher import keyword_match_score
+from app.services.career_watch.matcher import (
+    keyword_match_score,
+    passes_career_watch_keyword_match,
+)
 
 
 def _job(**kwargs: object) -> CareerJobCache:
@@ -39,8 +42,30 @@ def test_keyword_match_score_miss() -> None:
     assert reason == ""
 
 
-def test_keyword_match_default_without_keywords() -> None:
+def test_keyword_match_without_keywords_scores_zero() -> None:
     job = _job()
     score, reason = keyword_match_score([], job)
-    assert score == 0.5
-    assert "default" in reason
+    assert score == 0.0
+    assert reason == ""
+
+
+def test_passes_requires_two_hits_or_title() -> None:
+    job_desc_only = _job(
+        title="Office Manager",
+        description_text="We use python sometimes",
+    )
+    score, _ = keyword_match_score(["python", "backend"], job_desc_only)
+    assert score > 0
+    assert not passes_career_watch_keyword_match(
+        ["python", "backend"], job_desc_only, score=score
+    )
+
+    job_title = _job(title="Python Backend Engineer", description_text="General role")
+    score2, _ = keyword_match_score(["python", "backend"], job_title)
+    assert passes_career_watch_keyword_match(
+        ["python", "backend"], job_title, score=score2
+    )
+
+    job_two = _job(title="Engineer", description_text="python and backend stack")
+    score3, _ = keyword_match_score(["python", "backend"], job_two)
+    assert passes_career_watch_keyword_match(["python", "backend"], job_two, score=score3)

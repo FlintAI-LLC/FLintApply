@@ -268,6 +268,13 @@ class Settings(BaseSettings):
     # Free-tier exhaustion top-up (M20 §11j slice 8).
     EXHAUSTION_TOP_UP_CREDITS: int = 3
 
+    @field_validator("WEB_PUSH_VAPID_PUBLIC_KEY", "WEB_PUSH_VAPID_PRIVATE_KEY", mode="before")
+    @classmethod
+    def _normalize_vapid_pem_newlines(cls, v: object) -> object:
+        if isinstance(v, str) and "\\n" in v:
+            return v.replace("\\n", "\n")
+        return v
+
     @field_validator("APP_ENV")
     @classmethod
     def _validate_app_env(cls, v: str) -> str:

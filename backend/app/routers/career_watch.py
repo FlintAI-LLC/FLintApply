@@ -17,6 +17,7 @@ from app.models.user import User
 from app.services.auth.dependencies import get_current_user
 from app.services.career_watch.limits import CareerWatchLimitError, get_career_watch_limits
 from app.services.career_watch.notifications import dismiss_alert
+from app.services.career_watch.keyword_suggestions import suggest_career_watch_keywords
 from app.services.career_watch.watchlist import (
     WatchlistEntry,
     add_watch,
@@ -67,6 +68,10 @@ class LimitsResponse(BaseModel):
     active_watches: int
 
 
+class KeywordSuggestionsResponse(BaseModel):
+    keywords: list[str]
+
+
 class AlertResponse(BaseModel):
     id: uuid.UUID
     status: str
@@ -106,6 +111,15 @@ async def career_watch_limits(
         poll_interval_minutes=interval,
         active_watches=active,
     )
+
+
+@router.get("/keyword-suggestions", response_model=KeywordSuggestionsResponse)
+async def career_watch_keyword_suggestions(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> KeywordSuggestionsResponse:
+    keywords = await suggest_career_watch_keywords(db, user_id=user.id)
+    return KeywordSuggestionsResponse(keywords=keywords)
 
 
 @router.post("/detect", response_model=DetectResponse)

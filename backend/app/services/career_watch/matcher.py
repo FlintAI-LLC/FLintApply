@@ -28,19 +28,43 @@ def _tokenize(text: str) -> set[str]:
     return set(_WORD_RE.findall(text.lower()))
 
 
-def keyword_match_score(keywords: list[str], job: CareerJobCache) -> tuple[float, str]:
-    """Return ``(score, reason)`` based on keyword overlap."""
-    if not keywords:
-        return 0.5, "no keywords configured; default watch match"
+def _keyword_hits(keywords: list[str], job: CareerJobCache) -> list[str]:
     haystack = " ".join(
         [job.title, job.location, job.description_text]
     ).lower()
     tokens = _tokenize(haystack)
-    hits = [kw for kw in keywords if kw.lower() in haystack or kw.lower() in tokens]
+    return [kw for kw in keywords if kw.lower() in haystack or kw.lower() in tokens]
+
+
+def keyword_match_score(keywords: list[str], job: CareerJobCache) -> tuple[float, str]:
+    """Return ``(score, reason)`` based on keyword overlap."""
+    if not keywords:
+        return 0.0, ""
+    hits = _keyword_hits(keywords, job)
     if not hits:
         return 0.0, ""
     score = min(1.0, len(hits) / max(len(keywords), 1))
     return score, f"matched keywords: {', '.join(hits)}"
+
+
+def passes_career_watch_keyword_match(
+    keywords: list[str],
+    job: CareerJobCache,
+    *,
+    score: float,
+    min_score: float = 0.25,
+) -> bool:
+    """Stricter gate: no keywords → no alert; need 2+ hits or a title match."""
+    if not keywords or score < min_score:
+        return False
+    hits = _keyword_hits(keywords, job)
+    if not hits:
+        return False
+    title_l = job.title.lower()
+    title_hit = any(h.lower() in title_l for h in hits)
+    if len(hits) >= 2:
+        return True
+    return title_hit
 
 
 @dataclass(slots=True)
@@ -72,7 +96,9 @@ async def match_new_jobs_for_watch(
     keywords = list(watch.keywords or [])
     for job in jobs:
         score, reason = keyword_match_score(keywords, job)
-        if score < min_score:
+        if not passes_career_watch_keyword_match(
+            keywords, job, score=score, min_score=min_score
+        ):
             continue
         existing = (
             await session.execute(
@@ -137,4 +163,10 @@ async def run_matcher(
     return stats
 
 
-__all__ = ["MatchStats", "keyword_match_score", "match_new_jobs_for_watch", "run_matcher"]
+__all__ = [
+    "MatchStats",
+    "keyword_match_score",
+    "match_new_jobs_for_watch",
+    "passes_career_watch_keyword_match",
+    "run_matcher",
+]

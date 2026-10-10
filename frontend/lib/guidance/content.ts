@@ -198,7 +198,7 @@ export const GUIDANCE_CONTENT: Record<GuidanceStepId, GuidanceContent> = {
     id: "career_watch.cw1",
     title: "What Career Watch actually does",
     body:
-      "Career Watch polls a company's ATS board and pulls in every open job it posts — it does not pre-filter by role or seniority. You narrow that down with keywords; without keywords you'll get an alert for every open role at that company.",
+      "Career Watch polls a company's ATS board and pulls in every open job it posts — it does not pre-filter by role or seniority. Add keywords (or use Suggest from master resume); without keywords you won't get match alerts.",
   },
   "career_watch.cw2": {
     id: "career_watch.cw2",
@@ -216,9 +216,9 @@ export const GUIDANCE_CONTENT: Record<GuidanceStepId, GuidanceContent> = {
   },
   "career_watch.cw4": {
     id: "career_watch.cw4",
-    title: "Your master resume isn't part of the match",
+    title: "Suggest keywords from your master resume",
     body:
-      "Career Watch does not read your master resume for relevance — only your keywords against the ATS feed. Tune keywords instead of expecting personalized filtering.",
+      "Use Suggest from master resume to pull skills and job titles into your keyword list. Alerts still match only those keywords against the ATS feed — we don't auto-score jobs against your full resume yet.",
   },
   "career_watch.cw5": {
     id: "career_watch.cw5",
