@@ -63,6 +63,16 @@ export async function getCareerWatchLimits(token: string): Promise<CareerWatchLi
   return apiFetch("/api/career-watch/limits", token)
 }
 
+export async function getCareerWatchKeywordSuggestions(
+  token: string,
+): Promise<string[]> {
+  const data = await apiFetch<{ keywords: string[] }>(
+    "/api/career-watch/keyword-suggestions",
+    token,
+  )
+  return data.keywords
+}
+
 export async function detectCareersPage(
   token: string,
   careersPageUrl: string,

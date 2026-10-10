@@ -13,6 +13,7 @@ import {
   deleteCareerWatch,
   detectCareersPage,
   dismissCareerAlert,
+  getCareerWatchKeywordSuggestions,
   getCareerWatchLimits,
   listCareerAlerts,
   listCareerWatches,
@@ -34,6 +35,7 @@ export default function CareerWatchPage() {
   const [companyName, setCompanyName] = useState("")
   const [detectedAts, setDetectedAts] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [suggestingKeywords, setSuggestingKeywords] = useState(false)
   const [keywordsFieldFocused, setKeywordsFieldFocused] = useState(false)
 
   const pickCareerWatchGuidance = useCallback(
@@ -127,6 +129,35 @@ export default function CareerWatchPage() {
     await load()
   }
 
+  async function handleSuggestKeywords() {
+    if (!token) return
+    setSuggestingKeywords(true)
+    setError(null)
+    try {
+      const suggested = await getCareerWatchKeywordSuggestions(token)
+      if (suggested.length === 0) {
+        setError("No keyword suggestions yet — add skills or experience to your master resume first.")
+        return
+      }
+      const existing = keywords
+        .split(",")
+        .map((k) => k.trim().toLowerCase())
+        .filter(Boolean)
+      const merged = [...existing]
+      for (const s of suggested) {
+        const lower = s.toLowerCase()
+        if (!merged.includes(lower)) {
+          merged.push(lower)
+        }
+      }
+      setKeywords(merged.join(", "))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load keyword suggestions")
+    } finally {
+      setSuggestingKeywords(false)
+    }
+  }
+
   if (status === "loading" || loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -195,9 +226,22 @@ export default function CareerWatchPage() {
           />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="cw-keywords">
-            Keywords (comma-separated)
-          </label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="text-sm font-medium" htmlFor="cw-keywords">
+              Keywords (comma-separated)
+            </label>
+            <button
+              type="button"
+              className="rounded-md border px-2 py-1 text-xs font-medium disabled:opacity-50"
+              disabled={suggestingKeywords}
+              onClick={() => void handleSuggestKeywords()}
+            >
+              {suggestingKeywords ? "Suggesting…" : "Suggest from master resume"}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Alerts require at least two keyword hits in the posting, or one hit in the job title.
+          </p>
           <input
             id="cw-keywords"
             className="w-full rounded-md border px-3 py-2 text-sm"

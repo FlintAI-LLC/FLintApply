@@ -325,13 +325,19 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="mb-8 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
-        <h2 className="font-medium text-slate-800 dark:text-slate-200 mb-2">Notifications</h2>
+      <section className="mb-8 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-2">
+        <h2 className="font-medium text-slate-800 dark:text-slate-200">Notifications</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          Email and in-app alerts by category — including{" "}
+          <strong className="font-medium text-slate-700 dark:text-slate-300">interview reminders</strong>{" "}
+          (24h and 1h before a scheduled interview round on your application tracker). There is no
+          separate SMS setup; reminders go to your account email when enabled.
+        </p>
         <Link
           href="/settings/notifications"
-          className="text-sm text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
+          className="inline-block text-sm font-medium text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
         >
-          Notification preferences →
+          Open notification preferences →
         </Link>
       </section>
 
