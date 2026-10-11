@@ -18,6 +18,7 @@ from app.services.career_watch.aggregators.registry import enabled_aggregator_so
 from app.services.career_watch.aggregators.sync import sync_aggregator_jobs_to_cache
 from app.services.career_watch.corpus_sync import sync_polled_jobs_to_caches
 from app.services.career_watch.fetch import is_gone_error
+from app.services.career_watch.http_client import create_career_watch_client
 from app.services.career_watch.global_poll_schedule import fetch_due_global_seeds
 from app.services.career_watch.job_corpus_seed import STALE_FAIL_DEACTIVATE
 from app.services.career_watch.poll_budget import apply_daily_poll_budget, count_polls_today
@@ -51,7 +52,7 @@ class PollStats:
 
 def _host_for_company(company: WatchedCompany) -> str:
     try:
-        return urlparse(company.careers_page_url).netloc.lower() or "unknown"
+        return urlparse(company.effective_poll_url).netloc.lower() or "unknown"
     except Exception:
         return "unknown"
 
@@ -229,7 +230,7 @@ async def poll_due_companies(
     jobs_upserted = 0
     failures = 0
     semaphores: dict[str, asyncio.Semaphore] = {}
-    async with httpx.AsyncClient() as client:
+    async with create_career_watch_client() as client:
         fetch_outcomes = await asyncio.gather(
             *[
                 _fetch_company_jobs_bounded(company, client=client, semaphores=semaphores)

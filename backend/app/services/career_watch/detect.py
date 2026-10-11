@@ -27,6 +27,8 @@ _BREEZY_RE = re.compile(r"([^.]+)\.breezy\.hr", re.IGNORECASE)
 _PERSONIO_RE = re.compile(r"([^.]+)\.jobs\.personio\.(?:com|de)", re.IGNORECASE)
 _BAMBOOHR_RE = re.compile(r"([^.]+)\.bamboohr\.com", re.IGNORECASE)
 _WORKDAY_HOST = "myworkdayjobs.com"
+_ICIMS_HOST_RE = re.compile(r"^([^.]+)\.icims\.com$", re.IGNORECASE)
+_TALEO_HOST_RE = re.compile(r"^([^.]+)\.taleo\.net$", re.IGNORECASE)
 
 
 def _normalize_url(url: str) -> str:
@@ -133,6 +135,24 @@ def detect_ats_from_url(url: str) -> AtsDetectionResult:
             board_token=f"{tenant}/{site}",
             careers_page_url=normalized,
             company_name=tenant.replace("-", " ").title(),
+        )
+
+    if match := _ICIMS_HOST_RE.match(path.netloc.lower()):
+        token = match.group(1)
+        return AtsDetectionResult(
+            ats_type=CareerAtsType.icims,
+            board_token=token,
+            careers_page_url=normalized,
+            company_name=token.replace("-", " ").title(),
+        )
+
+    if match := _TALEO_HOST_RE.match(path.netloc.lower()):
+        token = match.group(1)
+        return AtsDetectionResult(
+            ats_type=CareerAtsType.generic_html,
+            board_token=token,
+            careers_page_url=normalized,
+            company_name=token.replace("-", " ").title(),
         )
 
     company_hint = path.netloc.split(".")[0].replace("-", " ").title()

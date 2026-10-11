@@ -39,8 +39,9 @@ class WorkdayAdapter:
         *,
         client: httpx.AsyncClient,
     ) -> list[ParsedJob]:
-        html = await fetch_text(client, company.careers_page_url, accept="text/html")
-        return parse_workday_html(html, base_url=company.careers_page_url)
+        poll_url = company.effective_poll_url
+        html = await fetch_text(client, poll_url, accept="text/html")
+        return parse_workday_html(html, base_url=poll_url)
 
 
 def parse_workday_html(html: str, *, base_url: str) -> list[ParsedJob]:

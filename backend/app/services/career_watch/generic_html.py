@@ -201,8 +201,9 @@ class GenericHtmlAdapter:
         *,
         client: httpx.AsyncClient,
     ) -> list[ParsedJob]:
-        html = await fetch_text(client, company.careers_page_url, accept="text/html")
-        return parse_generic_html(html, base_url=company.careers_page_url)
+        poll_url = company.effective_poll_url
+        html = await fetch_text(client, poll_url, accept="text/html")
+        return parse_generic_html(html, base_url=poll_url)
 
 
 def _parse_anchor_jobs(html: str, *, base_url: str) -> list[ParsedJob]:
