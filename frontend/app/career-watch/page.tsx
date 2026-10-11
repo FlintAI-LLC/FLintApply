@@ -20,7 +20,9 @@ import {
   Trash2,
 } from "lucide-react"
 import { useRequireAuth } from "@/lib/auth/guards"
+import { bumpNotificationsRefresh } from "@/lib/notifications"
 import {
+  clearCareerWatchInAppNotifications,
   createCareerWatch,
   deleteCareerWatch,
   detectCareersPage,
@@ -78,6 +80,7 @@ export default function CareerWatchPage() {
   const [keywordsFieldFocused, setKeywordsFieldFocused] = useState(false)
   const [selectedAlertIds, setSelectedAlertIds] = useState<Set<string>>(() => new Set())
   const [dismissingAlerts, setDismissingAlerts] = useState(false)
+  const [clearingBell, setClearingBell] = useState(false)
 
   const pickCareerWatchGuidance = useCallback(
     () =>
@@ -180,6 +183,7 @@ export default function CareerWatchPage() {
     if (!token) return
     await dismissCareerAlert(token, alertId)
     await load()
+    bumpNotificationsRefresh()
   }
 
   function toggleAlertSelected(alertId: string) {
@@ -212,6 +216,7 @@ export default function CareerWatchPage() {
       })
       setSelectedAlertIds(new Set())
       await load()
+      bumpNotificationsRefresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to dismiss alerts")
     } finally {
@@ -227,10 +232,25 @@ export default function CareerWatchPage() {
       await dismissCareerAlertsBulk(token, { dismiss_all: true })
       setSelectedAlertIds(new Set())
       await load()
+      bumpNotificationsRefresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to dismiss alerts")
     } finally {
       setDismissingAlerts(false)
+    }
+  }
+
+  async function handleClearBellJobAlerts() {
+    if (!token) return
+    setClearingBell(true)
+    setError(null)
+    try {
+      await clearCareerWatchInAppNotifications(token)
+      bumpNotificationsRefresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not clear notification bell")
+    } finally {
+      setClearingBell(false)
     }
   }
 
@@ -587,10 +607,21 @@ export default function CareerWatchPage() {
             )}
           </div>
           {alerts.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white/50 dark:bg-slate-900/40 px-6 py-10 text-center">
+            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white/50 dark:bg-slate-900/40 px-6 py-10 text-center space-y-3">
               <BellRing className="mx-auto h-9 w-9 text-slate-400 dark:text-slate-600 mb-2" />
               <p className="text-sm text-slate-600 dark:text-slate-400">No matching roles yet.</p>
               <p className="mt-1 text-xs text-slate-500">When a posting matches, it will show up here.</p>
+              <button
+                type="button"
+                data-testid="career-watch-clear-bell"
+                disabled={clearingBell}
+                className="text-xs font-medium text-violet-700 dark:text-violet-400 hover:underline disabled:opacity-50"
+                onClick={() => void handleClearBellJobAlerts()}
+              >
+                {clearingBell
+                  ? "Clearing…"
+                  : "Bell still shows old job alerts? Clear them from the menu icon"}
+              </button>
             </div>
           ) : (
             <ul className="space-y-3" data-testid="career-watch-alerts-list">

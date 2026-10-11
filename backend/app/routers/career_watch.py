@@ -16,7 +16,11 @@ from app.models.career_watch import CareerAlert, CareerAlertStatus, CareerJobCac
 from app.models.user import User
 from app.services.auth.dependencies import get_current_user
 from app.services.career_watch.limits import CareerWatchLimitError, get_career_watch_limits
-from app.services.career_watch.notifications import dismiss_alert, dismiss_alerts
+from app.services.career_watch.notifications import (
+    clear_career_watch_in_app_notifications,
+    dismiss_alert,
+    dismiss_alerts,
+)
 from app.services.career_watch.keyword_suggestions import suggest_career_watch_keywords
 from app.services.career_watch.watchlist import (
     WatchlistEntry,
@@ -247,6 +251,20 @@ class BulkDismissAlertsRequest(BaseModel):
 
 class BulkDismissAlertsResponse(BaseModel):
     dismissed: int
+
+
+class ClearInAppNotificationsResponse(BaseModel):
+    marked_read: int
+
+
+@router.post("/alerts/clear-in-app-notifications", response_model=ClearInAppNotificationsResponse)
+async def career_watch_clear_in_app_notifications(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> ClearInAppNotificationsResponse:
+    marked = await clear_career_watch_in_app_notifications(db, user_id=user.id)
+    await db.commit()
+    return ClearInAppNotificationsResponse(marked_read=marked)
 
 
 @router.post("/alerts/dismiss", response_model=BulkDismissAlertsResponse)
