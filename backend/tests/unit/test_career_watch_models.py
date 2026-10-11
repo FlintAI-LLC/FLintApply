@@ -76,6 +76,7 @@ def test_career_alert_one_per_user_job() -> None:
 def test_career_ats_type_values() -> None:
     assert CareerAtsType.greenhouse.value == "greenhouse"
     assert CareerAtsType.generic_html.value == "generic_html"
+    assert CareerAtsType.icims.value == "icims"
 
 
 def test_career_alert_status_values() -> None:
