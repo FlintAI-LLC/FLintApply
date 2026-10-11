@@ -36,6 +36,13 @@ def _description_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _varchar500(value: str) -> str:
+    """career_job_cache.title/location/apply_url are VARCHAR(500)."""
+    if len(value) <= 500:
+        return value
+    return value[:497] + "..."
+
+
 def _normalize_description(raw: str) -> str:
     return normalize_job_description(
         raw, max_chars=settings.JD_TEXT_MAX_CHARS
@@ -110,15 +117,18 @@ async def _upsert_career_job_cache(
     ).scalar_one_or_none()
     desc_norm = _normalize_description(job.description_text)
     desc_hash = _description_hash(desc_norm)
+    title = _varchar500(job.title)
+    location = _varchar500(job.location)
+    apply_url = _varchar500(job.apply_url)
     if existing is None:
         session.add(
             CareerJobCache(
                 id=uuid.uuid4(),
                 watched_company_id=company.id,
                 external_job_id=job.external_job_id,
-                title=job.title,
-                location=job.location,
-                apply_url=job.apply_url,
+                title=title,
+                location=location,
+                apply_url=apply_url,
                 description_text=desc_norm,
                 description_hash=desc_hash,
                 posted_at=job.posted_at,
@@ -130,9 +140,9 @@ async def _upsert_career_job_cache(
         )
         return True
 
-    existing.title = job.title
-    existing.location = job.location
-    existing.apply_url = job.apply_url
+    existing.title = title
+    existing.location = location
+    existing.apply_url = apply_url
     existing.description_text = desc_norm
     existing.description_hash = desc_hash
     existing.posted_at = job.posted_at

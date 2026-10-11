@@ -82,15 +82,14 @@ async def match_new_jobs_for_watch(
     min_score: float = 0.25,
 ) -> int:
     """Create alerts for newly seen jobs matching ``watch`` keywords."""
-    since = since or datetime.now(timezone.utc)
-    jobs = (
-        await session.execute(
-            select(CareerJobCache)
-            .where(CareerJobCache.watched_company_id == watch.watched_company_id)
-            .where(CareerJobCache.is_open.is_(True))
-            .where(CareerJobCache.first_seen_at >= since - timedelta(days=7))
-        )
-    ).scalars().all()
+    stmt = (
+        select(CareerJobCache)
+        .where(CareerJobCache.watched_company_id == watch.watched_company_id)
+        .where(CareerJobCache.is_open.is_(True))
+    )
+    if since is not None:
+        stmt = stmt.where(CareerJobCache.first_seen_at >= since - timedelta(days=7))
+    jobs = (await session.execute(stmt)).scalars().all()
 
     created = 0
     keywords = list(watch.keywords or [])

@@ -14,6 +14,7 @@ from app.services.master_resume.crud import get_chunks_for_user
 _WORD_RE = re.compile(r"[a-z][a-z0-9+#.-]{1,48}", re.I)
 _MAX_SUGGESTIONS = 20
 _MIN_TOKEN_LEN = 3
+_MAX_KEYWORD_PHRASE_LEN = 40
 
 
 def _tokens_from_text(text: str) -> list[str]:
@@ -37,9 +38,17 @@ async def suggest_career_watch_keywords(
         phrase = raw.strip().lower()
         if not phrase or len(phrase) < _MIN_TOKEN_LEN:
             return
+        if len(phrase) > _MAX_KEYWORD_PHRASE_LEN:
+            return
         if phrase not in counts:
             ordered.append(phrase)
         counts[phrase] += weight
+
+    def add_title_tokens(raw: str) -> None:
+        cleaned = raw.strip().lower().replace("—", " ").replace("–", "-")
+        for tok in _tokens_from_text(cleaned):
+            if len(tok) >= 4:
+                add_phrase(tok, weight=3)
 
     for chunk in chunks:
         meta = chunk.chunk_metadata or {}
@@ -47,7 +56,7 @@ async def suggest_career_watch_keywords(
             for key in ("job_title", "title", "role"):
                 val = meta.get(key)
                 if isinstance(val, str) and val.strip():
-                    add_phrase(val, weight=3)
+                    add_title_tokens(val)
         if chunk.section_type == MasterResumeSectionType.skills:
             for part in re.split(r"[,;\n|/]+", chunk.content):
                 add_phrase(part, weight=2)

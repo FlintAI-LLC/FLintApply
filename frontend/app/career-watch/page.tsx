@@ -583,8 +583,18 @@ export default function CareerWatchPage() {
                 </span>
               )}
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="career-watch-clear-bell"
+                  disabled={clearingBell}
+                  className="rounded-lg border border-violet-400/30 px-3 py-1.5 text-xs font-medium text-violet-800 dark:text-violet-300 disabled:opacity-50 hover:bg-violet-500/10"
+                  onClick={() => void handleClearBellJobAlerts()}
+                >
+                  {clearingBell ? "Clearing bell…" : "Clear menu bell for job alerts"}
+                </button>
             {alerts.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
+              <>
                 <button
                   type="button"
                   data-testid="career-watch-dismiss-selected"
@@ -603,25 +613,15 @@ export default function CareerWatchPage() {
                 >
                   Dismiss all
                 </button>
-              </div>
+              </>
             )}
+            </div>
           </div>
           {alerts.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white/50 dark:bg-slate-900/40 px-6 py-10 text-center space-y-3">
               <BellRing className="mx-auto h-9 w-9 text-slate-400 dark:text-slate-600 mb-2" />
               <p className="text-sm text-slate-600 dark:text-slate-400">No matching roles yet.</p>
               <p className="mt-1 text-xs text-slate-500">When a posting matches, it will show up here.</p>
-              <button
-                type="button"
-                data-testid="career-watch-clear-bell"
-                disabled={clearingBell}
-                className="text-xs font-medium text-violet-700 dark:text-violet-400 hover:underline disabled:opacity-50"
-                onClick={() => void handleClearBellJobAlerts()}
-              >
-                {clearingBell
-                  ? "Clearing…"
-                  : "Bell still shows old job alerts? Clear them from the menu icon"}
-              </button>
             </div>
           ) : (
             <ul className="space-y-3" data-testid="career-watch-alerts-list">
