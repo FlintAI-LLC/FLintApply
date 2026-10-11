@@ -19,9 +19,8 @@ type NavSession = {
 export function shouldShowUserMenu(
   status: AuthStatus,
   session: NavSession,
-  sessionDead: boolean,
 ): boolean {
-  if (status !== "authenticated" || session == null || sessionDead) return false
+  if (status !== "authenticated" || session == null) return false
   if (session.backendUser != null) return true
   if (session.backendAccessToken) return true
   if (session.error === "TokenExpired") return true

@@ -64,7 +64,9 @@ export function StaleSessionGuard() {
     const tearDownIfDead = () => {
       if (signingOutRef.current) return
       const unusable =
-        needsBackendAccessRefresh(sessionRef.current) || serverRejectedRef.current
+        needsBackendAccessRefresh(sessionRef.current) ||
+        serverRejectedRef.current ||
+        isSessionDead()
       const now = Date.now()
       if (!unusable) {
         unusableSinceRef.current = null

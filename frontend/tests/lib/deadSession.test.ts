@@ -8,16 +8,16 @@ import {
 const base = { unusable: true, dead: false, exhausted: false, unusableForMs: 0 }
 
 describe("shouldSignOutForDeadSession", () => {
-  it("never signs out while the token is still usable", () => {
+  it("signs out when the refresh cookie is dead even if the access JWT is still usable", () => {
     assert.equal(
       shouldSignOutForDeadSession({
         ...base,
         unusable: false,
         dead: true,
         exhausted: true,
-        unusableForMs: UNRECOVERABLE_GRACE_MS * 10,
+        unusableForMs: 0,
       }),
-      false,
+      true,
     )
   })
 

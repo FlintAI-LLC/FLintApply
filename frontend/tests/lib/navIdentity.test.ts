@@ -15,23 +15,23 @@ describe("shouldShowUserMenu", () => {
     ]
 
     for (const session of rotation) {
-      assert.equal(shouldShowUserMenu("authenticated", session, false), true)
+      assert.equal(shouldShowUserMenu("authenticated", session), true)
     }
   })
 
   it("hides the menu for OAuth-only session without backend user", () => {
     assert.equal(
-      shouldShowUserMenu("authenticated", { user: { name: "OAuth" } }, false),
+      shouldShowUserMenu("authenticated", { user: { name: "OAuth" } }),
       false,
     )
   })
 
-  it("hides the menu when signed out, loading, without a session, or dead", () => {
+  it("hides the menu when signed out, loading, or without a session", () => {
     const session = { backendAccessToken: "tok" }
-    assert.equal(shouldShowUserMenu("unauthenticated", null, false), false)
-    assert.equal(shouldShowUserMenu("loading", undefined, false), false)
-    assert.equal(shouldShowUserMenu("authenticated", null, false), false)
-    assert.equal(shouldShowUserMenu("authenticated", session, true), false)
+    assert.equal(shouldShowUserMenu("unauthenticated", null), false)
+    assert.equal(shouldShowUserMenu("loading", undefined), false)
+    assert.equal(shouldShowUserMenu("authenticated", null), false)
+    assert.equal(shouldShowUserMenu("authenticated", session), true)
   })
 
   it("NavBar assigns showUserMenu from the helper alone", () => {
@@ -43,7 +43,7 @@ describe("shouldShowUserMenu", () => {
     assert.ok(assignment, "showUserMenu assignment not found")
     assert.equal(
       assignment[1].replace(/\s+/g, " ").trim(),
-      "shouldShowUserMenu(status, session, isSessionDead())",
+      "shouldShowUserMenu(status, session)",
     )
   })
 })

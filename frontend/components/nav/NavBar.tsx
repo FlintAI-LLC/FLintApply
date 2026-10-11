@@ -29,7 +29,6 @@ import { getSubscriptionCurrent } from "@/lib/api"
 import { isSubscriptionActive } from "@/lib/billing"
 import { liveBackendAccessToken } from "@/lib/auth/accessToken"
 import { shouldShowUserMenu } from "@/lib/auth/navIdentity"
-import { isSessionDead } from "@/lib/auth/refreshBackendSession"
 import { needsEmailVerification } from "@/lib/auth/emailVerification"
 import { clsx } from "clsx"
 import { NotificationBell } from "@/components/nav/NotificationBell"
@@ -56,7 +55,7 @@ export function NavBar() {
 
   const accessToken = liveBackendAccessToken(session)
 
-  const showUserMenu = shouldShowUserMenu(status, session, isSessionDead())
+  const showUserMenu = shouldShowUserMenu(status, session)
   useEffect(() => {
     if (showUserMenu) {
       setHadUserMenu(true)

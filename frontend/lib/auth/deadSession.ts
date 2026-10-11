@@ -18,7 +18,8 @@ export interface DeadSessionInput {
  * not bounce the user, but a broken page can never stay up indefinitely.
  */
 export function shouldSignOutForDeadSession(input: DeadSessionInput): boolean {
-  if (!input.unusable) return false
+  // Refresh cookie rejected — end the session even if the access JWT has not expired yet.
   if (input.dead) return true
+  if (!input.unusable) return false
   return input.exhausted && input.unusableForMs >= UNRECOVERABLE_GRACE_MS
 }
