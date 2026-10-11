@@ -5,8 +5,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0050_career_job_cache_location_text"
-down_revision: str | None = "0049_career_ats_type_icims"
+revision: str = "0050_job_cache_location_text"
+down_revision: str | None = "0049_career_ats_icims"
 branch_labels = None
 depends_on = None
 

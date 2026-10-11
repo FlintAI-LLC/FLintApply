@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision: str = "0049_career_ats_type_icims"
-down_revision: str | None = "0048_watched_company_canonical_poll_url"
+revision: str = "0049_career_ats_icims"
+down_revision: str | None = "0048_canonical_poll_url"
 branch_labels = None
 depends_on = None
 

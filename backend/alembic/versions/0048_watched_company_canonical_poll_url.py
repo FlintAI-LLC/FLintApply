@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0048_watched_company_canonical_poll_url"
+revision: str = "0048_canonical_poll_url"
 down_revision: str | None = "0047_sync_users_tier_backfill"
 branch_labels = None
 depends_on = None
