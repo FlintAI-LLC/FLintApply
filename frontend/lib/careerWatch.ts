@@ -121,3 +121,16 @@ export async function dismissCareerAlert(token: string, alertId: string): Promis
     method: "POST",
   })
 }
+
+export async function dismissCareerAlertsBulk(
+  token: string,
+  body: { alert_ids?: string[]; dismiss_all?: boolean },
+): Promise<{ dismissed: number }> {
+  return apiFetch("/api/career-watch/alerts/dismiss", token, {
+    method: "POST",
+    body: JSON.stringify({
+      alert_ids: body.alert_ids ?? [],
+      dismiss_all: Boolean(body.dismiss_all),
+    }),
+  })
+}

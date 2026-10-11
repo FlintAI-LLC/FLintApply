@@ -82,3 +82,24 @@ async def test_career_watch_create_and_list(app_client: AsyncClient) -> None:
 
     limits_after = await app_client.get("/api/career-watch/limits", headers=headers)
     assert limits_after.json()["active_watches"] == 0
+
+
+@pytest.mark.asyncio
+async def test_career_watch_bulk_dismiss_requires_auth(app_client: AsyncClient) -> None:
+    resp = await app_client.post(
+        "/api/career-watch/alerts/dismiss",
+        json={"alert_ids": [], "dismiss_all": False},
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_career_watch_bulk_dismiss_validation(app_client: AsyncClient) -> None:
+    token = await _register(app_client)
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = await app_client.post(
+        "/api/career-watch/alerts/dismiss",
+        json={"alert_ids": [], "dismiss_all": False},
+        headers=headers,
+    )
+    assert resp.status_code == 422

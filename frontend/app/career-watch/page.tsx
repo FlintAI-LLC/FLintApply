@@ -25,6 +25,7 @@ import {
   deleteCareerWatch,
   detectCareersPage,
   dismissCareerAlert,
+  dismissCareerAlertsBulk,
   getCareerWatchKeywordSuggestions,
   getCareerWatchLimits,
   listCareerAlerts,
@@ -75,6 +76,8 @@ export default function CareerWatchPage() {
   const [submitting, setSubmitting] = useState(false)
   const [suggestingKeywords, setSuggestingKeywords] = useState(false)
   const [keywordsFieldFocused, setKeywordsFieldFocused] = useState(false)
+  const [selectedAlertIds, setSelectedAlertIds] = useState<Set<string>>(() => new Set())
+  const [dismissingAlerts, setDismissingAlerts] = useState(false)
 
   const pickCareerWatchGuidance = useCallback(
     () =>
@@ -103,6 +106,14 @@ export default function CareerWatchPage() {
       ])
       setWatches(watchRows)
       setAlerts(alertRows)
+      setSelectedAlertIds((prev) => {
+        const valid = new Set(alertRows.map((a) => a.id))
+        const next = new Set<string>()
+        for (const id of prev) {
+          if (valid.has(id)) next.add(id)
+        }
+        return next
+      })
       setLimits(limitRows)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load Career Watch")
@@ -169,6 +180,58 @@ export default function CareerWatchPage() {
     if (!token) return
     await dismissCareerAlert(token, alertId)
     await load()
+  }
+
+  function toggleAlertSelected(alertId: string) {
+    setSelectedAlertIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(alertId)) next.delete(alertId)
+      else next.add(alertId)
+      return next
+    })
+  }
+
+  const allAlertsSelected =
+    alerts.length > 0 && alerts.every((a) => selectedAlertIds.has(a.id))
+
+  function toggleSelectAllAlerts() {
+    if (allAlertsSelected) {
+      setSelectedAlertIds(new Set())
+      return
+    }
+    setSelectedAlertIds(new Set(alerts.map((a) => a.id)))
+  }
+
+  async function handleDismissSelected() {
+    if (!token || selectedAlertIds.size === 0) return
+    setDismissingAlerts(true)
+    setError(null)
+    try {
+      await dismissCareerAlertsBulk(token, {
+        alert_ids: [...selectedAlertIds],
+      })
+      setSelectedAlertIds(new Set())
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to dismiss alerts")
+    } finally {
+      setDismissingAlerts(false)
+    }
+  }
+
+  async function handleDismissAllAlerts() {
+    if (!token || alerts.length === 0) return
+    setDismissingAlerts(true)
+    setError(null)
+    try {
+      await dismissCareerAlertsBulk(token, { dismiss_all: true })
+      setSelectedAlertIds(new Set())
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to dismiss alerts")
+    } finally {
+      setDismissingAlerts(false)
+    }
   }
 
   async function handleSuggestKeywords() {
@@ -280,6 +343,18 @@ export default function CareerWatchPage() {
             )}
           </div>
         </header>
+
+        <div
+          className="rounded-xl border border-violet-400/25 bg-violet-500/5 px-4 py-3 text-sm text-slate-700 dark:text-slate-300"
+          data-testid="career-watch-referral-tip"
+        >
+          <span className="font-semibold text-violet-800 dark:text-violet-300">Referrals:</span>{" "}
+          Add every company where you have a referral or inside contact — paste their official careers
+          page URL so you see new roles early.{" "}
+          <Link href="/guide" className="font-medium text-violet-700 dark:text-violet-400 hover:underline">
+            More in the guide
+          </Link>
+        </div>
 
         {error && (
           <div
@@ -478,13 +553,37 @@ export default function CareerWatchPage() {
         </section>
 
         <section className="space-y-4 pb-8">
-          <div className="flex items-center gap-2">
-            <BellRing className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-            <h2 className="text-lg font-semibold">Recent alerts</h2>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <BellRing className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+              <h2 className="text-lg font-semibold">Recent alerts</h2>
+              {alerts.length > 0 && (
+                <span className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-800 dark:text-violet-300 border border-violet-400/25">
+                  {alerts.length}
+                </span>
+              )}
+            </div>
             {alerts.length > 0 && (
-              <span className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-800 dark:text-violet-300 border border-violet-400/25">
-                {alerts.length}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="career-watch-dismiss-selected"
+                  disabled={dismissingAlerts || selectedAlertIds.size === 0}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium disabled:opacity-50 hover:border-violet-400/40"
+                  onClick={() => void handleDismissSelected()}
+                >
+                  {dismissingAlerts ? "Dismissing…" : `Dismiss selected (${selectedAlertIds.size})`}
+                </button>
+                <button
+                  type="button"
+                  data-testid="career-watch-dismiss-all"
+                  disabled={dismissingAlerts}
+                  className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-800 dark:text-red-300 disabled:opacity-50 hover:bg-red-500/15"
+                  onClick={() => void handleDismissAllAlerts()}
+                >
+                  Dismiss all
+                </button>
+              </div>
             )}
           </div>
           {alerts.length === 0 ? (
@@ -494,13 +593,40 @@ export default function CareerWatchPage() {
               <p className="mt-1 text-xs text-slate-500">When a posting matches, it will show up here.</p>
             </div>
           ) : (
-            <ul className="space-y-3">
+            <ul className="space-y-3" data-testid="career-watch-alerts-list">
+              <li className="flex items-center gap-3 px-1 text-xs text-slate-600 dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  id="cw-alerts-select-all"
+                  data-testid="career-watch-alerts-select-all"
+                  checked={allAlertsSelected}
+                  onChange={toggleSelectAllAlerts}
+                  className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-400"
+                />
+                <label htmlFor="cw-alerts-select-all" className="cursor-pointer select-none">
+                  Select all on this page
+                </label>
+              </li>
               {alerts.map((alert) => (
                 <li
                   key={alert.id}
-                  className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm"
+                  data-testid={`career-watch-alert-${alert.id}`}
+                  className={clsx(
+                    "flex items-start gap-3 rounded-2xl border p-4 shadow-sm",
+                    selectedAlertIds.has(alert.id)
+                      ? "border-violet-400/50 bg-violet-500/5 dark:bg-violet-500/10"
+                      : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900",
+                  )}
                 >
-                  <div className="min-w-0 space-y-1">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select alert ${alert.job_title}`}
+                    data-testid={`career-watch-alert-select-${alert.id}`}
+                    checked={selectedAlertIds.has(alert.id)}
+                    onChange={() => toggleAlertSelected(alert.id)}
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-amber-600 focus:ring-amber-400"
+                  />
+                  <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold text-slate-900 dark:text-white">{alert.job_title}</p>
                       {alert.match_score != null && (

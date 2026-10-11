@@ -22,6 +22,15 @@ export function nextJobsGuidanceStep(ctx: {
     ctx.searchResultCount !== undefined &&
     ctx.searchResultCount > 0 &&
     isGuidanceSeen("jobs.js1") &&
+    !isGuidanceSeen("jobs.js6")
+  ) {
+    return "jobs.js6";
+  }
+
+  if (
+    ctx.searchResultCount !== undefined &&
+    ctx.searchResultCount > 0 &&
+    isGuidanceSeen("jobs.js1") &&
     !isGuidanceSeen("jobs.js2")
   ) {
     return "jobs.js2";

@@ -11,6 +11,13 @@ export function nextCareerWatchGuidanceStep(ctx: {
   if (ctx.watchCount === 0 && !isGuidanceSeen("career_watch.cw1")) {
     return "career_watch.cw1";
   }
+  if (
+    ctx.watchCount === 0 &&
+    isGuidanceSeen("career_watch.cw1") &&
+    !isGuidanceSeen("career_watch.cw6")
+  ) {
+    return "career_watch.cw6";
+  }
   if (ctx.keywordsFieldFocused) {
     if (isGuidanceSeen("career_watch.cw1") && !isGuidanceSeen("career_watch.cw2")) {
       return "career_watch.cw2";

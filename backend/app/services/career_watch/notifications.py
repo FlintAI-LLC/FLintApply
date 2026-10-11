@@ -91,4 +91,55 @@ async def dismiss_alert(
     return alert
 
 
-__all__ = ["dismiss_alert", "emit_career_watch_alert"]
+_MAX_BULK_DISMISS = 100
+_ACTIVE_ALERT_STATUSES = (
+    CareerAlertStatus.pending,
+    CareerAlertStatus.sent,
+)
+
+
+async def dismiss_alerts(
+    session: AsyncSession,
+    *,
+    user_id,
+    alert_ids: list | None = None,
+    dismiss_all: bool = False,
+) -> int:
+    """Dismiss active alerts for ``user_id``. Returns count updated."""
+    if dismiss_all:
+        stmt = (
+            select(CareerAlert)
+            .where(CareerAlert.user_id == user_id)
+            .where(CareerAlert.status.in_(_ACTIVE_ALERT_STATUSES))
+            .limit(_MAX_BULK_DISMISS + 1)
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+        if len(rows) > _MAX_BULK_DISMISS:
+            raise ValueError("too many alerts to dismiss at once")
+        for alert in rows:
+            alert.status = CareerAlertStatus.dismissed
+        await session.flush()
+        return len(rows)
+
+    if not alert_ids:
+        raise ValueError("alert_ids required when dismiss_all is false")
+    if len(alert_ids) > _MAX_BULK_DISMISS:
+        raise ValueError("too many alert_ids")
+
+    unique_ids = list(dict.fromkeys(alert_ids))
+    stmt = (
+        select(CareerAlert)
+        .where(CareerAlert.user_id == user_id)
+        .where(CareerAlert.id.in_(unique_ids))
+        .where(CareerAlert.status.in_(_ACTIVE_ALERT_STATUSES))
+    )
+    rows = list((await session.execute(stmt)).scalars().all())
+    if len(rows) != len(unique_ids):
+        raise LookupError("one or more alerts not found or already dismissed")
+    for alert in rows:
+        alert.status = CareerAlertStatus.dismissed
+    await session.flush()
+    return len(rows)
+
+
+__all__ = ["dismiss_alert", "dismiss_alerts", "emit_career_watch_alert"]

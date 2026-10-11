@@ -12,6 +12,7 @@ export type GuidanceStepId =
   | "jobs.js3"
   | "jobs.js4"
   | "jobs.js5"
+  | "jobs.js6"
   | "session.jt1"
   | "session.jt1b"
   | "session.jt2a"
@@ -26,6 +27,7 @@ export type GuidanceStepId =
   | "career_watch.cw3"
   | "career_watch.cw4"
   | "career_watch.cw5"
+  | "career_watch.cw6"
   | "notifications.no1"
   | "notifications.no2"
   | "notifications.no3"
@@ -138,6 +140,14 @@ export const GUIDANCE_CONTENT: Record<GuidanceStepId, GuidanceContent> = {
     body:
       "Add preferred job titles so keyword and match search work better. Keep titles close to what you search for on job boards.",
   },
+  "jobs.js6": {
+    id: "jobs.js6",
+    title: "Watch companies where you have a referral",
+    body:
+      "If someone at a company can refer you — or you already have a contact there — add that company's careers page to Career Watch. Referrals are one of the strongest levers in a search; watching the board means you see new roles early instead of only when they hit big job sites.",
+    learnMoreHref: "/career-watch",
+    learnMoreLabel: "Open Career Watch",
+  },
   "session.jt1": {
     id: "session.jt1",
     title: "Use a complete job description",
@@ -224,7 +234,15 @@ export const GUIDANCE_CONTENT: Record<GuidanceStepId, GuidanceContent> = {
     id: "career_watch.cw5",
     title: "Expect multiple alerts per company",
     body:
-      "Many roles can match the same keywords in one poll. Dismiss alerts you do not want; that does not affect future matches.",
+      "Many roles can match the same keywords in one poll. Use checkboxes to select alerts, then Dismiss selected — or Dismiss all — instead of clearing them one by one. Dismissing does not affect future matches.",
+  },
+  "career_watch.cw6": {
+    id: "career_watch.cw6",
+    title: "Prioritize companies with referrals",
+    body:
+      "Add every company where you have a referral, an inside contact, or someone willing to be a reference. Paste their official careers or ATS URL (Lever, Ashby, Workday, etc.) — not a LinkedIn search page. When a role opens that fits your keywords, you can apply while your contact still has bandwidth to refer you.",
+    guideBody:
+      "Think: \"Who could put my resume in front of a hiring manager?\" Those employers belong on your watch list even if you are not actively searching them every day.",
   },
   "notifications.no1": {
     id: "notifications.no1",
