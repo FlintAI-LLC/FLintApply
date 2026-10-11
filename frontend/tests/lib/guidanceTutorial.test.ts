@@ -110,8 +110,17 @@ describe("nextCareerWatchGuidanceStep", () => {
     );
   });
 
-  it("returns cw2 after cw1 when keywords field focused", () => {
+  it("returns cw6 after cw1 on empty watchlist", () => {
     markGuidanceSeen("career_watch.cw1");
+    assert.equal(
+      nextCareerWatchGuidanceStep({ watchCount: 0, alertCount: 0 }),
+      "career_watch.cw6",
+    );
+  });
+
+  it("returns cw2 after cw1 and cw6 when keywords field focused", () => {
+    markGuidanceSeen("career_watch.cw1");
+    markGuidanceSeen("career_watch.cw6");
     assert.equal(
       nextCareerWatchGuidanceStep({
         watchCount: 0,

@@ -16,7 +16,7 @@ from app.models.career_watch import CareerAlert, CareerAlertStatus, CareerJobCac
 from app.models.user import User
 from app.services.auth.dependencies import get_current_user
 from app.services.career_watch.limits import CareerWatchLimitError, get_career_watch_limits
-from app.services.career_watch.notifications import dismiss_alert
+from app.services.career_watch.notifications import dismiss_alert, dismiss_alerts
 from app.services.career_watch.keyword_suggestions import suggest_career_watch_keywords
 from app.services.career_watch.watchlist import (
     WatchlistEntry,
@@ -238,6 +238,44 @@ async def career_watch_alerts(
         )
         for alert, job in rows
     ]
+
+
+class BulkDismissAlertsRequest(BaseModel):
+    alert_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
+    dismiss_all: bool = False
+
+
+class BulkDismissAlertsResponse(BaseModel):
+    dismissed: int
+
+
+@router.post("/alerts/dismiss", response_model=BulkDismissAlertsResponse)
+async def career_watch_dismiss_alerts_bulk(
+    body: BulkDismissAlertsRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> BulkDismissAlertsResponse:
+    if not body.dismiss_all and not body.alert_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Provide alert_ids or set dismiss_all=true",
+        )
+    try:
+        count = await dismiss_alerts(
+            db,
+            user_id=user.id,
+            alert_ids=body.alert_ids if body.alert_ids else None,
+            dismiss_all=body.dismiss_all,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await db.commit()
+    return BulkDismissAlertsResponse(dismissed=count)
 
 
 @router.post("/alerts/{alert_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT)
