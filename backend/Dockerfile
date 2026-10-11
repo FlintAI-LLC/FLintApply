@@ -19,6 +19,10 @@ COPY pyproject.toml uv.lock* README.md ./
 COPY app ./app
 RUN uv sync --frozen --no-dev
 
+# Chromium for the Career Watch headless render fallback tier (poll worker only).
+# --with-deps installs the OS libraries Chromium needs on this base image.
+RUN uv run playwright install --with-deps chromium
+
 COPY . .
 
 RUN chmod +x docker-entrypoint.sh
