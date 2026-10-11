@@ -22,6 +22,7 @@ from app.services.career_watch.notifications import (
     dismiss_alerts,
 )
 from app.services.career_watch.keyword_suggestions import suggest_career_watch_keywords
+from app.services.career_watch.probe import ProbeStatus, probe_careers_page
 from app.services.career_watch.watchlist import (
     WatchlistEntry,
     add_watch,
@@ -43,6 +44,9 @@ class DetectResponse(BaseModel):
     board_token: str | None
     careers_page_url: str
     company_name: str | None
+    probe_status: str
+    job_count: int
+    probe_message: str
 
 
 class WatchCreateRequest(BaseModel):
@@ -151,6 +155,18 @@ async def career_watch_create(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> WatchResponse:
+    probe = await probe_careers_page(body.careers_page_url)
+    if probe.status == ProbeStatus.error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "career_watch_url_probe_failed",
+                "message": probe.message,
+                "probe_status": probe.status.value,
+                "job_count": probe.job_count,
+            },
+        )
+
     try:
         entry = await add_watch(
             db,
@@ -254,7 +270,7 @@ class BulkDismissAlertsResponse(BaseModel):
 
 
 class ClearInAppNotificationsResponse(BaseModel):
-    marked_read: int
+    cleared: int
 
 
 @router.post("/alerts/clear-in-app-notifications", response_model=ClearInAppNotificationsResponse)
@@ -262,9 +278,9 @@ async def career_watch_clear_in_app_notifications(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> ClearInAppNotificationsResponse:
-    marked = await clear_career_watch_in_app_notifications(db, user_id=user.id)
+    cleared = await clear_career_watch_in_app_notifications(db, user_id=user.id)
     await db.commit()
-    return ClearInAppNotificationsResponse(marked_read=marked)
+    return ClearInAppNotificationsResponse(cleared=cleared)
 
 
 @router.post("/alerts/dismiss", response_model=BulkDismissAlertsResponse)

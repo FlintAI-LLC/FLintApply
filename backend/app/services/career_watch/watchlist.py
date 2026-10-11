@@ -18,7 +18,9 @@ from app.models.career_watch import (
     WatchedCompany,
 )
 from app.services.career_watch.detect import detect_ats_from_url
+from app.services.career_watch.http_client import _RESOLVER_TIMEOUT, create_career_watch_client
 from app.services.career_watch.limits import assert_can_add_watch
+from app.services.career_watch.resolver import resolve_careers_board
 
 
 def _slugify(value: str) -> str:
@@ -72,7 +74,12 @@ async def _get_or_create_company(
     careers_page_url: str,
     company_name: str | None = None,
 ) -> WatchedCompany:
-    detection = detect_ats_from_url(careers_page_url)
+    async with create_career_watch_client(timeout=_RESOLVER_TIMEOUT) as client:
+        resolution = await resolve_careers_board(careers_page_url, client=client)
+    detection = resolution.detection
+    canonical_poll_url = (
+        resolution.canonical_poll_url if resolution.resolved_away_from_input else None
+    )
     slug_base = _slugify(company_name or detection.company_name or detection.board_token or "company")
     slug = slug_base
     suffix = 1
@@ -94,7 +101,8 @@ async def _get_or_create_company(
         id=uuid.uuid4(),
         name=company_name or detection.company_name or slug.replace("-", " ").title(),
         slug=slug,
-        careers_page_url=detection.careers_page_url,
+        careers_page_url=resolution.input_url,
+        canonical_poll_url=canonical_poll_url,
         ats_type=detection.ats_type,
         ats_board_token=detection.board_token,
     )
@@ -196,13 +204,24 @@ async def _owned_watch(
     return row
 
 
-async def detect_careers_page(careers_page_url: str) -> dict[str, str | None]:
-    detection = detect_ats_from_url(careers_page_url)
+async def detect_careers_page(careers_page_url: str) -> dict[str, str | int | None]:
+    from app.services.career_watch.probe import probe_careers_page
+
+    async with create_career_watch_client(timeout=_RESOLVER_TIMEOUT) as client:
+        resolution = await resolve_careers_board(careers_page_url, client=client)
+    detection = resolution.detection
+    probe = await probe_careers_page(careers_page_url)
     return {
         "ats_type": detection.ats_type.value,
         "board_token": detection.board_token,
-        "careers_page_url": detection.careers_page_url,
+        "careers_page_url": resolution.input_url,
+        "canonical_poll_url": resolution.canonical_poll_url
+        if resolution.resolved_away_from_input
+        else None,
         "company_name": detection.company_name,
+        "probe_status": probe.status.value,
+        "job_count": probe.job_count,
+        "probe_message": probe.message,
     }
 
 

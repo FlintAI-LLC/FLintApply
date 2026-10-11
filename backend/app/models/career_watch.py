@@ -47,6 +47,7 @@ class CareerAtsType(str, enum.Enum):
     breezy = "breezy"
     personio = "personio"
     bamboohr = "bamboohr"
+    icims = "icims"
 
 
 class CareerAlertStatus(str, enum.Enum):
@@ -81,6 +82,7 @@ class WatchedCompany(Base):
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     slug: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     careers_page_url: Mapped[str] = mapped_column(Text, nullable=False)
+    canonical_poll_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     ats_type: Mapped[CareerAtsType] = mapped_column(
         _CAREER_ATS_TYPE_PG,
         nullable=False,
@@ -113,6 +115,10 @@ class WatchedCompany(Base):
         default=_utcnow,
         server_default=text("now()"),
     )
+
+    @property
+    def effective_poll_url(self) -> str:
+        return self.canonical_poll_url or self.careers_page_url
 
     __table_args__ = (
         Index("ix_watched_companies_active_poll", "is_active", "last_polled_at"),
@@ -188,7 +194,7 @@ class CareerJobCache(Base):
     external_job_id: Mapped[str] = mapped_column(String(255), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     location: Mapped[str] = mapped_column(
-        String(500), nullable=False, default="", server_default=""
+        Text, nullable=False, default="", server_default=""
     )
     apply_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
     description_text: Mapped[str] = mapped_column(Text, nullable=False, default="")

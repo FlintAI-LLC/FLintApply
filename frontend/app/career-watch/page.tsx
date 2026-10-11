@@ -35,6 +35,7 @@ import {
   type CareerWatchAlert,
   type CareerWatchEntry,
   type CareerWatchLimits,
+  type DetectResult,
 } from "@/lib/careerWatch"
 
 const inputClass =
@@ -75,6 +76,10 @@ export default function CareerWatchPage() {
   const [keywords, setKeywords] = useState("")
   const [companyName, setCompanyName] = useState("")
   const [detectedAts, setDetectedAts] = useState<string | null>(null)
+  const [probeStatus, setProbeStatus] = useState<"ok" | "warning" | "error" | null>(null)
+  const [probeMessage, setProbeMessage] = useState<string | null>(null)
+  const [jobCount, setJobCount] = useState<number | null>(null)
+  const [probing, setProbing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [suggestingKeywords, setSuggestingKeywords] = useState(false)
   const [keywordsFieldFocused, setKeywordsFieldFocused] = useState(false)
@@ -129,22 +134,45 @@ export default function CareerWatchPage() {
     void load()
   }, [load])
 
-  async function handleDetect() {
-    if (!token || !url.trim()) return
+  async function handleDetect(): Promise<DetectResult | null> {
+    if (!token || !url.trim()) return null
+    setProbing(true)
+    setError(null)
+    setProbeStatus(null)
+    setProbeMessage(null)
+    setJobCount(null)
     try {
       const result = await detectCareersPage(token, url.trim())
       setDetectedAts(result.ats_type)
+      setProbeStatus(result.probe_status)
+      setProbeMessage(result.probe_message)
+      setJobCount(result.job_count)
       if (result.company_name && !companyName) {
         setCompanyName(result.company_name)
       }
+      return result
     } catch (e) {
       setError(e instanceof Error ? e.message : "Detection failed")
+      setDetectedAts(null)
+      return null
+    } finally {
+      setProbing(false)
     }
   }
 
   async function handleAdd(e: FormEvent) {
     e.preventDefault()
     if (!token || !url.trim()) return
+    let probe = probeStatus
+    if (probe === null) {
+      const result = await handleDetect()
+      if (!result) return
+      probe = result.probe_status
+    }
+    if (probe === "error") {
+      setError(probeMessage ?? "Fix the careers URL before adding this company.")
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
@@ -165,6 +193,9 @@ export default function CareerWatchPage() {
       setKeywords("")
       setCompanyName("")
       setDetectedAts(null)
+      setProbeStatus(null)
+      setProbeMessage(null)
+      setJobCount(null)
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add company")
@@ -397,7 +428,8 @@ export default function CareerWatchPage() {
             <div>
               <h2 className="text-lg font-semibold">Add a company</h2>
               <p className="text-xs text-slate-600 dark:text-slate-400">
-                Paste a Greenhouse, Lever, Ashby, or similar careers URL.
+                Paste the <strong className="font-medium">job board URL</strong> from your browser when
+                listings are visible — not a marketing homepage.
               </p>
             </div>
           </div>
@@ -412,25 +444,59 @@ export default function CareerWatchPage() {
                 className={clsx(inputClass, "flex-1")}
                 placeholder="https://boards.greenhouse.io/acme"
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                onChange={(e) => {
+                  setUrl(e.target.value)
+                  setDetectedAts(null)
+                  setProbeStatus(null)
+                  setProbeMessage(null)
+                  setJobCount(null)
+                }}
                 onBlur={() => void handleDetect()}
               />
               <button
                 type="button"
                 className="shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-4 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-200 hover:border-amber-400/50 hover:bg-amber-500/5 transition-colors"
                 onClick={() => void handleDetect()}
+                disabled={probing}
               >
-                Detect ATS
+                {probing ? "Checking…" : "Check URL"}
               </button>
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-500 leading-relaxed">
+              Good: <code className="text-[11px]">boards.greenhouse.io/…</code>,{" "}
+              <code className="text-[11px]">jobs.lever.co/…</code>,{" "}
+              <code className="text-[11px]">jobs.ashbyhq.com/…</code>, full Workday careers site.
+              Weak: corporate pages like <code className="text-[11px]">careers.costco.com/jobs</code>{" "}
+              (often JavaScript-only — we cannot read listings).
+            </p>
             {detectedAts && (
               <p
                 data-testid="career-watch-detected-ats"
-                className="text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5"
+                className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1.5"
               >
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-400" />
                 Detected ATS:{" "}
                 <span className="font-medium capitalize">{atsLabel(detectedAts)}</span>
+                {jobCount !== null && probeStatus !== "error" ? (
+                  <span className="text-slate-500"> · {jobCount} listing(s) found</span>
+                ) : null}
+              </p>
+            )}
+            {probeMessage && probeStatus && (
+              <p
+                data-testid="career-watch-probe-message"
+                role={probeStatus === "error" ? "alert" : "status"}
+                className={clsx(
+                  "text-xs rounded-lg border px-3 py-2 leading-relaxed",
+                  probeStatus === "ok" &&
+                    "border-emerald-400/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200",
+                  probeStatus === "warning" &&
+                    "border-amber-400/30 bg-amber-500/10 text-amber-950 dark:text-amber-100",
+                  probeStatus === "error" &&
+                    "border-red-400/30 bg-red-500/10 text-red-900 dark:text-red-200",
+                )}
+              >
+                {probeMessage}
               </p>
             )}
           </div>
@@ -482,7 +548,7 @@ export default function CareerWatchPage() {
 
           <button
             type="submit"
-            disabled={submitting || !url.trim()}
+            disabled={submitting || probing || !url.trim() || probeStatus === "error"}
             data-testid="career-watch-add-submit"
             className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-sm hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 transition-all"
           >

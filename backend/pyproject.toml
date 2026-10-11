@@ -47,6 +47,7 @@ dependencies = [
     "weasyprint>=70.0",
     "zxcvbn>=4.5.0",
     "pgvector>=0.4.2",
+    "playwright>=1.49.0",
 ]
 
 [dependency-groups]

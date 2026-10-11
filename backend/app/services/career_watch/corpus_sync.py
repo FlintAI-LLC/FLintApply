@@ -12,6 +12,7 @@ import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,16 +32,27 @@ from app.services.jobs.normalization import (
 )
 from app.services.jobs.cache_writer import upsert_job_cache
 
+log = structlog.get_logger("career_watch.corpus_sync")
+
+_CAREER_CACHE_TITLE_MAX = 500
+_CAREER_CACHE_LOCATION_MAX = 8000
+_CAREER_CACHE_APPLY_URL_MAX = 8000
+
 
 def _description_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _varchar500(value: str) -> str:
-    """career_job_cache.title/location/apply_url are VARCHAR(500)."""
-    if len(value) <= 500:
+def _truncate_field(value: str, *, max_len: int, field: str) -> str:
+    if len(value) <= max_len:
         return value
-    return value[:497] + "..."
+    log.warning(
+        "career_job_cache_field_truncated",
+        field=field,
+        original_length=len(value),
+        max_length=max_len,
+    )
+    return value[: max_len - 3] + "..."
 
 
 def _normalize_description(raw: str) -> str:
@@ -117,9 +129,13 @@ async def _upsert_career_job_cache(
     ).scalar_one_or_none()
     desc_norm = _normalize_description(job.description_text)
     desc_hash = _description_hash(desc_norm)
-    title = _varchar500(job.title)
-    location = _varchar500(job.location)
-    apply_url = _varchar500(job.apply_url)
+    title = _truncate_field(job.title, max_len=_CAREER_CACHE_TITLE_MAX, field="title")
+    location = _truncate_field(
+        job.location, max_len=_CAREER_CACHE_LOCATION_MAX, field="location"
+    )
+    apply_url = _truncate_field(
+        job.apply_url, max_len=_CAREER_CACHE_APPLY_URL_MAX, field="apply_url"
+    )
     if existing is None:
         session.add(
             CareerJobCache(

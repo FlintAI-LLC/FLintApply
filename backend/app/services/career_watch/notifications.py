@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import structlog
 import uuid
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.career_watch import CareerAlert, CareerAlertStatus, CareerJobCache
@@ -73,29 +73,31 @@ async def emit_career_watch_alert(session: AsyncSession, alert: CareerAlert) -> 
     return True
 
 
-async def _mark_in_app_career_watch_read(
+def _in_app_job_alert_filters(user_id: uuid.UUID) -> list:
+    """In-app rows shown under the bell for Career Watch / job alerts."""
+    return [
+        Notification.user_id == user_id,
+        Notification.channel == NotificationChannel.in_app,
+        Notification.category == "job_alerts",
+    ]
+
+
+async def _remove_in_app_job_alert_notifications(
     session: AsyncSession,
     *,
     user_id: uuid.UUID,
     career_alert_ids: list[uuid.UUID] | None = None,
-    all_career_watch_matches: bool = False,
+    all_job_alerts: bool = False,
 ) -> int:
-    """Mark in-app bell notifications read when Career Watch alerts are dismissed."""
-    now = datetime.now(timezone.utc)
-    filters = [
-        Notification.user_id == user_id,
-        Notification.channel == NotificationChannel.in_app,
-        Notification.type == "career_watch_match",
-        Notification.read_at.is_(None),
-    ]
-    if all_career_watch_matches:
-        stmt = update(Notification).where(*filters).values(read_at=now)
+    """Remove in-app bell rows when Career Watch alerts are cleared or dismissed."""
+    filters = _in_app_job_alert_filters(user_id)
+    if all_job_alerts:
+        stmt = delete(Notification).where(*filters)
     elif career_alert_ids:
         id_strings = [str(aid) for aid in career_alert_ids]
-        stmt = (
-            update(Notification)
-            .where(*filters, Notification.data["career_alert_id"].astext.in_(id_strings))
-            .values(read_at=now)
+        stmt = delete(Notification).where(
+            *filters,
+            Notification.data["career_alert_id"].astext.in_(id_strings),
         )
     else:
         return 0
@@ -119,7 +121,7 @@ async def dismiss_alert(
     if alert is None:
         raise LookupError("alert not found")
     alert.status = CareerAlertStatus.dismissed
-    await _mark_in_app_career_watch_read(
+    await _remove_in_app_job_alert_notifications(
         session, user_id=user_id, career_alert_ids=[alert.id]
     )
     await session.flush()
@@ -154,15 +156,15 @@ async def dismiss_alerts(
         for alert in rows:
             alert.status = CareerAlertStatus.dismissed
         if rows:
-            await _mark_in_app_career_watch_read(
+            await _remove_in_app_job_alert_notifications(
                 session,
                 user_id=user_id,
                 career_alert_ids=[a.id for a in rows],
             )
-        await _mark_in_app_career_watch_read(
+        await _remove_in_app_job_alert_notifications(
             session,
             user_id=user_id,
-            all_career_watch_matches=True,
+            all_job_alerts=True,
         )
         await session.flush()
         return len(rows)
@@ -184,7 +186,7 @@ async def dismiss_alerts(
         raise LookupError("one or more alerts not found or already dismissed")
     for alert in rows:
         alert.status = CareerAlertStatus.dismissed
-    await _mark_in_app_career_watch_read(
+    await _remove_in_app_job_alert_notifications(
         session,
         user_id=user_id,
         career_alert_ids=[a.id for a in rows],
@@ -198,11 +200,11 @@ async def clear_career_watch_in_app_notifications(
     *,
     user_id: uuid.UUID,
 ) -> int:
-    """Mark all unread in-app career-watch notifications read (bell sync)."""
-    return await _mark_in_app_career_watch_read(
+    """Remove all in-app job-alert notifications (bell sync)."""
+    return await _remove_in_app_job_alert_notifications(
         session,
         user_id=user_id,
-        all_career_watch_matches=True,
+        all_job_alerts=True,
     )
 
 
