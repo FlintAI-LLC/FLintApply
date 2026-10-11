@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Bell } from "lucide-react";
-import { fetchNotifications, fetchUnreadCount, markNotificationRead, type NotificationItem } from "@/lib/notifications";
+import {
+  fetchNotifications,
+  fetchUnreadCount,
+  markNotificationRead,
+  NOTIFICATIONS_REFRESH_EVENT,
+  type NotificationItem,
+} from "@/lib/notifications";
 import { liveBackendAccessToken } from "@/lib/auth/accessToken";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +53,16 @@ export function NotificationBell() {
     const id = setInterval(refreshCount, POLL_MS);
     return () => clearInterval(id);
   }, [token, refreshCount]);
+
+  useEffect(() => {
+    if (!token) return;
+    function onExternalRefresh() {
+      void refreshCount();
+      if (open) void loadInbox();
+    }
+    window.addEventListener(NOTIFICATIONS_REFRESH_EVENT, onExternalRefresh);
+    return () => window.removeEventListener(NOTIFICATIONS_REFRESH_EVENT, onExternalRefresh);
+  }, [token, open, refreshCount, loadInbox]);
 
   useEffect(() => {
     if (open && token) loadInbox();

@@ -122,6 +122,14 @@ export async function dismissCareerAlert(token: string, alertId: string): Promis
   })
 }
 
+export async function clearCareerWatchInAppNotifications(
+  token: string,
+): Promise<{ marked_read: number }> {
+  return apiFetch("/api/career-watch/alerts/clear-in-app-notifications", token, {
+    method: "POST",
+  })
+}
+
 export async function dismissCareerAlertsBulk(
   token: string,
   body: { alert_ids?: string[]; dismiss_all?: boolean },

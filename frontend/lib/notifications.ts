@@ -1,5 +1,14 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/** Fired when in-app unread count may have changed outside the bell (e.g. Career Watch dismiss). */
+export const NOTIFICATIONS_REFRESH_EVENT = "flintapply-notifications-refresh";
+
+export function bumpNotificationsRefresh(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT));
+  }
+}
+
 export interface NotificationItem {
   id: string;
   type: string;
