@@ -40,7 +40,10 @@ export function NotificationBell() {
     if (!token) return;
     setLoading(true);
     try {
-      const { items: list } = await fetchNotifications(token, { limit: 10 });
+      const { items: list } = await fetchNotifications(token, {
+        limit: 10,
+        unread_only: true,
+      });
       setItems(list);
     } finally {
       setLoading(false);

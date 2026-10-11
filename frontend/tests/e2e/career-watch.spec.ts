@@ -155,6 +155,9 @@ async function mockCareerWatchApi(page: Page) {
           board_token: "acme",
           careers_page_url: body.careers_page_url,
           company_name: "Acme Corp",
+          probe_status: "ok",
+          job_count: 12,
+          probe_message: "Found 12 open job(s). This URL looks good for monitoring.",
         }),
       })
     }
@@ -223,7 +226,7 @@ test("add company watch for notifications then remove", async ({ page }) => {
   await expect(page.getByTestId("career-watch-empty")).toBeVisible()
 
   await page.locator("#cw-url").fill(CAREERS_URL)
-  await page.getByRole("button", { name: "Detect ATS" }).click()
+  await page.getByRole("button", { name: "Check URL" }).click()
   await expect(page.getByTestId("career-watch-detected-ats")).toContainText("greenhouse", {
     timeout: 10_000,
   })

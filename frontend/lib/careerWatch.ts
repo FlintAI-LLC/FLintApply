@@ -34,6 +34,9 @@ export type DetectResult = {
   board_token: string | null
   careers_page_url: string
   company_name: string | null
+  probe_status: "ok" | "warning" | "error"
+  job_count: number
+  probe_message: string
 }
 
 async function apiFetch<T>(
@@ -51,6 +54,20 @@ async function apiFetch<T>(
   })
   if (!resp.ok) {
     const body = await resp.text()
+    try {
+      const parsed = JSON.parse(body) as { detail?: { message?: string } | string }
+      const detail = parsed.detail
+      if (detail && typeof detail === "object" && detail.message) {
+        throw new Error(detail.message)
+      }
+      if (typeof detail === "string") {
+        throw new Error(detail)
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message !== body) {
+        throw err
+      }
+    }
     throw new Error(body || `Request failed (${resp.status})`)
   }
   if (resp.status === 204) {
@@ -124,7 +141,7 @@ export async function dismissCareerAlert(token: string, alertId: string): Promis
 
 export async function clearCareerWatchInAppNotifications(
   token: string,
-): Promise<{ marked_read: number }> {
+): Promise<{ cleared: number }> {
   return apiFetch("/api/career-watch/alerts/clear-in-app-notifications", token, {
     method: "POST",
   })
