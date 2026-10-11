@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -10,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notifications import Notification, NotificationChannel
+from app.services.career_watch.probe import CareersPageProbe, ProbeStatus
 from app.services.notifications.factory import build_notification
 from tests.integration.test_auth import REGISTER_PAYLOAD
 
@@ -49,15 +51,24 @@ async def test_career_watch_create_and_list(app_client: AsyncClient) -> None:
     assert detect_resp.status_code == 200
     assert detect_resp.json()["ats_type"] == "greenhouse"
 
-    create_resp = await app_client.post(
-        "/api/career-watch/watches",
-        json={
-            "careers_page_url": "https://boards.greenhouse.io/acme",
-            "company_name": "Acme Corp",
-            "keywords": ["python", "backend"],
-        },
-        headers=headers,
+    ok_probe = CareersPageProbe(
+        status=ProbeStatus.ok,
+        job_count=1,
+        message="Found 1 open job(s). This URL looks good for monitoring.",
     )
+    with patch(
+        "app.routers.career_watch.probe_careers_page",
+        new=AsyncMock(return_value=ok_probe),
+    ):
+        create_resp = await app_client.post(
+            "/api/career-watch/watches",
+            json={
+                "careers_page_url": "https://boards.greenhouse.io/acme",
+                "company_name": "Acme Corp",
+                "keywords": ["python", "backend"],
+            },
+            headers=headers,
+        )
     assert create_resp.status_code == 201, create_resp.text
     body = create_resp.json()
     assert body["company_name"] == "Acme Corp"
