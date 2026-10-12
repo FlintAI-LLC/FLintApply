@@ -36,7 +36,9 @@ async def get_or_create_preferences(
         in_app_enabled_categories=list(DEFAULT_IN_APP_CATEGORIES),
         web_push_enabled=False,
         sms_enabled=False,
-        digest_mode=DigestMode.off,
+        digest_mode=DigestMode.daily,
+        timezone="America/Los_Angeles",
+        instant_job_alert_email=False,
         updated_at=datetime.now(timezone.utc),
     )
     session.add(row)

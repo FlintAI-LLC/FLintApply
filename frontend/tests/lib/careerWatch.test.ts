@@ -133,7 +133,7 @@ describe("careerWatch apiFetch error handling", () => {
     await assert.rejects(
       () => getCareerWatchLimits("token"),
       (err: Error) => {
-        assert.match(err.message, /at most 20 keywords/i);
+        assert.match(err.message, /at most 10 keywords/i);
         assert.ok(!err.message.includes("validation error"));
         return true;
       },

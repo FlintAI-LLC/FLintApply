@@ -6,10 +6,13 @@ import uuid
 from datetime import datetime, timezone
 
 from app.models.career_watch import CareerJobCache
+from app.services.career_watch.apply_url import normalize_apply_url
 from app.services.career_watch.matcher import (
     keyword_match_score,
+    match_baseline_for_watch,
     passes_career_watch_keyword_match,
 )
+from app.models.career_watch import UserWatchedCompany
 
 
 def _job(**kwargs: object) -> CareerJobCache:
@@ -69,3 +72,24 @@ def test_passes_requires_two_hits_or_title() -> None:
     job_two = _job(title="Engineer", description_text="python and backend stack")
     score3, _ = keyword_match_score(["python", "backend"], job_two)
     assert passes_career_watch_keyword_match(["python", "backend"], job_two, score=score3)
+
+
+def test_normalize_apply_url_strips_tracking() -> None:
+    a = normalize_apply_url("https://jobs.example/role?utm_source=x")
+    b = normalize_apply_url("https://jobs.example/role")
+    assert a == b
+
+
+def test_match_baseline_uses_last_matched_at() -> None:
+    created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    matched = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    watch = UserWatchedCompany(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        watched_company_id=uuid.uuid4(),
+        keywords=[],
+        created_at=created,
+        last_matched_at=matched,
+        is_active=True,
+    )
+    assert match_baseline_for_watch(watch) == matched

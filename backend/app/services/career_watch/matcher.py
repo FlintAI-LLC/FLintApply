@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy import select
@@ -17,7 +17,9 @@ from app.models.career_watch import (
     CareerJobCache,
     UserWatchedCompany,
 )
+from app.services.career_watch.apply_url import normalize_apply_url
 from app.services.career_watch.notifications import emit_career_watch_alert
+from app.services.career_watch.seniority import title_matches_seniority_levels
 
 log = structlog.get_logger("career_watch.matcher")
 
@@ -67,6 +69,35 @@ def passes_career_watch_keyword_match(
     return title_hit
 
 
+def match_baseline_for_watch(watch: UserWatchedCompany) -> datetime:
+    """Only consider jobs first seen after the watch existed and since the last matcher pass."""
+    baseline = watch.created_at
+    if watch.last_matched_at is not None and watch.last_matched_at > baseline:
+        baseline = watch.last_matched_at
+    return baseline
+
+
+async def _user_has_alert_for_apply_url(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    normalized_url: str,
+) -> bool:
+    if not normalized_url:
+        return False
+    stmt = (
+        select(CareerJobCache.apply_url)
+        .join(CareerAlert, CareerAlert.career_job_cache_id == CareerJobCache.id)
+        .where(CareerAlert.user_id == user_id)
+        .where(CareerJobCache.apply_url != "")
+    )
+    urls = (await session.execute(stmt)).scalars().all()
+    for url in urls:
+        if normalize_apply_url(url) == normalized_url:
+            return True
+    return False
+
+
 @dataclass(slots=True)
 class MatchStats:
     watches_scanned: int = 0
@@ -82,18 +113,21 @@ async def match_new_jobs_for_watch(
     min_score: float = 0.25,
 ) -> int:
     """Create alerts for newly seen jobs matching ``watch`` keywords."""
+    baseline = since if since is not None else match_baseline_for_watch(watch)
     stmt = (
         select(CareerJobCache)
         .where(CareerJobCache.watched_company_id == watch.watched_company_id)
         .where(CareerJobCache.is_open.is_(True))
+        .where(CareerJobCache.first_seen_at > baseline)
     )
-    if since is not None:
-        stmt = stmt.where(CareerJobCache.first_seen_at >= since - timedelta(days=7))
     jobs = (await session.execute(stmt)).scalars().all()
 
     created = 0
     keywords = list(watch.keywords or [])
+    seniority = list(watch.seniority_levels or [])
     for job in jobs:
+        if not title_matches_seniority_levels(job.title, seniority):
+            continue
         score, reason = keyword_match_score(keywords, job)
         if not passes_career_watch_keyword_match(
             keywords, job, score=score, min_score=min_score
@@ -107,6 +141,11 @@ async def match_new_jobs_for_watch(
             )
         ).scalar_one_or_none()
         if existing is not None:
+            continue
+        norm_url = normalize_apply_url(job.apply_url)
+        if norm_url and await _user_has_alert_for_apply_url(
+            session, user_id=watch.user_id, normalized_url=norm_url
+        ):
             continue
         alert = CareerAlert(
             id=uuid.uuid4(),
@@ -165,6 +204,7 @@ async def run_matcher(
 __all__ = [
     "MatchStats",
     "keyword_match_score",
+    "match_baseline_for_watch",
     "match_new_jobs_for_watch",
     "passes_career_watch_keyword_match",
     "run_matcher",

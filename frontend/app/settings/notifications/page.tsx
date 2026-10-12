@@ -228,12 +228,13 @@ export default function NotificationSettingsPage() {
         </p>
       </section>
 
-      <section className="border border-slate-200 dark:border-slate-800 rounded-xl p-4">
-        <h2 className="font-medium text-slate-800 dark:text-slate-200 mb-2">Digest mode</h2>
+      <section className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 mb-10">
+        <h2 className="font-medium text-slate-800 dark:text-slate-200 mb-2">Job alert emails</h2>
         <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-          Batch non-urgent emails into one daily digest.
+          Free plans get one daily email around 6 PM in your timezone with new matches. Premium subscribers
+          can opt into immediate email per match.
         </p>
-        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer mb-3">
           <input
             type="checkbox"
             checked={prefs.digest_mode === "daily"}
@@ -241,9 +242,21 @@ export default function NotificationSettingsPage() {
               save({ digest_mode: e.target.checked ? "daily" : "off" })
             }
             disabled={saving}
+            data-testid="notification-digest-daily"
             className="rounded border-slate-400 dark:border-slate-600"
           />
-          Daily digest
+          Daily digest email for job matches
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={prefs.instant_job_alert_email}
+            onChange={(e) => save({ instant_job_alert_email: e.target.checked })}
+            disabled={saving}
+            data-testid="notification-instant-job-email"
+            className="rounded border-slate-400 dark:border-slate-600"
+          />
+          Email me immediately for new job matches (Premium)
         </label>
       </section>
       <GuidanceModal

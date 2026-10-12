@@ -32,6 +32,8 @@ export interface NotificationPreferences {
   sms_phone: string | null;
   sms_phone_verified_at: string | null;
   digest_mode: "off" | "daily";
+  timezone: string;
+  instant_job_alert_email: boolean;
 }
 
 async function api<T>(

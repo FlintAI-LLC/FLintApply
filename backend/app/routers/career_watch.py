@@ -23,6 +23,7 @@ from app.services.career_watch.notifications import (
 )
 from app.services.career_watch.keyword_suggestions import suggest_career_watch_keywords
 from app.services.career_watch.probe import ProbeStatus, probe_careers_page
+from app.services.career_watch.constants import CAREER_WATCH_MAX_KEYWORDS
 from app.services.career_watch.watchlist import (
     WatchlistEntry,
     add_watch,
@@ -52,11 +53,13 @@ class DetectResponse(BaseModel):
 class WatchCreateRequest(BaseModel):
     careers_page_url: str = Field(..., min_length=8, max_length=2000)
     company_name: str | None = Field(None, max_length=500)
-    keywords: list[str] = Field(default_factory=list, max_length=20)
+    keywords: list[str] = Field(default_factory=list, max_length=CAREER_WATCH_MAX_KEYWORDS)
+    seniority_levels: list[str] = Field(default_factory=list, max_length=8)
 
 
 class WatchUpdateRequest(BaseModel):
-    keywords: list[str] = Field(..., max_length=20)
+    keywords: list[str] = Field(..., max_length=CAREER_WATCH_MAX_KEYWORDS)
+    seniority_levels: list[str] | None = Field(default=None, max_length=8)
 
 
 class WatchResponse(BaseModel):
@@ -66,6 +69,7 @@ class WatchResponse(BaseModel):
     careers_page_url: str
     ats_type: str
     keywords: list[str]
+    seniority_levels: list[str]
     is_active: bool
     created_at: datetime
 
@@ -100,6 +104,7 @@ def _watch_response(entry: WatchlistEntry) -> WatchResponse:
         careers_page_url=entry.careers_page_url,
         ats_type=entry.ats_type.value,
         keywords=entry.keywords,
+        seniority_levels=entry.seniority_levels,
         is_active=entry.is_active,
         created_at=entry.created_at,
     )
@@ -175,6 +180,7 @@ async def career_watch_create(
             careers_page_url=body.careers_page_url,
             company_name=body.company_name,
             keywords=body.keywords,
+            seniority_levels=body.seniority_levels,
         )
     except CareerWatchLimitError as exc:
         raise HTTPException(
@@ -202,6 +208,7 @@ async def career_watch_update(
             user_id=user.id,
             watch_id=watch_id,
             keywords=body.keywords,
+            seniority_levels=body.seniority_levels,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail="watch not found") from exc

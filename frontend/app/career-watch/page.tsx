@@ -20,7 +20,12 @@ import {
   Trash2,
 } from "lucide-react"
 import { useRequireAuth } from "@/lib/auth/guards"
-import { bumpNotificationsRefresh } from "@/lib/notifications"
+import {
+  bumpNotificationsRefresh,
+  fetchNotificationPreferences,
+  patchNotificationPreferences,
+} from "@/lib/notifications"
+import { registerWebPush } from "@/lib/notifications/web-push"
 import {
   clearCareerWatchInAppNotifications,
   createCareerWatch,
@@ -36,6 +41,7 @@ import {
   type CareerWatchEntry,
   type CareerWatchLimits,
   CAREER_WATCH_MAX_KEYWORDS,
+  CAREER_WATCH_SENIORITY_LEVELS,
   type CareerAlertSort,
   type DetectResult,
   mergeCommaKeywords,
@@ -93,6 +99,12 @@ export default function CareerWatchPage() {
   const [clearingBell, setClearingBell] = useState(false)
   const [alertSort, setAlertSort] = useState<CareerAlertSort>("latest")
   const [keywordHint, setKeywordHint] = useState<string | null>(null)
+  const [seniorityLevels, setSeniorityLevels] = useState<string[]>([])
+  const [pushSupported, setPushSupported] = useState(false)
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | null>(null)
+  const [webPushEnabled, setWebPushEnabled] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushBannerMessage, setPushBannerMessage] = useState<string | null>(null)
 
   const pickCareerWatchGuidance = useCallback(
     () =>
@@ -145,6 +157,59 @@ export default function CareerWatchPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    setPushSupported("serviceWorker" in navigator && "PushManager" in window)
+    if ("Notification" in window) {
+      setPushPermission(Notification.permission)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!token) return
+    void fetchNotificationPreferences(token)
+      .then((p) => setWebPushEnabled(p.web_push_enabled))
+      .catch(() => undefined)
+  }, [token])
+
+  function toggleSeniorityLevel(id: string) {
+    setSeniorityLevels((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    )
+  }
+
+  async function handleEnableDesktopNotifications() {
+    if (!token) return
+    setPushBusy(true)
+    setPushBannerMessage(null)
+    setError(null)
+    try {
+      const ok = await registerWebPush(token)
+      if (!ok) {
+        setPushBannerMessage("Could not enable desktop notifications. Try again and choose Allow.")
+        return
+      }
+      const prefs = await fetchNotificationPreferences(token)
+      const inApp = new Set(prefs.in_app_enabled_categories ?? [])
+      inApp.add("job_alerts")
+      await patchNotificationPreferences(token, {
+        web_push_enabled: true,
+        in_app_enabled_categories: [...inApp],
+      })
+      setWebPushEnabled(true)
+      if (typeof window !== "undefined" && "Notification" in window) {
+        setPushPermission(Notification.permission)
+      }
+      setPushBannerMessage("Desktop notifications are on for new job matches.")
+    } catch (e) {
+      setPushBannerMessage(
+        e instanceof Error ? e.message : "Could not enable desktop notifications",
+      )
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   async function handleDetect(): Promise<DetectResult | null> {
     if (!token || !url.trim()) return null
@@ -199,9 +264,11 @@ export default function CareerWatchPage() {
         careers_page_url: url.trim(),
         company_name: companyName.trim() || undefined,
         keywords: kw,
+        seniority_levels: seniorityLevels,
       })
       setUrl("")
       setKeywords("")
+      setSeniorityLevels([])
       setCompanyName("")
       setDetectedAts(null)
       setProbeStatus(null)
@@ -421,6 +488,41 @@ export default function CareerWatchPage() {
           </div>
         </header>
 
+        {pushSupported &&
+          pushPermission !== "granted" &&
+          !webPushEnabled && (
+            <div
+              className="rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+              data-testid="career-watch-web-push-cta"
+            >
+              <div className="text-sm text-slate-700 dark:text-slate-300">
+                <p className="font-semibold text-sky-900 dark:text-sky-200">Enable desktop notifications</p>
+                <p className="text-slate-600 dark:text-slate-400">
+                  Get real-time toasts when a watched company posts a matching role. You can also manage this in{" "}
+                  <Link href="/settings/notifications" className="underline hover:text-sky-800 dark:hover:text-sky-100">
+                    Settings → Notifications
+                  </Link>
+                  .
+                </p>
+                {pushBannerMessage && (
+                  <p className="mt-2 text-xs text-amber-800 dark:text-amber-300" role="status">
+                    {pushBannerMessage}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                data-testid="career-watch-enable-web-push"
+                disabled={pushBusy}
+                onClick={() => void handleEnableDesktopNotifications()}
+                className="shrink-0 inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+              >
+                {pushBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
+                Enable desktop notifications
+              </button>
+            </div>
+          )}
+
         <div
           className="rounded-xl border border-violet-400/25 bg-violet-500/5 px-4 py-3 text-sm text-slate-700 dark:text-slate-300"
           data-testid="career-watch-referral-tip"
@@ -567,8 +669,32 @@ export default function CareerWatchPage() {
                 >
                   + Remote
                 </button>
+                {CAREER_WATCH_SENIORITY_LEVELS.map((level) => {
+                  const active = seniorityLevels.includes(level.id)
+                  return (
+                    <button
+                      key={level.id}
+                      type="button"
+                      data-testid={`career-watch-seniority-${level.id}`}
+                      className={clsx(
+                        "inline-flex items-center rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors",
+                        active
+                          ? "border-amber-400/50 bg-amber-500/20 text-amber-900 dark:text-amber-200"
+                          : "border-slate-300/60 dark:border-slate-700 bg-white/50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-400 hover:border-amber-400/40",
+                      )}
+                      onClick={() => toggleSeniorityLevel(level.id)}
+                    >
+                      {level.label}
+                    </button>
+                  )
+                })}
               </div>
             </div>
+            {seniorityLevels.length > 0 && (
+              <p className="text-xs text-slate-500 dark:text-slate-500">
+                Optional: only alert on titles matching selected seniority levels.
+              </p>
+            )}
             <p className="text-xs text-slate-500 dark:text-slate-500">
               Alerts need two keyword hits in the posting, or one hit in the job title. Up to{" "}
               {CAREER_WATCH_MAX_KEYWORDS} keywords.
