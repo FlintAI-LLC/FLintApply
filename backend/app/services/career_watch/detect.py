@@ -6,6 +6,7 @@ import re
 from urllib.parse import urlparse
 
 from app.models.career_watch import CareerAtsType
+from app.services.career_watch.amazon_jobs import amazon_locale_from_url
 from app.services.career_watch.types import AtsDetectionResult
 
 _GREENHOUSE_RE = re.compile(
@@ -30,6 +31,7 @@ _WORKDAY_HOST = "myworkdayjobs.com"
 _WORKDAY_LOCALE_SEGMENT_RE = re.compile(r"^[a-z]{2}(-[a-z]{2,4})?$", re.IGNORECASE)
 _ICIMS_HOST_RE = re.compile(r"^([^.]+)\.icims\.com$", re.IGNORECASE)
 _TALEO_HOST_RE = re.compile(r"^([^.]+)\.taleo\.net$", re.IGNORECASE)
+_AMAZON_HOSTS = frozenset({"amazon.jobs", "www.amazon.jobs"})
 
 
 def _normalize_url(url: str) -> str:
@@ -153,6 +155,15 @@ def detect_ats_from_url(url: str) -> AtsDetectionResult:
             board_token=token,
             careers_page_url=normalized,
             company_name=token.replace("-", " ").title(),
+        )
+
+    if path.netloc.lower() in _AMAZON_HOSTS:
+        locale = amazon_locale_from_url(normalized)
+        return AtsDetectionResult(
+            ats_type=CareerAtsType.amazon_jobs,
+            board_token=locale,
+            careers_page_url=normalized,
+            company_name="Amazon",
         )
 
     if match := _TALEO_HOST_RE.match(path.netloc.lower()):
