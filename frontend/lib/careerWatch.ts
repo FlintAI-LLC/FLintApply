@@ -41,19 +41,75 @@ export type DetectResult = {
 
 export type CareerAlertSort = "latest" | "match"
 
-/** Merge comma-separated keywords (case-insensitive de-dupe). */
-export function mergeCommaKeywords(current: string, toAdd: string[]): string {
-  const existing = current
-    .split(",")
-    .map((k) => k.trim().toLowerCase())
-    .filter(Boolean)
-  const merged = [...existing]
+/** Must match backend `CreateWatchRequest.keywords` max_length. */
+export const CAREER_WATCH_MAX_KEYWORDS = 20
+
+export type MergeCommaKeywordsResult = {
+  value: string
+  count: number
+  truncated: boolean
+}
+
+/** Parse comma-separated keywords (trim, lowercase, de-dupe, preserve order). */
+export function parseCommaKeywords(value: string): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const part of value.split(",")) {
+    const lower = part.trim().toLowerCase()
+    if (!lower || seen.has(lower)) continue
+    seen.add(lower)
+    out.push(lower)
+  }
+  return out
+}
+
+/** Merge comma-separated keywords (case-insensitive de-dupe), capped at ``max``. */
+export function mergeCommaKeywords(
+  current: string,
+  toAdd: string[],
+  max: number = CAREER_WATCH_MAX_KEYWORDS,
+): MergeCommaKeywordsResult {
+  const merged = parseCommaKeywords(current)
   for (const raw of toAdd) {
     const lower = raw.trim().toLowerCase()
     if (!lower || merged.includes(lower)) continue
     merged.push(lower)
   }
-  return merged.join(", ")
+  const truncated = merged.length > max
+  const capped = truncated ? merged.slice(0, max) : merged
+  return {
+    value: capped.join(", "),
+    count: capped.length,
+    truncated,
+  }
+}
+
+function friendlyApiErrorMessage(bodyText: string): string | null {
+  try {
+    const parsed = JSON.parse(bodyText) as {
+      detail?: { message?: string; code?: string } | string | Array<{ msg?: string; loc?: unknown[]; type?: string }>
+    }
+    const detail = parsed.detail
+    if (detail && typeof detail === "object" && !Array.isArray(detail) && typeof detail.message === "string") {
+      return detail.message
+    }
+    if (typeof detail === "string") {
+      return detail
+    }
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0]
+      const loc = Array.isArray(first?.loc) ? first.loc.map(String) : []
+      if (loc.includes("keywords") && first?.type === "too_long") {
+        return `You can use at most ${CAREER_WATCH_MAX_KEYWORDS} keywords. Remove one or more and try again.`
+      }
+      if (typeof first?.msg === "string") {
+        return first.msg
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  return null
 }
 
 function alertSortTimestamp(alert: CareerWatchAlert): number {
@@ -96,20 +152,7 @@ async function apiFetch<T>(
   })
   if (!resp.ok) {
     const bodyText = await resp.text()
-    let friendlyMessage: string | null = null
-    try {
-      const parsed = JSON.parse(bodyText) as { detail?: { message?: string } | string }
-      const detail = parsed.detail
-      if (detail && typeof detail === "object" && typeof detail.message === "string") {
-        friendlyMessage = detail.message
-      } else if (typeof detail === "string") {
-        friendlyMessage = detail
-      }
-    } catch {
-      // Non-JSON error body (e.g. an upstream gateway error during a
-      // deploy) — never surface the raw body or a JSON parse error to
-      // the user, fall through to the generic message below instead.
-    }
+    const friendlyMessage = friendlyApiErrorMessage(bodyText)
     throw new Error(
       friendlyMessage ?? "Something went wrong. Please check the details and try again.",
     )

@@ -35,9 +35,11 @@ import {
   type CareerWatchAlert,
   type CareerWatchEntry,
   type CareerWatchLimits,
+  CAREER_WATCH_MAX_KEYWORDS,
   type CareerAlertSort,
   type DetectResult,
   mergeCommaKeywords,
+  parseCommaKeywords,
   sortCareerWatchAlerts,
 } from "@/lib/careerWatch"
 
@@ -90,6 +92,7 @@ export default function CareerWatchPage() {
   const [dismissingAlerts, setDismissingAlerts] = useState(false)
   const [clearingBell, setClearingBell] = useState(false)
   const [alertSort, setAlertSort] = useState<CareerAlertSort>("latest")
+  const [keywordHint, setKeywordHint] = useState<string | null>(null)
 
   const pickCareerWatchGuidance = useCallback(
     () =>
@@ -182,17 +185,16 @@ export default function CareerWatchPage() {
       setError(probeMessage ?? "Fix the careers URL before adding this company.")
       return
     }
+    const kw = parseCommaKeywords(keywords)
+    if (kw.length > CAREER_WATCH_MAX_KEYWORDS) {
+      setError(
+        `You can use at most ${CAREER_WATCH_MAX_KEYWORDS} keywords (you have ${kw.length}). Remove one or more before adding this watch.`,
+      )
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
-      const kw = [
-        ...new Set(
-          keywords
-            .split(",")
-            .map((k) => k.trim())
-            .filter(Boolean),
-        ),
-      ]
       await createCareerWatch(token, {
         careers_page_url: url.trim(),
         company_name: companyName.trim() || undefined,
@@ -304,7 +306,13 @@ export default function CareerWatchPage() {
         setError("No keyword suggestions yet — add skills or experience to your master resume first.")
         return
       }
-      setKeywords(mergeCommaKeywords(keywords, suggested))
+      const merged = mergeCommaKeywords(keywords, suggested)
+      setKeywords(merged.value)
+      setKeywordHint(
+        merged.truncated
+          ? `Keyword list is limited to ${CAREER_WATCH_MAX_KEYWORDS}. We kept the first ${CAREER_WATCH_MAX_KEYWORDS}; remove some to add others.`
+          : null,
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load keyword suggestions")
     } finally {
@@ -313,7 +321,23 @@ export default function CareerWatchPage() {
   }
 
   function handleAddRemoteKeyword() {
-    setKeywords(mergeCommaKeywords(keywords, ["remote"]))
+    const merged = mergeCommaKeywords(keywords, ["remote"])
+    setKeywords(merged.value)
+    if (merged.truncated) {
+      setKeywordHint(
+        `Keyword list is limited to ${CAREER_WATCH_MAX_KEYWORDS}. We kept the first ${CAREER_WATCH_MAX_KEYWORDS}; remove some to add others.`,
+      )
+    } else {
+      setKeywordHint(null)
+    }
+  }
+
+  function handleKeywordsChange(value: string) {
+    setKeywords(value)
+    const count = parseCommaKeywords(value).length
+    if (count <= CAREER_WATCH_MAX_KEYWORDS) {
+      setKeywordHint(null)
+    }
   }
 
   if (status === "loading" || loading) {
@@ -546,21 +570,45 @@ export default function CareerWatchPage() {
               </div>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-500">
-              Alerts need two keyword hits in the posting, or one hit in the job title.
+              Alerts need two keyword hits in the posting, or one hit in the job title. Up to{" "}
+              {CAREER_WATCH_MAX_KEYWORDS} keywords.
             </p>
             <input
               id="cw-keywords"
               className={inputClass}
               placeholder="python, backend, remote"
               value={keywords}
-              onChange={(e) => setKeywords(e.target.value)}
+              onChange={(e) => handleKeywordsChange(e.target.value)}
               onFocus={() => setKeywordsFieldFocused(true)}
+              aria-describedby="cw-keywords-meta"
             />
+            <p
+              id="cw-keywords-meta"
+              className={clsx(
+                "text-xs tabular-nums",
+                parseCommaKeywords(keywords).length > CAREER_WATCH_MAX_KEYWORDS
+                  ? "text-red-600 dark:text-red-400 font-medium"
+                  : "text-slate-500 dark:text-slate-500",
+              )}
+            >
+              {parseCommaKeywords(keywords).length} / {CAREER_WATCH_MAX_KEYWORDS} keywords
+            </p>
+            {keywordHint && (
+              <p className="text-xs text-amber-800 dark:text-amber-300" role="status">
+                {keywordHint}
+              </p>
+            )}
           </div>
 
           <button
             type="submit"
-            disabled={submitting || probing || !url.trim() || probeStatus === "error"}
+            disabled={
+              submitting ||
+              probing ||
+              !url.trim() ||
+              probeStatus === "error" ||
+              parseCommaKeywords(keywords).length > CAREER_WATCH_MAX_KEYWORDS
+            }
             data-testid="career-watch-add-submit"
             className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-sm hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 transition-all"
           >

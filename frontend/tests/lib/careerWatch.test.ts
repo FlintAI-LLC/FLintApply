@@ -2,8 +2,10 @@ import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  CAREER_WATCH_MAX_KEYWORDS,
   getCareerWatchLimits,
   mergeCommaKeywords,
+  parseCommaKeywords,
   sortCareerWatchAlerts,
   type CareerWatchAlert,
 } from "@/lib/careerWatch";
@@ -18,8 +20,16 @@ function mockFetchOnce(response: Response) {
 
 describe("careerWatch keyword helpers", () => {
   it("mergeCommaKeywords adds remote without duplicates", () => {
-    assert.equal(mergeCommaKeywords("python, remote", ["remote"]), "python, remote");
-    assert.equal(mergeCommaKeywords("python", ["remote"]), "python, remote");
+    assert.equal(mergeCommaKeywords("python, remote", ["remote"]).value, "python, remote");
+    assert.equal(mergeCommaKeywords("python", ["remote"]).value, "python, remote");
+  });
+
+  it("mergeCommaKeywords caps at CAREER_WATCH_MAX_KEYWORDS", () => {
+    const many = Array.from({ length: CAREER_WATCH_MAX_KEYWORDS }, (_, i) => `kw${i}`);
+    const merged = mergeCommaKeywords(many.join(", "), ["remote"]);
+    assert.equal(merged.count, CAREER_WATCH_MAX_KEYWORDS);
+    assert.equal(merged.truncated, true);
+    assert.equal(parseCommaKeywords(merged.value).length, CAREER_WATCH_MAX_KEYWORDS);
   });
 });
 
@@ -99,6 +109,32 @@ describe("careerWatch apiFetch error handling", () => {
           err.message,
           "Something went wrong. Please check the details and try again.",
         );
+        return true;
+      },
+    );
+  });
+
+  it("maps FastAPI keyword too_long validation to a friendly message", async () => {
+    mockFetchOnce(
+      new Response(
+        JSON.stringify({
+          detail: [
+            {
+              type: "too_long",
+              loc: ["body", "keywords"],
+              msg: "List should have at most 20 items after validation, not 21",
+            },
+          ],
+        }),
+        { status: 422 },
+      ),
+    );
+
+    await assert.rejects(
+      () => getCareerWatchLimits("token"),
+      (err: Error) => {
+        assert.match(err.message, /at most 20 keywords/i);
+        assert.ok(!err.message.includes("validation error"));
         return true;
       },
     );
