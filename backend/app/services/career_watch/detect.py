@@ -27,6 +27,7 @@ _BREEZY_RE = re.compile(r"([^.]+)\.breezy\.hr", re.IGNORECASE)
 _PERSONIO_RE = re.compile(r"([^.]+)\.jobs\.personio\.(?:com|de)", re.IGNORECASE)
 _BAMBOOHR_RE = re.compile(r"([^.]+)\.bamboohr\.com", re.IGNORECASE)
 _WORKDAY_HOST = "myworkdayjobs.com"
+_WORKDAY_LOCALE_SEGMENT_RE = re.compile(r"^[a-z]{2}(-[a-z]{2,4})?$", re.IGNORECASE)
 _ICIMS_HOST_RE = re.compile(r"^([^.]+)\.icims\.com$", re.IGNORECASE)
 _TALEO_HOST_RE = re.compile(r"^([^.]+)\.taleo\.net$", re.IGNORECASE)
 
@@ -129,6 +130,14 @@ def detect_ats_from_url(url: str) -> AtsDetectionResult:
     if "myworkdayjobs.com" in path.netloc.lower():
         tenant = path.netloc.split(".")[0]
         segments = [segment for segment in path.path.split("/") if segment]
+        # Workday career sites commonly prefix the path with a locale segment
+        # (e.g. /en-US/SiteName/job/...). Skip it so the site/tenant token we
+        # poll is the actual career site, not the locale code.
+        if (
+            len(segments) > 1
+            and _WORKDAY_LOCALE_SEGMENT_RE.match(segments[0])
+        ):
+            segments = segments[1:]
         site = segments[0] if segments else "External"
         return AtsDetectionResult(
             ats_type=CareerAtsType.workday,

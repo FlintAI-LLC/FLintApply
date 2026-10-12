@@ -138,6 +138,25 @@ async def probe_careers_page(careers_page_url: str) -> CareersPageProbe:
         )
 
     if count == 0:
+        if ats == CareerAtsType.workday:
+            # Workday career sites are frequently client-rendered (the job
+            # list loads via XHR after page load), so a quick synchronous
+            # fetch here often finds nothing even for a correct URL. The
+            # background poll worker uses a headless-render fallback that
+            # this live probe intentionally skips (cost/latency/abuse
+            # surface), so warn rather than block — the recurring poll may
+            # still find jobs even though this check could not confirm it.
+            return CareersPageProbe(
+                status=ProbeStatus.warning,
+                job_count=0,
+                message=(
+                    resolution_prefix
+                    + "Detected Workday, but we could not confirm open jobs with a quick check "
+                    "(Workday job lists often load after the page renders). This will be "
+                    "monitored and checked more thoroughly on the next scan — if nothing turns "
+                    "up after that, double-check the URL."
+                ),
+            )
         return CareersPageProbe(
             status=ProbeStatus.error,
             job_count=0,

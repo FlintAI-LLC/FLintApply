@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
-from typing import Any
+from html import unescape
+from urllib.parse import urljoin
 
 import httpx
 
@@ -50,12 +51,12 @@ def parse_workday_html(html: str, *, base_url: str) -> list[ParsedJob]:
     seen: set[str] = set()
 
     for match in _JOB_LINK_RE.finditer(html):
-        href, title = match.group(1), match.group(2).strip()
+        href, title = match.group(1), unescape(match.group(2).strip())
         if not title or href in seen:
             continue
         seen.add(href)
         job_id = href.rstrip("/").split("/")[-1]
-        apply_url = href if href.startswith("http") else _join_url(base_url, href)
+        apply_url = urljoin(base_url, href)
         parsed.append(
             ParsedJob(
                 external_job_id=job_id,
@@ -97,15 +98,6 @@ def parse_workday_html(html: str, *, base_url: str) -> list[ParsedJob]:
                     )
                 )
     return parsed
-
-
-def _join_url(base: str, path: str) -> str:
-    if path.startswith("http"):
-        return path
-    base = base.rstrip("/")
-    if not path.startswith("/"):
-        path = f"/{path}"
-    return f"{base}{path}"
 
 
 __all__ = ["WorkdayAdapter", "parse_workday_html"]

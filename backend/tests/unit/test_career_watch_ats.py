@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.models.career_watch import CareerAtsType
 from app.services.career_watch.ashby import parse_ashby_payload
 from app.services.career_watch.detect import detect_ats_from_url
@@ -34,6 +32,34 @@ def test_detect_ashby_url() -> None:
 
 def test_detect_workday_url() -> None:
     result = detect_ats_from_url("https://acme.wd5.myworkdayjobs.com/External")
+    assert result.ats_type == CareerAtsType.workday
+    assert result.board_token == "acme/External"
+
+
+def test_detect_workday_url_strips_locale_segment() -> None:
+    """A locale-prefixed Workday path (the common real-world shape) must
+    resolve to the actual site token, not the locale code."""
+    result = detect_ats_from_url("https://acme.wd5.myworkdayjobs.com/en-US/External")
+    assert result.ats_type == CareerAtsType.workday
+    assert result.board_token == "acme/External"
+
+
+def test_detect_workday_url_single_segment_locale_like_name_unaffected() -> None:
+    """A single-segment site path is never stripped, even if it happens to
+    look locale-like, since there is nothing left to fall back to."""
+    result = detect_ats_from_url("https://acme.wd5.myworkdayjobs.com/en")
+    assert result.ats_type == CareerAtsType.workday
+    assert result.board_token == "acme/en"
+
+
+def test_detect_workday_url_non_locale_first_segment_is_preserved() -> None:
+    """A multi-segment path whose first segment is NOT locale-shaped must
+    keep that segment as the site token — pins the actual regex check, not
+    just "always drop the first of 2+ segments" (which would wrongly turn
+    this into acme/job instead of acme/External)."""
+    result = detect_ats_from_url(
+        "https://acme.wd5.myworkdayjobs.com/External/job/123"
+    )
     assert result.ats_type == CareerAtsType.workday
     assert result.board_token == "acme/External"
 
@@ -118,6 +144,25 @@ def test_workday_parse_html_links() -> None:
     )
     assert len(jobs) == 1
     assert jobs[0].title == "Backend Engineer"
+
+
+def test_workday_parse_html_apply_url_does_not_duplicate_base_path() -> None:
+    """Regression: apply_url must resolve against the origin, not get the
+    base_url's own path segment concatenated in front of the absolute href
+    (previously produced .../Workday/en-US/Workday/job/... instead of
+    .../en-US/Workday/job/...)."""
+    html = (
+        '<a href="/en-US/Workday/job/USA-CA-Pleasanton/Role_JR-1">Role &amp; Title</a>'
+    )
+    jobs = parse_workday_html(
+        html,
+        base_url="https://workday.wd5.myworkdayjobs.com/Workday",
+    )
+    assert len(jobs) == 1
+    assert jobs[0].apply_url == (
+        "https://workday.wd5.myworkdayjobs.com/en-US/Workday/job/USA-CA-Pleasanton/Role_JR-1"
+    )
+    assert jobs[0].title == "Role & Title"
 
 
 def test_generic_html_extracts_job_links() -> None:
