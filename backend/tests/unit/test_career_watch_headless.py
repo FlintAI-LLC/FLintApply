@@ -97,7 +97,7 @@ async def test_registry_falls_back_to_headless_for_workday(monkeypatch) -> None:
     jobs) for a modern SPA career site; the headless fallback must now be
     eligible for ats_type=workday, not just generic_html/icims."""
 
-    async def _empty_fetch(self, company, *, client):
+    async def _empty_fetch(self, company, *, client, max_jobs=None):
         return []
 
     async def _fake_headless(company, *, browser=None):

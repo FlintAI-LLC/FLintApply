@@ -49,11 +49,19 @@ async def fetch_company_jobs(
     *,
     client: httpx.AsyncClient | None = None,
     allow_headless: bool = True,
+    workday_max_jobs: int | None = None,
 ) -> list[ParsedJob]:
     adapter = get_adapter(company.ats_type)
 
     async def _fetch_with_client(active: httpx.AsyncClient) -> list[ParsedJob]:
-        jobs = await adapter.fetch_jobs(company, client=active)
+        if company.ats_type == CareerAtsType.workday:
+            jobs = await adapter.fetch_jobs(
+                company,
+                client=active,
+                max_jobs=workday_max_jobs,
+            )
+        else:
+            jobs = await adapter.fetch_jobs(company, client=active)
         filtered = meaningful_jobs(company.ats_type, jobs)
         if filtered:
             return filtered
