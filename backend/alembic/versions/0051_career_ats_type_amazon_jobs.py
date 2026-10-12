@@ -5,7 +5,7 @@ from __future__ import annotations
 from alembic import op
 
 revision: str = "0051_career_ats_amazon_jobs"
-down_revision: str | None = "0050_career_job_cache_location_text"
+down_revision: str | None = "0050_job_cache_location_text"
 branch_labels = None
 depends_on = None
 
