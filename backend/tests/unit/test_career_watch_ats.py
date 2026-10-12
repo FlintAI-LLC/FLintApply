@@ -9,7 +9,12 @@ from app.services.career_watch.generic_html import parse_generic_html
 from app.services.career_watch.greenhouse import parse_greenhouse_payload
 from app.services.career_watch.lever import parse_lever_payload
 from app.services.career_watch.registry import get_adapter
-from app.services.career_watch.workday import parse_workday_html
+from app.services.career_watch.workday import (
+    build_workday_job_url,
+    parse_workday_cxs_payload,
+    parse_workday_html,
+    workday_cxs_api_url,
+)
 
 
 def test_detect_greenhouse_url() -> None:
@@ -134,6 +139,42 @@ def test_ashby_skips_unlisted_jobs() -> None:
         ]
     )
     assert [job.external_job_id for job in jobs] == ["listed"]
+
+
+def test_workday_cxs_api_url_from_board_token() -> None:
+    url = workday_cxs_api_url(
+        "https://workday.wd5.myworkdayjobs.com/en-US/Workday",
+        "workday/Workday",
+    )
+    assert url == "https://workday.wd5.myworkdayjobs.com/wday/cxs/workday/Workday/jobs"
+
+
+def test_parse_workday_cxs_payload_builds_apply_urls() -> None:
+    payload = {
+        "total": 1,
+        "jobPostings": [
+            {
+                "title": "Backend Engineer",
+                "externalPath": "/job/USA-CA-Pleasanton/Role_JR-1",
+                "locationsText": "USA, CA, Pleasanton",
+                "bulletFields": ["JR-1"],
+            }
+        ],
+    }
+    jobs = parse_workday_cxs_payload(
+        payload,
+        origin="https://workday.wd5.myworkdayjobs.com",
+        locale="en-US",
+        site="Workday",
+    )
+    assert len(jobs) == 1
+    assert jobs[0].title == "Backend Engineer"
+    assert jobs[0].apply_url == build_workday_job_url(
+        origin="https://workday.wd5.myworkdayjobs.com",
+        locale="en-US",
+        site="Workday",
+        external_path="/job/USA-CA-Pleasanton/Role_JR-1",
+    )
 
 
 def test_workday_parse_html_links() -> None:

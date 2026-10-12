@@ -84,7 +84,10 @@ async def probe_careers_page(careers_page_url: str) -> CareersPageProbe:
             )
             ats = company.ats_type
             jobs = await fetch_company_jobs(
-                company, client=client, allow_headless=False
+                company,
+                client=client,
+                allow_headless=False,
+                workday_max_jobs=20,
             )
     except httpx.HTTPStatusError as exc:
         if is_gone_error(exc) or exc.response.status_code in {404, 410}:

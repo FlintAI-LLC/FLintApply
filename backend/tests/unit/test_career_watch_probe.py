@@ -58,8 +58,9 @@ async def test_probe_workday_zero_jobs_warns_instead_of_blocking(monkeypatch) ->
     hard-reject — the background poll worker's headless fallback may still
     find jobs even though this quick check could not confirm it."""
 
-    async def _no_jobs(company, *, client=None, allow_headless=True):
+    async def _no_jobs(company, *, client=None, allow_headless=True, workday_max_jobs=None):
         assert allow_headless is False, "live probe must never trigger headless Chromium"
+        assert workday_max_jobs == 20
         return []
 
     monkeypatch.setattr(probe_module, "fetch_company_jobs", _no_jobs)
@@ -75,7 +76,7 @@ async def test_probe_greenhouse_zero_jobs_still_errors(monkeypatch) -> None:
     """Non-SPA ATS platforms (API-backed, no rendering needed) should still
     hard-reject on 0 jobs — only Workday gets the leniency above."""
 
-    async def _no_jobs(company, *, client=None, allow_headless=True):
+    async def _no_jobs(company, *, client=None, allow_headless=True, workday_max_jobs=None):
         return []
 
     monkeypatch.setattr(probe_module, "fetch_company_jobs", _no_jobs)
