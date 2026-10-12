@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { FormEvent, useCallback, useEffect, useState } from "react"
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { GuidanceModal } from "@/components/guidance/GuidanceModal"
 import { GUIDANCE_CONTENT } from "@/lib/guidance/content"
 import { nextCareerWatchGuidanceStep } from "@/lib/guidance/careerWatchGuidance"
@@ -35,7 +35,10 @@ import {
   type CareerWatchAlert,
   type CareerWatchEntry,
   type CareerWatchLimits,
+  type CareerAlertSort,
   type DetectResult,
+  mergeCommaKeywords,
+  sortCareerWatchAlerts,
 } from "@/lib/careerWatch"
 
 const inputClass =
@@ -86,6 +89,7 @@ export default function CareerWatchPage() {
   const [selectedAlertIds, setSelectedAlertIds] = useState<Set<string>>(() => new Set())
   const [dismissingAlerts, setDismissingAlerts] = useState(false)
   const [clearingBell, setClearingBell] = useState(false)
+  const [alertSort, setAlertSort] = useState<CareerAlertSort>("latest")
 
   const pickCareerWatchGuidance = useCallback(
     () =>
@@ -101,6 +105,11 @@ export default function CareerWatchPage() {
   useEffect(() => {
     refresh()
   }, [watches.length, alerts.length, keywordsFieldFocused, refresh])
+
+  const sortedAlerts = useMemo(
+    () => sortCareerWatchAlerts(alerts, alertSort),
+    [alerts, alertSort],
+  )
 
   const load = useCallback(async () => {
     if (!token) return
@@ -295,23 +304,16 @@ export default function CareerWatchPage() {
         setError("No keyword suggestions yet — add skills or experience to your master resume first.")
         return
       }
-      const existing = keywords
-        .split(",")
-        .map((k) => k.trim().toLowerCase())
-        .filter(Boolean)
-      const merged = [...existing]
-      for (const s of suggested) {
-        const lower = s.toLowerCase()
-        if (!merged.includes(lower)) {
-          merged.push(lower)
-        }
-      }
-      setKeywords(merged.join(", "))
+      setKeywords(mergeCommaKeywords(keywords, suggested))
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load keyword suggestions")
     } finally {
       setSuggestingKeywords(false)
     }
+  }
+
+  function handleAddRemoteKeyword() {
+    setKeywords(mergeCommaKeywords(keywords, ["remote"]))
   }
 
   if (status === "loading" || loading) {
@@ -519,19 +521,29 @@ export default function CareerWatchPage() {
               <label className="text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="cw-keywords">
                 Keywords (comma-separated)
               </label>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1.5 text-xs font-semibold text-violet-800 dark:text-violet-300 hover:bg-violet-500/15 disabled:opacity-50 transition-colors"
-                disabled={suggestingKeywords}
-                onClick={() => void handleSuggestKeywords()}
-              >
-                {suggestingKeywords ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" />
-                )}
-                Suggest from master resume
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1.5 text-xs font-semibold text-violet-800 dark:text-violet-300 hover:bg-violet-500/15 disabled:opacity-50 transition-colors"
+                  disabled={suggestingKeywords}
+                  onClick={() => void handleSuggestKeywords()}
+                >
+                  {suggestingKeywords ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  Suggest from master resume
+                </button>
+                <button
+                  type="button"
+                  data-testid="career-watch-add-remote-keyword"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/30 bg-sky-500/10 px-2.5 py-1.5 text-xs font-semibold text-sky-900 dark:text-sky-200 hover:bg-sky-500/15 transition-colors"
+                  onClick={handleAddRemoteKeyword}
+                >
+                  + Remote
+                </button>
+              </div>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-500">
               Alerts need two keyword hits in the posting, or one hit in the job title.
@@ -650,15 +662,49 @@ export default function CareerWatchPage() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  data-testid="career-watch-clear-bell"
-                  disabled={clearingBell}
-                  className="rounded-lg border border-violet-400/30 px-3 py-1.5 text-xs font-medium text-violet-800 dark:text-violet-300 disabled:opacity-50 hover:bg-violet-500/10"
-                  onClick={() => void handleClearBellJobAlerts()}
+              {alerts.length > 0 && (
+                <div
+                  className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5"
+                  role="group"
+                  aria-label="Sort recent alerts"
                 >
-                  {clearingBell ? "Clearing bell…" : "Clear menu bell for job alerts"}
-                </button>
+                  <button
+                    type="button"
+                    data-testid="career-watch-sort-latest"
+                    className={clsx(
+                      "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                      alertSort === "latest"
+                        ? "bg-violet-500/15 text-violet-900 dark:text-violet-200"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800",
+                    )}
+                    onClick={() => setAlertSort("latest")}
+                  >
+                    Latest
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="career-watch-sort-match"
+                    className={clsx(
+                      "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                      alertSort === "match"
+                        ? "bg-violet-500/15 text-violet-900 dark:text-violet-200"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800",
+                    )}
+                    onClick={() => setAlertSort("match")}
+                  >
+                    Best match %
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                data-testid="career-watch-clear-bell"
+                disabled={clearingBell}
+                className="rounded-lg border border-violet-400/30 px-3 py-1.5 text-xs font-medium text-violet-800 dark:text-violet-300 disabled:opacity-50 hover:bg-violet-500/10"
+                onClick={() => void handleClearBellJobAlerts()}
+              >
+                {clearingBell ? "Clearing bell…" : "Clear bell only"}
+              </button>
             {alerts.length > 0 && (
               <>
                 <button
@@ -683,6 +729,11 @@ export default function CareerWatchPage() {
             )}
             </div>
           </div>
+          <p className="text-xs text-slate-500 dark:text-slate-500 max-w-2xl">
+            <span className="font-medium text-slate-600 dark:text-slate-400">Clear bell only</span> removes
+            unread job-alert items from the header menu but keeps them under Recent alerts. Dismiss removes
+            them from both.
+          </p>
           {alerts.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white/50 dark:bg-slate-900/40 px-6 py-10 text-center space-y-3">
               <BellRing className="mx-auto h-9 w-9 text-slate-400 dark:text-slate-600 mb-2" />
@@ -704,7 +755,7 @@ export default function CareerWatchPage() {
                   Select all on this page
                 </label>
               </li>
-              {alerts.map((alert) => (
+              {sortedAlerts.map((alert) => (
                 <li
                   key={alert.id}
                   data-testid={`career-watch-alert-${alert.id}`}
