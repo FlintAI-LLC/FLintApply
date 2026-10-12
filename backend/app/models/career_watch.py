@@ -48,6 +48,7 @@ class CareerAtsType(str, enum.Enum):
     personio = "personio"
     bamboohr = "bamboohr"
     icims = "icims"
+    amazon_jobs = "amazon_jobs"
 
 
 class CareerAlertStatus(str, enum.Enum):

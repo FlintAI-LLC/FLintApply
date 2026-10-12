@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 
 from app.models.career_watch import CareerAtsType, WatchedCompany
+from app.services.career_watch.amazon_jobs import AmazonJobsAdapter
 from app.services.career_watch.ashby import AshbyAdapter
 from app.services.career_watch.bamboohr import BambooHrAdapter
 from app.services.career_watch.base import AtsAdapter
@@ -35,6 +36,7 @@ _ADAPTERS: dict[CareerAtsType, AtsAdapter] = {
     CareerAtsType.personio: PersonioAdapter(),
     CareerAtsType.bamboohr: BambooHrAdapter(),
     CareerAtsType.icims: IcimsAdapter(),
+    CareerAtsType.amazon_jobs: AmazonJobsAdapter(),
     CareerAtsType.generic_html: GenericHtmlAdapter(),
     CareerAtsType.unknown: GenericHtmlAdapter(),
 }
@@ -54,7 +56,7 @@ async def fetch_company_jobs(
     adapter = get_adapter(company.ats_type)
 
     async def _fetch_with_client(active: httpx.AsyncClient) -> list[ParsedJob]:
-        if company.ats_type == CareerAtsType.workday:
+        if company.ats_type in (CareerAtsType.workday, CareerAtsType.amazon_jobs):
             jobs = await adapter.fetch_jobs(
                 company,
                 client=active,

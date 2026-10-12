@@ -15,6 +15,8 @@ log = structlog.get_logger("career_watch.fetch")
 CAREER_WATCH_USER_AGENT = (
     f"{PRODUCT_NAME}-CareerWatch/1.0 (+{PRODUCT_SITE_URL})"
 )
+# Avoid zstd responses (e.g. amazon.jobs) — httpx can fail decoding zstd on reuse.
+_ACCEPT_ENCODING = "gzip, deflate"
 FETCH_TIMEOUT_SECONDS = 10.0
 CIRCUIT_FAILURE_THRESHOLD = 5
 CIRCUIT_COOLDOWN_SECONDS = 300
@@ -84,6 +86,7 @@ async def fetch_text(
             headers={
                 "User-Agent": CAREER_WATCH_USER_AGENT,
                 "Accept": accept,
+                "Accept-Encoding": _ACCEPT_ENCODING,
             },
             timeout=FETCH_TIMEOUT_SECONDS,
             follow_redirects=True,
@@ -112,6 +115,7 @@ async def fetch_json(
     request_headers = {
         "User-Agent": CAREER_WATCH_USER_AGENT,
         "Accept": "application/json",
+        "Accept-Encoding": _ACCEPT_ENCODING,
     }
     if headers:
         request_headers.update(headers)
