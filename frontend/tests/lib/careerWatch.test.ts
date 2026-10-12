@@ -1,7 +1,12 @@
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { getCareerWatchLimits } from "@/lib/careerWatch";
+import {
+  getCareerWatchLimits,
+  mergeCommaKeywords,
+  sortCareerWatchAlerts,
+  type CareerWatchAlert,
+} from "@/lib/careerWatch";
 
 type FetchMock = (input: unknown, init?: unknown) => Promise<Response>;
 
@@ -10,6 +15,46 @@ const originalFetch = globalThis.fetch;
 function mockFetchOnce(response: Response) {
   (globalThis as { fetch: FetchMock }).fetch = async () => response;
 }
+
+describe("careerWatch keyword helpers", () => {
+  it("mergeCommaKeywords adds remote without duplicates", () => {
+    assert.equal(mergeCommaKeywords("python, remote", ["remote"]), "python, remote");
+    assert.equal(mergeCommaKeywords("python", ["remote"]), "python, remote");
+  });
+});
+
+describe("sortCareerWatchAlerts", () => {
+  const base = (id: string, score: number | null, created: string, notified?: string): CareerWatchAlert => ({
+    id,
+    status: "sent",
+    match_score: score,
+    match_reason: null,
+    created_at: created,
+    notified_at: notified ?? null,
+    job_title: id,
+    job_location: "",
+    apply_url: "",
+  });
+
+  it("sorts by match score descending with latest tie-breaker", () => {
+    const alerts = [
+      base("a", 0.3, "2026-01-01T00:00:00Z"),
+      base("b", 0.45, "2026-01-02T00:00:00Z"),
+      base("c", 0.45, "2026-01-03T00:00:00Z"),
+    ];
+    const sorted = sortCareerWatchAlerts(alerts, "match");
+    assert.deepEqual(sorted.map((a) => a.id), ["c", "b", "a"]);
+  });
+
+  it("sorts by notified/created time when mode is latest", () => {
+    const alerts = [
+      base("old", 0.9, "2026-01-01T00:00:00Z", "2026-01-01T12:00:00Z"),
+      base("new", 0.2, "2026-01-05T00:00:00Z", "2026-01-05T12:00:00Z"),
+    ];
+    const sorted = sortCareerWatchAlerts(alerts, "latest");
+    assert.deepEqual(sorted.map((a) => a.id), ["new", "old"]);
+  });
+});
 
 describe("careerWatch apiFetch error handling", () => {
   afterEach(() => {

@@ -39,6 +39,48 @@ export type DetectResult = {
   probe_message: string
 }
 
+export type CareerAlertSort = "latest" | "match"
+
+/** Merge comma-separated keywords (case-insensitive de-dupe). */
+export function mergeCommaKeywords(current: string, toAdd: string[]): string {
+  const existing = current
+    .split(",")
+    .map((k) => k.trim().toLowerCase())
+    .filter(Boolean)
+  const merged = [...existing]
+  for (const raw of toAdd) {
+    const lower = raw.trim().toLowerCase()
+    if (!lower || merged.includes(lower)) continue
+    merged.push(lower)
+  }
+  return merged.join(", ")
+}
+
+function alertSortTimestamp(alert: CareerWatchAlert): number {
+  const raw = alert.notified_at ?? alert.created_at
+  const ms = new Date(raw).getTime()
+  return Number.isNaN(ms) ? 0 : ms
+}
+
+/** Sort Career Watch alerts for the dashboard list (client-side). */
+export function sortCareerWatchAlerts(
+  alerts: CareerWatchAlert[],
+  mode: CareerAlertSort,
+): CareerWatchAlert[] {
+  const copy = [...alerts]
+  if (mode === "match") {
+    copy.sort((a, b) => {
+      const sa = a.match_score ?? -1
+      const sb = b.match_score ?? -1
+      if (sb !== sa) return sb - sa
+      return alertSortTimestamp(b) - alertSortTimestamp(a)
+    })
+    return copy
+  }
+  copy.sort((a, b) => alertSortTimestamp(b) - alertSortTimestamp(a))
+  return copy
+}
+
 async function apiFetch<T>(
   path: string,
   token: string,
