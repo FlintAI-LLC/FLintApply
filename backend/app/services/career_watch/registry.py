@@ -59,7 +59,8 @@ async def fetch_company_jobs(
             return filtered
         if (
             allow_headless
-            and company.ats_type in (CareerAtsType.generic_html, CareerAtsType.icims)
+            and company.ats_type
+            in (CareerAtsType.generic_html, CareerAtsType.icims, CareerAtsType.workday)
         ):
             headless_jobs = await fetch_jobs_headless(company)
             if headless_jobs:

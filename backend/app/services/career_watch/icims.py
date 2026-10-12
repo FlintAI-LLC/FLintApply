@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from html import unescape
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -107,7 +108,7 @@ def parse_icims_html(html: str, *, base_url: str) -> list[ParsedJob]:
     for body in bodies:
         for match in _ICIMS_JOB_LINK_RE.finditer(body):
             href = match.group("href").strip()
-            title = re.sub(r"\s+", " ", match.group("title")).strip()
+            title = unescape(re.sub(r"\s+", " ", match.group("title")).strip())
             if not href or not title:
                 continue
             if "job" not in href.lower() and "requisition" not in href.lower():

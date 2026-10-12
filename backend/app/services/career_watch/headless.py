@@ -77,6 +77,18 @@ class _PlaywrightBrowser:
 
                 await assert_url_safe_async(url)
                 await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                # SPA career sites (e.g. Workday) populate the job list via an
+                # XHR after the initial DOM load. Give the page a bounded
+                # extra window to go idle so the rendered list is present
+                # before we snapshot it. Never hard-fail on this: a page with
+                # background polling/analytics that never truly idles should
+                # still return whatever content it has rendered so far.
+                try:
+                    await page.wait_for_load_state(
+                        "networkidle", timeout=min(timeout_ms, 8_000)
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
                 content = await page.content()
                 return content[:2_000_000]
             finally:
@@ -100,6 +112,13 @@ def _extract_rendered_jobs(
         icims_jobs = parse_icims_html(html, base_url=base_url)
         if icims_jobs:
             return icims_jobs
+    # Generic "/job/" or "/requisition/" anchor-link fallback. Despite the
+    # name, parse_icims_html's regex + urljoin-based absolute URL resolution
+    # is ATS-agnostic and is what actually extracts post-render job links
+    # for Workday, generic_html, and any other SPA career site once
+    # JavaScript has populated the DOM (unlike workday.py's parse_workday_html,
+    # whose base-URL joining duplicates path segments on sites like
+    # tenant.myworkdayjobs.com/SiteName).
     return parse_icims_html(html, base_url=base_url)
 
 

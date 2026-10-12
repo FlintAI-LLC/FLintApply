@@ -28,6 +28,21 @@ def test_parse_icims_html_extracts_job_rows() -> None:
     assert "12345" in jobs[0].apply_url
 
 
+def test_parse_icims_html_unescapes_html_entities_in_title() -> None:
+    """This extractor is also reused as the generic post-render fallback
+    for headless Workday/SPA extraction, so a raw &amp; in a title must
+    come out as a plain & for every caller, not just the iCIMS adapter."""
+    html = """
+    <div class="iCIMS_JobsTable">
+      <a href="/jobs/999/role">Workplace Portfolio &amp; Analytics</a>
+    </div>
+    """
+    jobs = parse_icims_html(html, base_url="https://careers-costco.icims.com/jobs/search")
+    assert len(jobs) == 1
+    assert jobs[0].title == "Workplace Portfolio & Analytics"
+    assert "&amp;" not in jobs[0].title
+
+
 @pytest.mark.asyncio
 async def test_icims_adapter_fetches_html_jobs() -> None:
     company = WatchedCompany(

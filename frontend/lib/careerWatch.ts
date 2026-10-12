@@ -53,22 +53,24 @@ async function apiFetch<T>(
     },
   })
   if (!resp.ok) {
-    const body = await resp.text()
+    const bodyText = await resp.text()
+    let friendlyMessage: string | null = null
     try {
-      const parsed = JSON.parse(body) as { detail?: { message?: string } | string }
+      const parsed = JSON.parse(bodyText) as { detail?: { message?: string } | string }
       const detail = parsed.detail
-      if (detail && typeof detail === "object" && detail.message) {
-        throw new Error(detail.message)
+      if (detail && typeof detail === "object" && typeof detail.message === "string") {
+        friendlyMessage = detail.message
+      } else if (typeof detail === "string") {
+        friendlyMessage = detail
       }
-      if (typeof detail === "string") {
-        throw new Error(detail)
-      }
-    } catch (err) {
-      if (err instanceof Error && err.message !== body) {
-        throw err
-      }
+    } catch {
+      // Non-JSON error body (e.g. an upstream gateway error during a
+      // deploy) — never surface the raw body or a JSON parse error to
+      // the user, fall through to the generic message below instead.
     }
-    throw new Error(body || `Request failed (${resp.status})`)
+    throw new Error(
+      friendlyMessage ?? "Something went wrong. Please check the details and try again.",
+    )
   }
   if (resp.status === 204) {
     return undefined as T
