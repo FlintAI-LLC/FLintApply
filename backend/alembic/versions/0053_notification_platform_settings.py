@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0053_notification_platform_settings"
+revision: str = "0053_notif_platform_settings"
 down_revision: str | None = "0052_cw_seniority_digest_prefs"
 branch_labels = None
 depends_on = None
