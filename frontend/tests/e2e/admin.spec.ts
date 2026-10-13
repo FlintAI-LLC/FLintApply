@@ -306,7 +306,7 @@ test.describe("/admin/reports chart rendering", () => {
     })
 
     await page.goto(`${BASE}/admin/reports`)
-    await expect(page.getByText("DAU/WAU/MAU")).toBeVisible()
+    await expect(page.getByTestId("activity-metrics-legend")).toBeVisible()
     await expect(page.locator("svg.recharts-surface").first()).toBeVisible()
   })
 })

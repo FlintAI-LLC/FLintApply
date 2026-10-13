@@ -6,7 +6,7 @@ export function buildFunnelData(metrics: FunnelMetrics) {
     { name: "Registered", value: metrics.registered },
     { name: "Email verified", value: metrics.email_verified },
     { name: "First build", value: metrics.first_build },
-    { name: "First export", value: metrics.first_export },
+    { name: "First resume build", value: metrics.first_export },
     { name: "Subscribed", value: metrics.subscribed },
   ]
 }
