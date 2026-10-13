@@ -1,8 +1,12 @@
-"""Daily job-alert digest unit tests."""
+"""Daily job-alert digest tests (DB-backed; runs in integration CI job)."""
 
 from __future__ import annotations
 
 import uuid
+
+import pytest
+
+pytestmark = pytest.mark.integration
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo

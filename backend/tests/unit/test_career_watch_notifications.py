@@ -1,8 +1,12 @@
-"""Career Watch emit notification policy tests."""
+"""Career Watch emit notification policy tests (DB-backed)."""
 
 from __future__ import annotations
 
 import uuid
+
+import pytest
+
+pytestmark = pytest.mark.integration
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
