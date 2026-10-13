@@ -138,14 +138,19 @@ async def _classify_revoked_refresh_token(row: RefreshToken) -> None:
     """Raise ``SessionReplacedError`` or ``RefreshTokenReuseError`` for revoked rows."""
     from app.services.auth import session as redis_session
 
-    active_sid = await redis_session.get_active_auth_session_id(row.user_id)
     meta = await redis_session.get_refresh_token_metadata(row.id)
     token_sid = meta.get("auth_session_id") if meta else None
 
-    if active_sid and (token_sid is None or token_sid != active_sid):
-        raise SessionReplacedError(user_id=str(row.user_id))
+    if token_sid is None:
+        if meta and meta.get("db_revoked"):
+            raise SessionReplacedError(user_id=str(row.user_id))
+        # Rotation replay without Redis metadata (tests / legacy rows).
+        raise RefreshTokenReuseError(user_id=str(row.user_id))
 
-    raise RefreshTokenReuseError(user_id=str(row.user_id))
+    if await redis_session.is_auth_session_active(row.user_id, token_sid):
+        raise RefreshTokenReuseError(user_id=str(row.user_id))
+
+    raise SessionReplacedError(user_id=str(row.user_id))
 
 
 def decode_access_token(token: str, *, expected_type: TokenType = "access") -> dict[str, Any]:
@@ -251,6 +256,43 @@ async def revoke_token(session: AsyncSession, *, row: RefreshToken) -> None:
         await session.flush()
 
 
+async def revoke_active_refresh_tokens_for_auth_session(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    auth_session_id: str,
+) -> int:
+    """Revoke DB refresh rows (and mark Redis) tied to one auth session id."""
+    from app.services.auth import session as redis_session
+
+    target = str(auth_session_id)
+    revoked = 0
+    for token_id in await redis_session.list_user_token_ids(user_id):
+        meta = await redis_session.get_refresh_token_metadata(token_id)
+        if not meta or meta.get("db_revoked"):
+            continue
+        if str(meta.get("auth_session_id")) != target:
+            continue
+        try:
+            tid = uuid.UUID(str(token_id))
+        except ValueError:
+            continue
+        row = (
+            await session.execute(
+                select(RefreshToken).where(
+                    RefreshToken.id == tid,
+                    RefreshToken.user_id == user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None or row.revoked_at is not None:
+            continue
+        await revoke_token(session, row=row)
+        await redis_session.mark_refresh_token_revoked_in_redis(row.id)
+        revoked += 1
+    return revoked
+
+
 async def revoke_all_user_tokens(
     session: AsyncSession,
     *,
@@ -345,6 +387,7 @@ __all__ = [
     "create_refresh_token",
     "decode_access_token",
     "find_refresh_token",
+    "revoke_active_refresh_tokens_for_auth_session",
     "hash_refresh_token",
     "make_device_fingerprint",
     "new_auth_session_id",

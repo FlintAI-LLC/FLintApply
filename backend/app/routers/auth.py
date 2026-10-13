@@ -106,6 +106,7 @@ from app.services.auth.tokens import (
     find_refresh_token,
     make_device_fingerprint,
     new_auth_session_id,
+    revoke_active_refresh_tokens_for_auth_session,
     revoke_all_user_tokens,
     revoke_token,
     rotate_refresh_token,
@@ -414,9 +415,7 @@ async def _issue_session(
 ) -> AuthSuccessResponse:
     """Mint access + refresh tokens and bind the refresh token in Redis."""
     auth_session_id = new_auth_session_id()
-    await revoke_all_user_tokens(db, user_id=user.id)
-    await redis_session.revoke_all_user_tokens(user.id)
-    await redis_session.set_active_auth_session(
+    await redis_session.register_auth_session(
         user.id,
         auth_session_id,
         ttl=settings.REFRESH_TOKEN_TTL_SECONDS,
@@ -1065,12 +1064,36 @@ async def logout(
     user: Annotated[User, Depends(get_current_user)],
     refresh_token: Annotated[str | None, Cookie(alias=REFRESH_COOKIE_NAME)] = None,
 ) -> dict[str, Any]:
+    auth_session_id: str | None = None
+    header = request.headers.get("Authorization", "")
+    if header.lower().startswith("bearer "):
+        token = header[7:].strip()
+        if token:
+            try:
+                auth_session_id = str(
+                    decode_access_token(token, expected_type="access").get("sid") or ""
+                ) or None
+            except (TokenExpiredError, TokenInvalidError):
+                auth_session_id = None
     if refresh_token:
         row = await find_refresh_token(db, token=refresh_token)
         if row and row.user_id == user.id:
+            meta = await redis_session.get_refresh_token_metadata(row.id)
+            if meta and meta.get("auth_session_id"):
+                auth_session_id = str(meta["auth_session_id"])
             await revoke_token(db, row=row)
-            await redis_session.revoke_redis_token(row.id)
-    await redis_session.clear_active_auth_session(user.id)
+            await redis_session.mark_refresh_token_revoked_in_redis(row.id)
+    elif auth_session_id:
+        await revoke_active_refresh_tokens_for_auth_session(
+            db,
+            user_id=user.id,
+            auth_session_id=auth_session_id,
+        )
+    if auth_session_id:
+        if not await redis_session.user_has_other_refresh_tokens_for_session(
+            user.id, auth_session_id
+        ):
+            await redis_session.unregister_auth_session(user.id, auth_session_id)
     await record_auth_event(
         db,
         user_id=user.id,
@@ -1372,8 +1395,15 @@ async def revoke_session(
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "session_not_found"})
+    meta = await redis_session.get_refresh_token_metadata(row.id)
     await revoke_token(db, row=row)
-    await redis_session.revoke_redis_token(row.id)
+    await redis_session.mark_refresh_token_revoked_in_redis(row.id)
+    if meta and meta.get("auth_session_id"):
+        sid = str(meta["auth_session_id"])
+        if not await redis_session.user_has_other_refresh_tokens_for_session(
+            user.id, sid
+        ):
+            await redis_session.unregister_auth_session(user.id, sid)
     _attach_closure_header(request, response)
     return {"ok": True}
 

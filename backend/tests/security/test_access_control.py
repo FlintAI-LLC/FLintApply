@@ -175,6 +175,7 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/api/auth/password/reset"): "authenticated by the reset token",
     ("GET", "/api/auth/verify/{token}"): "authenticated by the emailed token",
     ("POST", "/api/auth/extension/login"): "establishes the extension principal",
+    ("POST", "/api/auth/extension/web-handoff/exchange"): "extension web-handoff exchange",
     ("POST", "/api/auth/extension/refresh"): "authenticated by the extension refresh token",
     ("POST", "/api/auth/extension/callback"): "extension OAuth callback",
     # --- admin credential establishment (marked admin_public_route) -----
@@ -1182,12 +1183,10 @@ async def superseded_token(
     db_session: AsyncSession,
     stub_turnstile: None,
 ) -> tuple[str, str]:
-    """``(dead_token, live_token)`` for one user whose login was replaced.
+    """``(dead_token, live_token)`` for one user whose first session was revoked.
 
-    Registering then logging in again rotates the ``sid`` claim, which is
-    how the app revokes a stolen access token before it expires: the
-    victim signs in again (or resets their password) and the old token
-    must stop working everywhere.
+    Simulates logout-all / session revoke: the first auth session id is
+    unregistered while the second login remains valid.
     """
     email = f"replaced-{uuid.uuid4().hex[:10]}@example.com"
     register = await app_client.post(
@@ -1203,15 +1202,21 @@ async def superseded_token(
     )
     assert register.status_code == 201, register.text
     dead_token = register.json()["access_token"]
+    user_id = uuid.UUID(register.json()["user"]["id"])
     from tests.conftest import verify_user_email
+    from app.services.auth import session as redis_session
+    from app.services.auth.tokens import decode_access_token
 
-    await verify_user_email(db_session, uuid.UUID(register.json()["user"]["id"]))
+    await verify_user_email(db_session, user_id)
     await db_session.commit()
 
     login = await app_client.post(
         "/api/auth/login", json={"email": email, "password": _PASSWORD}
     )
     assert login.status_code == 200, login.text
+    dead_sid = decode_access_token(dead_token).get("sid")
+    assert dead_sid
+    await redis_session.unregister_auth_session(user_id, dead_sid)
     return dead_token, login.json()["access_token"]
 
 

@@ -39,8 +39,9 @@ async def _auth_session_is_current(claims: dict, subject: str) -> bool:
         user_id = uuid.UUID(subject)
     except ValueError:
         return False
-    active_sid = await redis_session.get_active_auth_session_id(user_id)
-    return not active_sid or str(sid) == active_sid
+    if not await redis_session.user_has_registered_auth_sessions(user_id):
+        return True
+    return await redis_session.is_auth_session_active(user_id, sid)
 
 
 async def resolve_bearer_user_id(
