@@ -29,6 +29,7 @@ from typing import Annotated, Literal
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,12 +72,19 @@ from app.services.auth.oauth import (
     exchange_microsoft_code,
 )
 from app.services.auth.password import verify_password
+from app.services.auth.dependencies import get_current_user
+from app.services.auth.extension_web_handoff import (
+    consume_web_handoff_code,
+    mint_web_handoff_code,
+)
 from app.services.auth.tokens import (
+    TokenExpiredError,
+    TokenInvalidError,
     create_access_token,
     create_refresh_token,
+    decode_access_token,
     make_device_fingerprint,
     new_auth_session_id,
-    revoke_all_user_tokens,
     rotate_refresh_token,
 )
 
@@ -155,6 +163,18 @@ class ExtensionAuthResponse(BaseModel):
     user: MeResponse
 
 
+class WebHandoffCodeResponse(BaseModel):
+    code: str
+    expires_in: int
+
+
+class WebHandoffExchangeRequest(BaseModel):
+    code: str = Field(..., min_length=16, max_length=128)
+
+
+_extension_bearer = HTTPBearer(auto_error=False)
+
+
 def _client_ip(request: Request) -> str:
     """Client IP for extension device fingerprints and login records.
 
@@ -181,15 +201,29 @@ def _require_enabled() -> None:
         )
 
 
+def _auth_session_id_from_bearer(
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    try:
+        sid = decode_access_token(credentials.credentials, expected_type="access").get(
+            "sid"
+        )
+    except (TokenExpiredError, TokenInvalidError):
+        raise HTTPException(status_code=401, detail="Invalid access token") from None
+    if not sid:
+        raise HTTPException(status_code=401, detail={"code": "missing_session"})
+    return str(sid)
+
+
 async def _issue_extension_session(
     db: AsyncSession,
     request: Request,
     user: User,
 ) -> ExtensionAuthResponse:
     auth_session_id = new_auth_session_id()
-    await revoke_all_user_tokens(db, user_id=user.id)
-    await redis_session.revoke_all_user_tokens(user.id)
-    await redis_session.set_active_auth_session(
+    await redis_session.register_auth_session(
         user.id,
         auth_session_id,
         ttl=settings.REFRESH_TOKEN_TTL_SECONDS,
@@ -557,5 +591,82 @@ async def extension_oauth_callback(
         ip=_client_ip(request),
         user_agent=_user_agent(request),
         metadata={"provider": provider, "source": "extension"},
+    )
+    return await _issue_extension_session(db, request, user)
+
+
+@router.post("/web-handoff", response_model=WebHandoffCodeResponse)
+@limiter.limit("30/minute", key_func=lambda request: resolve_client_ip(request))
+async def create_extension_web_handoff(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(_extension_bearer)
+    ] = None,
+) -> WebHandoffCodeResponse:
+    """Mint a one-time code for the browser extension (web session stays active)."""
+    _require_enabled()
+    web_sid = _auth_session_id_from_bearer(credentials)
+    if not await redis_session.is_auth_session_active(user.id, web_sid):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "session_replaced"},
+        )
+    code, expires_in = await mint_web_handoff_code(user.id, web_sid)
+    await record_auth_event(
+        db,
+        user_id=user.id,
+        event=AuthAuditEvent.login_success,
+        ip=_client_ip(request),
+        user_agent=_user_agent(request),
+        metadata={"reason": "extension_web_handoff_mint", "source": "extension"},
+    )
+    return WebHandoffCodeResponse(code=code, expires_in=expires_in)
+
+
+@router.post("/web-handoff/exchange", response_model=ExtensionAuthResponse)
+@limiter.limit("30/minute")
+async def exchange_extension_web_handoff(
+    request: Request,
+    payload: WebHandoffExchangeRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ExtensionAuthResponse:
+    """Exchange a web-handoff code for extension tokens (no OAuth round-trip)."""
+    _require_enabled()
+    redeemed = await consume_web_handoff_code(payload.code)
+    if redeemed is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "handoff_code_invalid"},
+        )
+    try:
+        user_id = uuid.UUID(redeemed["user_id"])
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "handoff_code_invalid"},
+        ) from None
+    web_sid = redeemed["web_sid"]
+    if not await redis_session.is_auth_session_active(user_id, web_sid):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "session_replaced"},
+        )
+    user = (
+        await db.execute(select(User).where(User.id == user_id))
+    ).scalar_one_or_none()
+    if user is None or user.is_suspended:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "account_suspended"},
+        )
+    await record_auth_event(
+        db,
+        user_id=user.id,
+        event=AuthAuditEvent.login_success,
+        ip=_client_ip(request),
+        user_agent=_user_agent(request),
+        metadata={"reason": "extension_web_handoff_exchange", "source": "extension"},
     )
     return await _issue_extension_session(db, request, user)

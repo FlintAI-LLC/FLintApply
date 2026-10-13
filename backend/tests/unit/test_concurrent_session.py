@@ -1,8 +1,9 @@
-"""Concurrent auth session enforcement — one active session per user (Redis).
+"""Concurrent auth sessions — multiple clients per user (Redis).
 
-When a user logs in or registers on a new device, prior refresh tokens are
-revoked and the active session id in Redis is replaced.  Stale access tokens
-and refresh tokens must surface ``session_replaced`` (401).
+Web and extension (and additional browsers) each keep their own auth session id.
+Logout or explicit session revoke ends one client; ``logout-all`` and password
+reset still revoke everything.  Presenting a refresh token after its auth
+session was unregistered surfaces ``session_replaced`` (401).
 """
 
 from __future__ import annotations
@@ -136,7 +137,7 @@ def test_access_token_carries_session_id_claim() -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_second_login_invalidates_first_session(
+async def test_second_login_keeps_first_session_valid(
     app_client: AsyncClient,
 ) -> None:
     first_access, first_refresh = await _register(app_client)
@@ -149,15 +150,19 @@ async def test_second_login_invalidates_first_session(
         "/api/auth/me",
         headers={"Authorization": f"Bearer {first_access}"},
     )
-    assert r.status_code == 401
-    assert r.json()["detail"]["code"] == "session_replaced"
+    assert r.status_code == 200, r.text
+
+    r = await app_client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {second_access}"},
+    )
+    assert r.status_code == 200, r.text
 
     r = await app_client.post(
         "/api/auth/refresh",
         cookies={REFRESH_COOKIE_NAME: first_refresh},
     )
-    assert r.status_code == 401
-    assert r.json()["detail"]["code"] == "session_replaced"
+    assert r.status_code == 200, r.text
 
 
 async def test_refresh_within_same_session_succeeds(
@@ -234,7 +239,6 @@ async def test_rotate_revoked_token_from_replaced_session_raises_session_replace
     await db_session.flush()
 
     old_session = new_auth_session_id()
-    new_session = new_auth_session_id()
     issued = await create_refresh_token(
         db_session, user_id=user.id, device_fingerprint="fp"
     )
@@ -246,13 +250,11 @@ async def test_rotate_revoked_token_from_replaced_session_raises_session_replace
         auth_session_id=old_session,
     )
 
-    # Simulate a new login elsewhere: revoke DB row + swap active session.
+    # Simulate logout-all: revoke DB row + drop the old auth session id.
     issued.row.revoked_at = issued.row.issued_at
     await db_session.flush()
     await redis_session.revoke_all_user_tokens(user.id)
-    await redis_session.set_active_auth_session(
-        user.id, new_session, ttl=3600
-    )
+    await redis_session.unregister_auth_session(user.id, old_session)
 
     with pytest.raises(SessionReplacedError):
         await rotate_refresh_token(

@@ -138,14 +138,15 @@ async def _classify_revoked_refresh_token(row: RefreshToken) -> None:
     """Raise ``SessionReplacedError`` or ``RefreshTokenReuseError`` for revoked rows."""
     from app.services.auth import session as redis_session
 
-    active_sid = await redis_session.get_active_auth_session_id(row.user_id)
     meta = await redis_session.get_refresh_token_metadata(row.id)
     token_sid = meta.get("auth_session_id") if meta else None
 
-    if active_sid and (token_sid is None or token_sid != active_sid):
-        raise SessionReplacedError(user_id=str(row.user_id))
+    if token_sid and await redis_session.is_auth_session_active(
+        row.user_id, token_sid
+    ):
+        raise RefreshTokenReuseError(user_id=str(row.user_id))
 
-    raise RefreshTokenReuseError(user_id=str(row.user_id))
+    raise SessionReplacedError(user_id=str(row.user_id))
 
 
 def decode_access_token(token: str, *, expected_type: TokenType = "access") -> dict[str, Any]:

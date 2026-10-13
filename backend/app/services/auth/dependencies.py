@@ -96,9 +96,8 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Token missing subject") from exc
 
     sid = claims.get("sid")
-    if sid:
-        active_sid = await redis_session.get_active_auth_session_id(user_id)
-        if active_sid and sid != active_sid:
+    if sid and await redis_session.user_has_registered_auth_sessions(user_id):
+        if not await redis_session.is_auth_session_active(user_id, sid):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={"code": "session_replaced"},
