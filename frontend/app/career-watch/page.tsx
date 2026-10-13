@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { CareerWatchOptionalFilters } from "@/components/career-watch/CareerWatchOptionalFilters"
 import { GuidanceModal } from "@/components/guidance/GuidanceModal"
 import { GUIDANCE_CONTENT } from "@/lib/guidance/content"
 import { nextCareerWatchGuidanceStep } from "@/lib/guidance/careerWatchGuidance"
@@ -41,7 +42,6 @@ import {
   type CareerWatchEntry,
   type CareerWatchLimits,
   CAREER_WATCH_MAX_KEYWORDS,
-  CAREER_WATCH_SENIORITY_LEVELS,
   type CareerAlertSort,
   type DetectResult,
   mergeCommaKeywords,
@@ -172,12 +172,6 @@ export default function CareerWatchPage() {
       .then((p) => setWebPushEnabled(p.web_push_enabled))
       .catch(() => undefined)
   }, [token])
-
-  function toggleSeniorityLevel(id: string) {
-    setSeniorityLevels((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    )
-  }
 
   async function handleEnableDesktopNotifications() {
     if (!token) return
@@ -647,54 +641,25 @@ export default function CareerWatchPage() {
               <label className="text-xs font-medium text-slate-600 dark:text-slate-400" htmlFor="cw-keywords">
                 Keywords (comma-separated)
               </label>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1.5 text-xs font-semibold text-violet-800 dark:text-violet-300 hover:bg-violet-500/15 disabled:opacity-50 transition-colors"
-                  disabled={suggestingKeywords}
-                  onClick={() => void handleSuggestKeywords()}
-                >
-                  {suggestingKeywords ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-3.5 w-3.5" />
-                  )}
-                  Suggest from master resume
-                </button>
-                <button
-                  type="button"
-                  data-testid="career-watch-add-remote-keyword"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/30 bg-sky-500/10 px-2.5 py-1.5 text-xs font-semibold text-sky-900 dark:text-sky-200 hover:bg-sky-500/15 transition-colors"
-                  onClick={handleAddRemoteKeyword}
-                >
-                  + Remote
-                </button>
-                {CAREER_WATCH_SENIORITY_LEVELS.map((level) => {
-                  const active = seniorityLevels.includes(level.id)
-                  return (
-                    <button
-                      key={level.id}
-                      type="button"
-                      data-testid={`career-watch-seniority-${level.id}`}
-                      className={clsx(
-                        "inline-flex items-center rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors",
-                        active
-                          ? "border-amber-400/50 bg-amber-500/20 text-amber-900 dark:text-amber-200"
-                          : "border-slate-300/60 dark:border-slate-700 bg-white/50 dark:bg-slate-900/40 text-slate-600 dark:text-slate-400 hover:border-amber-400/40",
-                      )}
-                      onClick={() => toggleSeniorityLevel(level.id)}
-                    >
-                      {level.label}
-                    </button>
-                  )
-                })}
-              </div>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1.5 text-xs font-semibold text-violet-800 dark:text-violet-300 hover:bg-violet-500/15 disabled:opacity-50 transition-colors"
+                disabled={suggestingKeywords}
+                onClick={() => void handleSuggestKeywords()}
+              >
+                {suggestingKeywords ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                Suggest from master resume
+              </button>
             </div>
-            {seniorityLevels.length > 0 && (
-              <p className="text-xs text-slate-500 dark:text-slate-500">
-                Optional: only alert on titles matching selected seniority levels.
-              </p>
-            )}
+            <CareerWatchOptionalFilters
+              seniorityLevels={seniorityLevels}
+              onSeniorityChange={setSeniorityLevels}
+              onAddRemote={handleAddRemoteKeyword}
+            />
             <p className="text-xs text-slate-500 dark:text-slate-500">
               Alerts need two keyword hits in the posting, or one hit in the job title. Up to{" "}
               {CAREER_WATCH_MAX_KEYWORDS} keywords.
