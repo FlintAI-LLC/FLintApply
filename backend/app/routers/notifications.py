@@ -32,6 +32,7 @@ from app.services.notifications.sms_verify import (
     verify_code,
 )
 from app.services.notifications.vapid_public import application_server_key
+from app.services.career_watch.job_alert_digest import send_daily_job_alert_digests
 from app.services.notifications.scheduler import dispatch_pending_notifications
 from app.config import settings
 
@@ -467,6 +468,25 @@ async def scheduler_dispatch_notifications(
         "inspected": result.inspected,
         "dispatched": result.dispatched,
         "failed": result.failed,
+    }
+
+
+@router.post("/api/notifications/scheduler/job-alert-digests", include_in_schema=False)
+async def scheduler_job_alert_digests(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    x_scheduler_secret: Annotated[str | None, Security(_scheduler_header)] = None,
+) -> dict[str, int]:
+    """Internal: send due daily Career Watch job-alert digest emails (hourly tick)."""
+    secret = settings.INTERNAL_SCHEDULER_SECRET
+    if not secret or x_scheduler_secret != secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    stats = await send_daily_job_alert_digests(db)
+    await db.commit()
+    return {
+        "ok": 1,
+        "users_considered": stats.users_considered,
+        "digests_sent": stats.digests_sent,
     }
 
 

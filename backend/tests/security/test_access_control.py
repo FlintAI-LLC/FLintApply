@@ -196,6 +196,10 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         "POST",
         "/api/notifications/scheduler/dispatch",
     ): "X-Scheduler-Secret shared secret; notification outbox dispatch",
+    (
+        "POST",
+        "/api/notifications/scheduler/job-alert-digests",
+    ): "X-Scheduler-Secret shared secret; daily job-alert digest send",
     # --- public runtime config (no user data) ---------------------------
     ("GET", "/api/auth/register-config"): "public Turnstile site key",
     ("GET", "/api/feature-flags"): "public runtime config",
@@ -264,6 +268,7 @@ HIDDEN_FROM_SCHEMA: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/api/billing/webhook"),
         ("POST", "/api/notifications/webhooks/resend"),
         ("POST", "/api/notifications/scheduler/dispatch"),
+        ("POST", "/api/notifications/scheduler/job-alert-digests"),
     }
 )
 
@@ -442,6 +447,7 @@ async def test_gated_route_rejects_anonymous_request(
     [
         ("DELETE", "/api/account"),
         ("POST", "/api/auth/scheduler/unverified-cleanup"),
+        ("POST", "/api/notifications/scheduler/job-alert-digests"),
     ],
 )
 async def test_scheduler_route_rejects_missing_and_wrong_secret(
