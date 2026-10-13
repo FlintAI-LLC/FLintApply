@@ -36,6 +36,7 @@ class WatchlistEntry:
     careers_page_url: str
     ats_type: CareerAtsType
     keywords: list[str]
+    seniority_levels: list[str]
     is_active: bool
     created_at: datetime
 
@@ -49,6 +50,7 @@ def _serialize(row: UserWatchedCompany) -> WatchlistEntry:
         careers_page_url=company.careers_page_url,
         ats_type=company.ats_type,
         keywords=list(row.keywords or []),
+        seniority_levels=list(row.seniority_levels or []),
         is_active=row.is_active,
         created_at=row.created_at,
     )
@@ -118,6 +120,7 @@ async def add_watch(
     careers_page_url: str,
     company_name: str | None = None,
     keywords: list[str] | None = None,
+    seniority_levels: list[str] | None = None,
     user: Any | None = None,
 ) -> WatchlistEntry:
     from app.models.user import User
@@ -144,6 +147,8 @@ async def add_watch(
         existing.is_active = True
         if keywords is not None:
             existing.keywords = keywords
+        if seniority_levels is not None:
+            existing.seniority_levels = seniority_levels
         await session.flush()
         await session.refresh(existing, attribute_names=["watched_company"])
         existing.watched_company = company
@@ -154,6 +159,7 @@ async def add_watch(
         user_id=user_id,
         watched_company_id=company.id,
         keywords=keywords or [],
+        seniority_levels=seniority_levels or [],
         is_active=True,
     )
     session.add(row)
@@ -168,9 +174,12 @@ async def update_watch_keywords(
     user_id: uuid.UUID,
     watch_id: uuid.UUID,
     keywords: list[str],
+    seniority_levels: list[str] | None = None,
 ) -> WatchlistEntry:
     row = await _owned_watch(session, user_id=user_id, watch_id=watch_id)
     row.keywords = keywords
+    if seniority_levels is not None:
+        row.seniority_levels = seniority_levels
     await session.flush()
     return _serialize(row)
 

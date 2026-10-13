@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.brand import PRODUCT_NAME
 from app.config import settings
-from app.models.notifications import Notification, NotificationPreference
+from app.models.notifications import DigestMode, Notification, NotificationPreference
 from app.models.user import User
 from app.services.notifications.preferences import category_enabled, get_or_create_preferences
 
@@ -57,7 +57,10 @@ async def send_notification_email(
         return {"sent": False, "reason": "email_bounced"}
 
     prefs = prefs or await get_or_create_preferences(session, user.id)
-    if not category_enabled(prefs, category=notification.category, channel="email"):
+    if notification.type == "career_watch_daily_digest":
+        if prefs.digest_mode != DigestMode.daily:
+            return {"sent": False, "reason": "digest_disabled"}
+    elif not category_enabled(prefs, category=notification.category, channel="email"):
         return {"sent": False, "reason": "category_disabled"}
 
     deep_link = (notification.data or {}).get("url") or (

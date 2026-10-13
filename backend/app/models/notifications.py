@@ -70,7 +70,6 @@ DEFAULT_EMAIL_CATEGORIES = [
     "application_follow_up",
     "application_interview",
     "application_offer",
-    "job_alerts",
     "data_export",
     "account_closure",
 ]
@@ -83,6 +82,7 @@ DEFAULT_IN_APP_CATEGORIES = [
     "application_interview",
     "application_nudge",
     "application_offer",
+    "job_alerts",
     "data_export",
     "admin_announcement",
 ]
@@ -186,8 +186,20 @@ class NotificationPreference(Base):
     digest_mode: Mapped[DigestMode] = mapped_column(
         _DIGEST_PG,
         nullable=False,
-        default=DigestMode.off,
-        server_default=DigestMode.off.value,
+        default=DigestMode.daily,
+        server_default=DigestMode.daily.value,
+    )
+    timezone: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="America/Los_Angeles",
+        server_default="America/Los_Angeles",
+    )
+    instant_job_alert_email: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

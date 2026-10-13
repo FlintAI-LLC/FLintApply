@@ -12,7 +12,26 @@ from app.models.master_resume import MasterResumeSectionType
 from app.services.master_resume.crud import get_chunks_for_user
 
 _WORD_RE = re.compile(r"[a-z][a-z0-9+#.-]{1,48}", re.I)
-_MAX_SUGGESTIONS = 20
+_MAX_SUGGESTIONS = 6
+_GENERIC_TOKENS = frozenset(
+    {
+        "and",
+        "the",
+        "for",
+        "with",
+        "team",
+        "work",
+        "experience",
+        "years",
+        "role",
+        "skills",
+        "software",
+        "engineer",
+        "engineering",
+        "developer",
+        "development",
+    }
+)
 _MIN_TOKEN_LEN = 3
 _MAX_KEYWORD_PHRASE_LEN = 40
 
@@ -37,6 +56,8 @@ async def suggest_career_watch_keywords(
     def add_phrase(raw: str, weight: int = 1) -> None:
         phrase = raw.strip().lower()
         if not phrase or len(phrase) < _MIN_TOKEN_LEN:
+            return
+        if phrase in _GENERIC_TOKENS:
             return
         if len(phrase) > _MAX_KEYWORD_PHRASE_LEN:
             return

@@ -13,9 +13,20 @@ export type CareerWatchEntry = {
   careers_page_url: string
   ats_type: string
   keywords: string[]
+  seniority_levels: string[]
   is_active: boolean
   created_at: string
 }
+
+export const CAREER_WATCH_SENIORITY_LEVELS = [
+  { id: "intern", label: "Intern" },
+  { id: "mid", label: "Mid" },
+  { id: "senior", label: "Senior" },
+  { id: "staff", label: "Staff" },
+  { id: "principal", label: "Principal" },
+  { id: "manager", label: "Manager" },
+  { id: "director", label: "Director" },
+] as const
 
 export type CareerWatchAlert = {
   id: string
@@ -42,7 +53,7 @@ export type DetectResult = {
 export type CareerAlertSort = "latest" | "match"
 
 /** Must match backend `CreateWatchRequest.keywords` max_length. */
-export const CAREER_WATCH_MAX_KEYWORDS = 20
+export const CAREER_WATCH_MAX_KEYWORDS = 10
 
 export type MergeCommaKeywordsResult = {
   value: string
@@ -193,7 +204,12 @@ export async function listCareerWatches(token: string): Promise<CareerWatchEntry
 
 export async function createCareerWatch(
   token: string,
-  body: { careers_page_url: string; company_name?: string; keywords: string[] },
+  body: {
+    careers_page_url: string
+    company_name?: string
+    keywords: string[]
+    seniority_levels?: string[]
+  },
 ): Promise<CareerWatchEntry> {
   return apiFetch("/api/career-watch/watches", token, {
     method: "POST",
@@ -205,10 +221,11 @@ export async function updateCareerWatchKeywords(
   token: string,
   watchId: string,
   keywords: string[],
+  seniority_levels?: string[],
 ): Promise<CareerWatchEntry> {
   return apiFetch(`/api/career-watch/watches/${watchId}`, token, {
     method: "PATCH",
-    body: JSON.stringify({ keywords }),
+    body: JSON.stringify({ keywords, seniority_levels }),
   })
 }
 

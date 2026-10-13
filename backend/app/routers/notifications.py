@@ -78,6 +78,8 @@ class PreferencesResponse(BaseModel):
     sms_phone: str | None
     sms_phone_verified_at: datetime | None
     digest_mode: str
+    timezone: str
+    instant_job_alert_email: bool
 
     model_config = {"from_attributes": True}
 
@@ -88,6 +90,8 @@ class PreferencesPatchRequest(BaseModel):
     web_push_enabled: bool | None = None
     sms_enabled: bool | None = None
     digest_mode: Literal["off", "daily"] | None = None
+    timezone: str | None = Field(default=None, min_length=3, max_length=64)
+    instant_job_alert_email: bool | None = None
 
 
 class WebPushSubscribeRequest(BaseModel):
@@ -282,6 +286,8 @@ async def get_preferences(
         sms_phone=prefs.sms_phone,
         sms_phone_verified_at=prefs.sms_phone_verified_at,
         digest_mode=prefs.digest_mode.value,
+        timezone=prefs.timezone,
+        instant_job_alert_email=prefs.instant_job_alert_email,
     )
 
 
@@ -304,6 +310,10 @@ async def patch_preferences(
         prefs.sms_enabled = body.sms_enabled
     if body.digest_mode is not None:
         prefs.digest_mode = DigestMode(body.digest_mode)
+    if body.timezone is not None:
+        prefs.timezone = body.timezone.strip()
+    if body.instant_job_alert_email is not None:
+        prefs.instant_job_alert_email = body.instant_job_alert_email
     prefs.updated_at = datetime.now(timezone.utc)
     await db.flush()
     return await get_preferences(request, db, user)
