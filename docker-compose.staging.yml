@@ -79,6 +79,9 @@ services:
               -H "X-Scheduler-Secret: $$INTERNAL_SCHEDULER_SECRET" \
               "$$API_URL/api/notifications/scheduler/dispatch" || true
             if [ "$$(date +%M)" = "00" ]; then
+              curl -sf -X POST \
+                -H "X-Scheduler-Secret: $$INTERNAL_SCHEDULER_SECRET" \
+                "$$API_URL/api/notifications/scheduler/job-alert-digests" || true
               curl -sf -X DELETE \
                 -H "X-Scheduler-Secret: $$INTERNAL_SCHEDULER_SECRET" \
                 "$$API_URL/api/account" || true
