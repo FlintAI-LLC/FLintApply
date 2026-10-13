@@ -242,6 +242,7 @@ async def test_rotate_revoked_token_from_replaced_session_raises_session_replace
     issued = await create_refresh_token(
         db_session, user_id=user.id, device_fingerprint="fp"
     )
+    await redis_session.register_auth_session(user.id, old_session, ttl=3600)
     await redis_session.bind_refresh_token_to_redis(
         issued.token_id,
         user.id,
@@ -250,10 +251,10 @@ async def test_rotate_revoked_token_from_replaced_session_raises_session_replace
         auth_session_id=old_session,
     )
 
-    # Simulate logout-all: revoke DB row + drop the old auth session id.
+    # Simulate single-session logout: revoked refresh row + auth session unregistered.
     issued.row.revoked_at = issued.row.issued_at
     await db_session.flush()
-    await redis_session.revoke_all_user_tokens(user.id)
+    await redis_session.revoke_redis_token(issued.token_id)
     await redis_session.unregister_auth_session(user.id, old_session)
 
     with pytest.raises(SessionReplacedError):
