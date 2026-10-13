@@ -661,6 +661,11 @@ async def exchange_extension_web_handoff(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "account_suspended"},
         )
+    if user.has_totp:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "totp_not_supported_on_extension"},
+        )
     await record_auth_event(
         db,
         user_id=user.id,

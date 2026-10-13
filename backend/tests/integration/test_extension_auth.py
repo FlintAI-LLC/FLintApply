@@ -630,10 +630,90 @@ async def test_extension_web_handoff_exchange_mints_tokens(
     assert exchange.status_code == 200, exchange.text
     body = exchange.json()
     assert body["user"]["email"] == email
+    assert body["access_token"]
     assert body["refresh_token"]
+    assert body["expires_in"] > 0
+    assert "Set-Cookie" not in exchange.headers
+
+    ext_me = await app_client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {body['access_token']}"},
+    )
+    assert ext_me.status_code == 200, ext_me.text
+    assert ext_me.json()["email"] == email
 
     me = await app_client.get(
         "/api/auth/me",
         headers={"Authorization": f"Bearer {web_access}"},
     )
     assert me.status_code == 200, me.text
+
+
+@pytest.mark.asyncio
+async def test_extension_web_handoff_exchange_rejects_invalid_code(
+    app_client: AsyncClient,
+) -> None:
+    r = await app_client.post(
+        "/api/auth/extension/web-handoff/exchange",
+        json={"code": "not-a-valid-handoff-code"},
+    )
+    assert r.status_code == 400, r.text
+    assert r.json()["detail"]["code"] == "handoff_code_invalid"
+
+
+@pytest.mark.asyncio
+async def test_extension_web_handoff_exchange_rejects_replay(
+    app_client: AsyncClient,
+) -> None:
+    web_access, _email = await _register(app_client, "handoff-replay")
+    mint = await app_client.post(
+        "/api/auth/extension/web-handoff",
+        headers={"Authorization": f"Bearer {web_access}"},
+    )
+    code = mint.json()["code"]
+    first = await app_client.post(
+        "/api/auth/extension/web-handoff/exchange",
+        json={"code": code},
+    )
+    assert first.status_code == 200, first.text
+    second = await app_client.post(
+        "/api/auth/extension/web-handoff/exchange",
+        json={"code": code},
+    )
+    assert second.status_code == 400, second.text
+    assert second.json()["detail"]["code"] == "handoff_code_invalid"
+
+
+@pytest.mark.asyncio
+async def test_extension_web_handoff_unused_code_after_web_logout(
+    app_client: AsyncClient,
+) -> None:
+    from app.routers.auth import REFRESH_COOKIE_NAME
+
+    web_access, email = await _register(app_client, "handoff-logout")
+    login = await app_client.post(
+        "/api/auth/login",
+        json={"email": email, "password": REGISTER_PAYLOAD["password"]},
+    )
+    refresh = login.cookies.get(REFRESH_COOKIE_NAME)
+    web_access = login.json()["access_token"]
+
+    mint = await app_client.post(
+        "/api/auth/extension/web-handoff",
+        headers={"Authorization": f"Bearer {web_access}"},
+    )
+    code = mint.json()["code"]
+
+    logout = await app_client.post(
+        "/api/auth/logout",
+        headers={"Authorization": f"Bearer {web_access}"},
+        cookies={REFRESH_COOKIE_NAME: refresh},
+    )
+    assert logout.status_code == 200, logout.text
+
+    exchange = await app_client.post(
+        "/api/auth/extension/web-handoff/exchange",
+        json={"code": code},
+    )
+    assert exchange.status_code == 401, exchange.text
+    assert exchange.json()["detail"]["code"] == "session_replaced"

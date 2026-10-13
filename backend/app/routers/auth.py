@@ -106,6 +106,7 @@ from app.services.auth.tokens import (
     find_refresh_token,
     make_device_fingerprint,
     new_auth_session_id,
+    revoke_active_refresh_tokens_for_auth_session,
     revoke_all_user_tokens,
     revoke_token,
     rotate_refresh_token,
@@ -1081,7 +1082,13 @@ async def logout(
             if meta and meta.get("auth_session_id"):
                 auth_session_id = str(meta["auth_session_id"])
             await revoke_token(db, row=row)
-            await redis_session.revoke_redis_token(row.id)
+            await redis_session.mark_refresh_token_revoked_in_redis(row.id)
+    elif auth_session_id:
+        await revoke_active_refresh_tokens_for_auth_session(
+            db,
+            user_id=user.id,
+            auth_session_id=auth_session_id,
+        )
     if auth_session_id:
         if not await redis_session.user_has_other_refresh_tokens_for_session(
             user.id, auth_session_id
@@ -1390,7 +1397,7 @@ async def revoke_session(
         raise HTTPException(status_code=404, detail={"code": "session_not_found"})
     meta = await redis_session.get_refresh_token_metadata(row.id)
     await revoke_token(db, row=row)
-    await redis_session.revoke_redis_token(row.id)
+    await redis_session.mark_refresh_token_revoked_in_redis(row.id)
     if meta and meta.get("auth_session_id"):
         sid = str(meta["auth_session_id"])
         if not await redis_session.user_has_other_refresh_tokens_for_session(

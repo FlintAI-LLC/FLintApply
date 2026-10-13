@@ -123,6 +123,36 @@ async def get_refresh_token_metadata(
     return json.loads(entry["payload"])
 
 
+async def mark_refresh_token_revoked_in_redis(token_id: uuid.UUID | str) -> None:
+    """Flag a refresh row as DB-revoked while keeping metadata for classify."""
+    key = _token_key(token_id)
+    r = _redis()
+    if r is not None:
+        raw = await r.get(key)
+        if not raw:
+            return
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            return
+        data["db_revoked"] = True
+        ttl = await r.ttl(key)
+        if ttl is None or ttl < 1:
+            ttl = settings.REFRESH_TOKEN_TTL_SECONDS
+        await r.setex(key, ttl, json.dumps(data))
+        return
+
+    entry = _memory_tokens.get(key)
+    if entry is None:
+        return
+    try:
+        data = json.loads(entry["payload"])
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return
+    data["db_revoked"] = True
+    entry["payload"] = json.dumps(data)
+
+
 async def revoke_redis_token(token_id: uuid.UUID | str) -> None:
     """Drop a single token id from Redis (idempotent)."""
     r = _redis()
@@ -352,7 +382,9 @@ async def user_has_other_refresh_tokens_for_session(
     target = str(auth_session_id)
     for token_id in await list_user_token_ids(user_id):
         meta = await get_refresh_token_metadata(token_id)
-        if meta and str(meta.get("auth_session_id")) == target:
+        if not meta or meta.get("db_revoked"):
+            continue
+        if str(meta.get("auth_session_id")) == target:
             return True
     return False
 
@@ -410,6 +442,7 @@ __all__ = [
     "list_user_token_ids",
     "register_auth_session",
     "revoke_all_user_tokens",
+    "mark_refresh_token_revoked_in_redis",
     "revoke_redis_token",
     "set_active_auth_session",
     "unregister_auth_session",

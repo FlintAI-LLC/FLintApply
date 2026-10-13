@@ -71,6 +71,19 @@ async def _login(client: AsyncClient) -> tuple[str, str]:
 
 
 @pytest.mark.asyncio
+async def test_unregister_one_auth_session_keeps_sibling() -> None:
+    redis_session._reset_for_tests()
+    user_id = uuid.uuid4()
+    sid_a = new_auth_session_id()
+    sid_b = new_auth_session_id()
+    await redis_session.register_auth_session(user_id, sid_a, ttl=3600)
+    await redis_session.register_auth_session(user_id, sid_b, ttl=3600)
+    await redis_session.unregister_auth_session(user_id, sid_a)
+    assert not await redis_session.is_auth_session_active(user_id, sid_a)
+    assert await redis_session.is_auth_session_active(user_id, sid_b)
+
+
+@pytest.mark.asyncio
 async def test_set_and_get_active_auth_session() -> None:
     redis_session._reset_for_tests()
     user_id = uuid.uuid4()
@@ -117,6 +130,7 @@ async def test_revoke_all_user_tokens_clears_active_session() -> None:
     count = await redis_session.revoke_all_user_tokens(user_id)
     assert count == 1
     assert await redis_session.get_refresh_token_metadata(token_id) is None
+    assert not await redis_session.is_auth_session_active(user_id, session_id)
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +149,46 @@ def test_access_token_carries_session_id_claim() -> None:
 # ---------------------------------------------------------------------------
 # HTTP + DB integration
 # ---------------------------------------------------------------------------
+
+
+async def test_logout_one_session_leaves_sibling_active(
+    app_client: AsyncClient,
+) -> None:
+    first_access, first_refresh = await _register(app_client)
+    second_access, second_refresh = await _login(app_client)
+
+    logout = await app_client.post(
+        "/api/auth/logout",
+        headers={"Authorization": f"Bearer {first_access}"},
+        cookies={REFRESH_COOKIE_NAME: first_refresh},
+    )
+    assert logout.status_code == 200, logout.text
+
+    dead = await app_client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {first_access}"},
+    )
+    assert dead.status_code == 401, dead.text
+    assert dead.json()["detail"]["code"] == "session_replaced"
+
+    alive = await app_client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {second_access}"},
+    )
+    assert alive.status_code == 200, alive.text
+
+    refresh_dead = await app_client.post(
+        "/api/auth/refresh",
+        cookies={REFRESH_COOKIE_NAME: first_refresh},
+    )
+    assert refresh_dead.status_code == 401, refresh_dead.text
+    assert refresh_dead.json()["detail"]["code"] == "session_replaced"
+
+    refresh_alive = await app_client.post(
+        "/api/auth/refresh",
+        cookies={REFRESH_COOKIE_NAME: second_refresh},
+    )
+    assert refresh_alive.status_code == 200, refresh_alive.text
 
 
 async def test_second_login_keeps_first_session_valid(
@@ -254,7 +308,7 @@ async def test_rotate_revoked_token_from_replaced_session_raises_session_replace
     # Simulate single-session logout: revoked refresh row + auth session unregistered.
     issued.row.revoked_at = issued.row.issued_at
     await db_session.flush()
-    await redis_session.revoke_redis_token(issued.token_id)
+    await redis_session.mark_refresh_token_revoked_in_redis(issued.token_id)
     await redis_session.unregister_auth_session(user.id, old_session)
 
     with pytest.raises(SessionReplacedError):
