@@ -30,6 +30,16 @@ import {
   getChurnMetrics,
   exportReportCSV,
 } from "@/lib/admin/api"
+import { ReportGuide } from "@/components/admin/ReportGuide"
+import { ACTIVITY_METRICS_LEGEND } from "@/lib/admin/activityMetricsLegend"
+import {
+  CHANNEL_METRICS_GUIDE,
+  CHURN_GUIDE,
+  FUNNEL_GUIDE,
+  LLM_COST_GUIDE,
+  MONITORING_SUMMARY_GUIDE,
+  REVENUE_GUIDE,
+} from "@/lib/admin/reportGuides"
 import { buildFunnelData, hasActivityData, signupConversionPct } from "@/lib/admin/reporting"
 import type {
   ActivityMetrics,
@@ -265,6 +275,14 @@ function MonitoringSummaryPanel({
           {card.hint ? <p className="text-xs text-slate-500 mt-1">{card.hint}</p> : null}
         </div>
       ))}
+      <div className="col-span-2 lg:col-span-4">
+        <ReportGuide
+          title="Summary cards — what they mean"
+          intro={MONITORING_SUMMARY_GUIDE.intro}
+          items={MONITORING_SUMMARY_GUIDE.items}
+          testId="monitoring-summary-guide"
+        />
+      </div>
     </div>
   )
 }
@@ -316,6 +334,12 @@ function ActivityChart({
           <Line type="monotone" dataKey="landing_views" name="Landing views" stroke="#38bdf8" dot={false} strokeWidth={1.5} />
         </LineChart>
       </ResponsiveContainer>
+      <ReportGuide
+        title="Chart legend — DAU / WAU / MAU & traffic"
+        items={ACTIVITY_METRICS_LEGEND}
+        footnote="Active-user series use login events (UTC calendar days). WAU and MAU are rolling counts as of each date on the chart."
+        testId="activity-metrics-legend"
+      />
     </>
   )
 }
@@ -371,9 +395,13 @@ function ChannelsChart({
           <Bar dataKey="beacon_extension" name="Extension opens" fill={COLORS.amber} stackId="opens" />
         </BarChart>
       </ResponsiveContainer>
-      <p className="text-xs text-slate-500 mt-4">
-        Logins come from auth audit logs. Opens are once-per-day anonymous beacons (no PII).
-      </p>
+      <ReportGuide
+        title="How to read this chart"
+        intro={CHANNEL_METRICS_GUIDE.intro}
+        items={CHANNEL_METRICS_GUIDE.items}
+        footnote={CHANNEL_METRICS_GUIDE.footnote}
+        testId="channel-metrics-guide"
+      />
     </>
   )
 }
@@ -426,6 +454,13 @@ function FunnelChartView({
           </Funnel>
         </FunnelChart>
       </ResponsiveContainer>
+      <ReportGuide
+        title="Signup funnel — steps"
+        intro={FUNNEL_GUIDE.intro}
+        items={FUNNEL_GUIDE.items}
+        footnote={FUNNEL_GUIDE.footnote}
+        testId="funnel-metrics-guide"
+      />
     </>
   )
 }
@@ -472,10 +507,18 @@ function RevenueChart({
       <div className="mt-4 flex flex-wrap gap-4">
         {data.map((d) => (
           <div key={d.plan} className="text-xs text-slate-400">
-            <span className="capitalize font-medium text-slate-300">{d.plan}</span>: {d.subscribers} subscribers · ${d.revenue_usd.toFixed(2)}
+            <span className="capitalize font-medium text-slate-300">{d.plan}</span>: {d.subscribers}{" "}
+            subscribers · ${d.revenue_usd.toFixed(2)} list price
           </div>
         ))}
       </div>
+      <ReportGuide
+        title="Revenue by plan — columns & bars"
+        intro={REVENUE_GUIDE.intro}
+        items={REVENUE_GUIDE.items}
+        footnote={REVENUE_GUIDE.footnote}
+        testId="revenue-metrics-guide"
+      />
     </>
   )
 }
@@ -542,6 +585,13 @@ function LLMCostChart({
           <Bar dataKey="margin_usd" name="Margin" fill={COLORS.amber} radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
+      <ReportGuide
+        title="LLM cost vs margin — series"
+        intro={LLM_COST_GUIDE.intro}
+        items={LLM_COST_GUIDE.items}
+        footnote={LLM_COST_GUIDE.footnote}
+        testId="llm-cost-guide"
+      />
     </>
   )
 }
@@ -585,6 +635,13 @@ function ChurnChart({
           <Line type="monotone" dataKey="churn_rate" name="Churn rate" stroke={COLORS.red} dot={false} strokeWidth={2} />
         </LineChart>
       </ResponsiveContainer>
+      <ReportGuide
+        title="Churn — how to interpret"
+        intro={CHURN_GUIDE.intro}
+        items={CHURN_GUIDE.items}
+        footnote={CHURN_GUIDE.footnote}
+        testId="churn-metrics-guide"
+      />
     </>
   )
 }

@@ -33,7 +33,7 @@ const funnel = [
   { name: "Registered", value: 1000 },
   { name: "Email verified", value: 820 },
   { name: "First build", value: 560 },
-  { name: "First export", value: 340 },
+  { name: "First resume build", value: 340 },
   { name: "Subscribed", value: 180 },
 ]
 
