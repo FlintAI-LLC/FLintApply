@@ -462,4 +462,6 @@ def test_extension_route_table_is_unchanged() -> None:
         "/api/auth/extension/callback",
         "/api/auth/extension/login",
         "/api/auth/extension/refresh",
+        "/api/auth/extension/web-handoff",
+        "/api/auth/extension/web-handoff/exchange",
     ]

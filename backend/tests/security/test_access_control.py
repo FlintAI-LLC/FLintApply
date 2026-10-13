@@ -175,7 +175,6 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/api/auth/password/reset"): "authenticated by the reset token",
     ("GET", "/api/auth/verify/{token}"): "authenticated by the emailed token",
     ("POST", "/api/auth/extension/login"): "establishes the extension principal",
-    ("POST", "/api/auth/extension/web-handoff"): "mints a one-time extension handoff code",
     ("POST", "/api/auth/extension/web-handoff/exchange"): "extension web-handoff exchange",
     ("POST", "/api/auth/extension/refresh"): "authenticated by the extension refresh token",
     ("POST", "/api/auth/extension/callback"): "extension OAuth callback",

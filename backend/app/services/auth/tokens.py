@@ -141,9 +141,11 @@ async def _classify_revoked_refresh_token(row: RefreshToken) -> None:
     meta = await redis_session.get_refresh_token_metadata(row.id)
     token_sid = meta.get("auth_session_id") if meta else None
 
-    if token_sid and await redis_session.is_auth_session_active(
-        row.user_id, token_sid
-    ):
+    if token_sid is None:
+        # Rotation replay without Redis metadata (tests / legacy rows).
+        raise RefreshTokenReuseError(user_id=str(row.user_id))
+
+    if await redis_session.is_auth_session_active(row.user_id, token_sid):
         raise RefreshTokenReuseError(user_id=str(row.user_id))
 
     raise SessionReplacedError(user_id=str(row.user_id))
