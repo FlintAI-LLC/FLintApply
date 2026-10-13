@@ -195,6 +195,17 @@ export const CANONICAL_PLAN_CODES = [
   "yearly_premium",
 ] as const
 
+// ── Notification platform settings ───────────────────────────────────────────
+
+export interface NotificationPlatformSettings {
+  job_alert_digest_hour_local: number;
+  updated_at: string;
+}
+
+export interface NotificationPlatformSettingsPatch {
+  job_alert_digest_hour_local: number;
+}
+
 // ── Feature Flags ─────────────────────────────────────────────────────────────
 
 export interface FeatureFlag {

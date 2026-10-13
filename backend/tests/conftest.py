@@ -87,7 +87,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
                 "application_attachments, offer_details, interview_rounds, applications, "
                 "ats_score_history, resume_records, "
                 "fit_analyses, master_resume_chunks, master_resumes, "
-                "web_push_subscriptions, notification_preferences, "
+                "web_push_subscriptions, notification_preferences, notification_platform_settings, "
                 "export_jobs, closure_requests, "
                 "announcements, feature_flags, admin_invites, "
                 "admin_audit_log, notifications, "

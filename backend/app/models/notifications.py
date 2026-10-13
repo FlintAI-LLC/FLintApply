@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -209,6 +210,40 @@ class NotificationPreference(Base):
     )
 
 
+class NotificationPlatformSettings(Base):
+    """Singleton platform knobs for notification delivery (admin-managed)."""
+
+    __tablename__ = "notification_platform_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    singleton_key: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="default",
+        server_default="default",
+        unique=True,
+    )
+    job_alert_digest_hour_local: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=18,
+        server_default="18",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utcnow,
+        server_default=text("now()"),
+    )
+    updated_by_admin_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("admin_users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+
 class WebPushSubscription(Base):
     __tablename__ = "web_push_subscriptions"
 
@@ -259,6 +294,7 @@ __all__ = [
     "Notification",
     "NotificationChannel",
     "NotificationDeliveryStatus",
+    "NotificationPlatformSettings",
     "NotificationPreference",
     "NotificationStatus",
     "WebPushSubscription",

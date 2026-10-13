@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Security, status
 from fastapi.security import APIKeyHeader
@@ -24,6 +25,7 @@ from app.models.notifications import (
 )
 from app.models.user import User
 from app.services.auth.dependencies import get_current_user
+from app.services.notifications.platform_settings import get_job_alert_digest_hour_local
 from app.services.notifications.preferences import get_or_create_preferences
 from app.services.notifications.email_adapter import handle_resend_bounce
 from app.services.notifications.sms_verify import (
@@ -81,6 +83,7 @@ class PreferencesResponse(BaseModel):
     digest_mode: str
     timezone: str
     instant_job_alert_email: bool
+    job_alert_digest_hour_local: int
 
     model_config = {"from_attributes": True}
 
@@ -271,14 +274,10 @@ async def dismiss_notification(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/api/notifications/preferences")
-@limiter.limit("120/minute")
-async def get_preferences(
-    request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[User, Depends(get_current_user)],
+async def _preferences_response(
+    db: AsyncSession, prefs: NotificationPreference
 ) -> PreferencesResponse:
-    prefs = await get_or_create_preferences(db, user.id)
+    digest_hour = await get_job_alert_digest_hour_local(db)
     return PreferencesResponse(
         email_enabled_categories=prefs.email_enabled_categories or [],
         in_app_enabled_categories=prefs.in_app_enabled_categories or [],
@@ -289,7 +288,19 @@ async def get_preferences(
         digest_mode=prefs.digest_mode.value,
         timezone=prefs.timezone,
         instant_job_alert_email=prefs.instant_job_alert_email,
+        job_alert_digest_hour_local=digest_hour,
     )
+
+
+@router.get("/api/notifications/preferences")
+@limiter.limit("120/minute")
+async def get_preferences(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> PreferencesResponse:
+    prefs = await get_or_create_preferences(db, user.id)
+    return await _preferences_response(db, prefs)
 
 
 @router.patch("/api/notifications/preferences")
@@ -312,12 +323,20 @@ async def patch_preferences(
     if body.digest_mode is not None:
         prefs.digest_mode = DigestMode(body.digest_mode)
     if body.timezone is not None:
-        prefs.timezone = body.timezone.strip()
+        tz = body.timezone.strip()
+        try:
+            ZoneInfo(tz)
+        except ZoneInfoNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid timezone; use an IANA name like America/Los_Angeles",
+            )
+        prefs.timezone = tz
     if body.instant_job_alert_email is not None:
         prefs.instant_job_alert_email = body.instant_job_alert_email
     prefs.updated_at = datetime.now(timezone.utc)
     await db.flush()
-    return await get_preferences(request, db, user)
+    return await _preferences_response(db, prefs)
 
 
 # ---------------------------------------------------------------------------

@@ -50,6 +50,8 @@ import type {
   ChurnMetrics,
   SystemHealth,
   AuditLogResponse,
+  NotificationPlatformSettings,
+  NotificationPlatformSettingsPatch,
 } from "./types"
 import {
   ADMIN_SESSION_GONE_CODES,
@@ -506,6 +508,31 @@ export async function updateSimilarityThreshold(
 ): Promise<AuditedResponse<{ similarity_threshold: number }>> {
   // Backend doesn't have this endpoint yet; return a mock success so the UI doesn't crash.
   return { data: { similarity_threshold: _threshold }, audit_log_id: "n/a" }
+}
+
+// ── Notification platform settings ───────────────────────────────────────────
+
+export async function getAdminNotificationPlatformSettings(
+  token: string,
+): Promise<NotificationPlatformSettings> {
+  return req<NotificationPlatformSettings>(
+    `/api/admin/notification-platform-settings`,
+    token,
+  );
+}
+
+export async function patchAdminNotificationPlatformSettings(
+  token: string,
+  payload: NotificationPlatformSettingsPatch,
+): Promise<AuditedResponse<NotificationPlatformSettings>> {
+  const raw = await req<{
+    settings: NotificationPlatformSettings;
+    audit_log_id: string;
+  }>(`/api/admin/notification-platform-settings`, token, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  return { data: raw.settings, audit_log_id: raw.audit_log_id };
 }
 
 // ── Feature Flags ─────────────────────────────────────────────────────────────
