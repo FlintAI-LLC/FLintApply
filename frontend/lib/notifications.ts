@@ -34,6 +34,30 @@ export interface NotificationPreferences {
   digest_mode: "off" | "daily";
   timezone: string;
   instant_job_alert_email: boolean;
+  job_alert_digest_hour_local: number;
+}
+
+export const COMMON_NOTIFICATION_TIMEZONES = [
+  "America/Los_Angeles",
+  "America/Denver",
+  "America/Chicago",
+  "America/New_York",
+  "America/Phoenix",
+  "Pacific/Honolulu",
+  "Europe/London",
+  "Europe/Paris",
+  "Asia/Dubai",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+  "UTC",
+] as const;
+
+export function formatDigestHourLocal(hour24: number): string {
+  const h = Math.max(0, Math.min(23, hour24));
+  const period = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:00 ${period}`;
 }
 
 async function api<T>(

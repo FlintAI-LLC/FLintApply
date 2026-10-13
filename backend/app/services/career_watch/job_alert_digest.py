@@ -21,13 +21,13 @@ from app.models.notifications import (
 from app.models.user import User
 from app.services.notifications.dispatcher import dispatch_notification
 from app.services.notifications.factory import build_notification
+from app.services.notifications.platform_settings import get_job_alert_digest_hour_local
 from app.services.notifications.preferences import get_or_create_preferences
 
 log = structlog.get_logger("career_watch.job_alert_digest")
 
 _DIGEST_TYPE = "career_watch_daily_digest"
 _MAX_ITEMS_PER_EMAIL = 50
-_DIGEST_HOUR_LOCAL = 18
 _DEFAULT_TZ = "America/Los_Angeles"
 
 
@@ -42,11 +42,17 @@ def local_digest_date(now: datetime, tz_name: str | None) -> str:
     return now.astimezone(_user_zone(tz_name)).date().isoformat()
 
 
-def scheduled_digest_send_utc(now: datetime, tz_name: str | None) -> datetime:
-    """6:00 PM local on the digest calendar day containing ``now`` (UTC)."""
+def scheduled_digest_send_utc(
+    now: datetime,
+    tz_name: str | None,
+    *,
+    hour_local: int,
+) -> datetime:
+    """Send at ``hour_local``:00 in the user's IANA timezone on the digest day."""
     tz = _user_zone(tz_name)
     local = now.astimezone(tz)
-    send_local = datetime.combine(local.date(), time(_DIGEST_HOUR_LOCAL, 0), tzinfo=tz)
+    hour = max(0, min(23, hour_local))
+    send_local = datetime.combine(local.date(), time(hour, 0), tzinfo=tz)
     return send_local.astimezone(timezone.utc)
 
 
@@ -84,7 +90,10 @@ async def enqueue_job_alert_digest_item(
         return
 
     digest_date = local_digest_date(now, prefs.timezone)
-    scheduled_at = scheduled_digest_send_utc(now, prefs.timezone)
+    hour_local = await get_job_alert_digest_hour_local(session)
+    scheduled_at = scheduled_digest_send_utc(
+        now, prefs.timezone, hour_local=hour_local
+    )
     item = {
         "title": title,
         "company": company_name,

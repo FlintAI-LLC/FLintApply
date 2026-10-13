@@ -30,7 +30,7 @@ def test_local_digest_date_uses_timezone() -> None:
 
 def test_scheduled_digest_send_utc_is_6pm_local() -> None:
     utc = datetime(2026, 3, 15, 20, 0, tzinfo=timezone.utc)
-    send_utc = scheduled_digest_send_utc(utc, "America/Los_Angeles")
+    send_utc = scheduled_digest_send_utc(utc, "America/Los_Angeles", hour_local=18)
     local = send_utc.astimezone(ZoneInfo("America/Los_Angeles"))
     assert local.hour == 18
     assert local.minute == 0

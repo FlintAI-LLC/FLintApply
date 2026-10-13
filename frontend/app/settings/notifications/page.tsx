@@ -6,6 +6,8 @@ import { Loader2 } from "lucide-react";
 import { useRequireAuth } from "@/lib/auth/guards";
 import {
   fetchNotificationPreferences,
+  COMMON_NOTIFICATION_TIMEZONES,
+  formatDigestHourLocal,
   NOTIFICATION_CATEGORIES,
   patchNotificationPreferences,
   type NotificationPreferences,
@@ -231,9 +233,27 @@ export default function NotificationSettingsPage() {
       <section className="border border-slate-200 dark:border-slate-800 rounded-xl p-4 mb-10">
         <h2 className="font-medium text-slate-800 dark:text-slate-200 mb-2">Job alert emails</h2>
         <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-          Free plans get one daily email around 6 PM in your timezone with new matches. Premium subscribers
-          can opt into immediate email per match.
+          Daily digest emails send at{" "}
+          <strong>{formatDigestHourLocal(prefs.job_alert_digest_hour_local)}</strong> in your local
+          timezone. Premium subscribers can opt into immediate email per match.
         </p>
+        <label className="block text-sm text-slate-700 dark:text-slate-300 mb-1" htmlFor="notif-timezone">
+          Your timezone (local time for digests)
+        </label>
+        <select
+          id="notif-timezone"
+          data-testid="notification-timezone"
+          className="mb-4 w-full max-w-md rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
+          value={prefs.timezone}
+          disabled={saving}
+          onChange={(e) => save({ timezone: e.target.value })}
+        >
+          {COMMON_NOTIFICATION_TIMEZONES.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz.replace(/_/g, " ")}
+            </option>
+          ))}
+        </select>
         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer mb-3">
           <input
             type="checkbox"
