@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from app.agent.chat import _SYSTEM_PROMPT, _master_resume_context
-from app.models.resume import ParsedResume, ProjectEntry
+from app.models.resume import EducationEntry, ParsedResume, ProjectEntry
 from app.models.session import Session
 
 
@@ -40,3 +40,21 @@ def test_master_resume_context_includes_project_bullets() -> None:
     assert "MASTER RESUME" in block
     assert "Flint" in block
     assert "RAG pipeline" in block
+
+
+def test_master_resume_context_education_uses_notes_not_bullets() -> None:
+    session = Session(
+        session_id="00000000-0000-0000-0000-000000000002",
+        resume_parsed=ParsedResume(
+            education=[
+                EducationEntry(
+                    degree="MS CS",
+                    institution="Example U",
+                    year="2020",
+                    notes="Thesis on distributed systems.",
+                ),
+            ],
+        ),
+    )
+    block = _master_resume_context(session)
+    assert "distributed systems" in block
