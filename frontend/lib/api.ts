@@ -892,8 +892,19 @@ export interface TailoredEducation {
   bullets: string[];
 }
 
+export interface TailoredContact {
+  name?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  linkedin?: string;
+  github?: string;
+  website?: string;
+  contact_links?: Array<{ label: string; url: string }>;
+}
+
 export interface TailoredResumeOutput {
-  contact: Record<string, string>;
+  contact: TailoredContact & Record<string, unknown>;
   summary: string;
   skills: string[];
   experience: TailoredExperience[];
