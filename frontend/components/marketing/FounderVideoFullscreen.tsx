@@ -7,10 +7,42 @@ import {
   FOUNDER_VIDEO_POSTER_SRC,
   FOUNDER_VIDEO_SRC,
 } from "@/lib/marketing/founderVideo";
+import {
+  ONBOARDING_HOOK_FULLSCREEN_CAPTION,
+  ONBOARDING_HOOK_VIDEO_DURATION_LABEL,
+  ONBOARDING_HOOK_VIDEO_POSTER_SRC,
+  ONBOARDING_HOOK_VIDEO_SRC,
+} from "@/lib/marketing/onboardingHookVideo";
 import { INTRO_SCROLL_LOCK_CLASS } from "@/lib/marketing/intro";
+
+export type MarketingFullscreenVideoConfig = {
+  src: string;
+  poster: string;
+  durationLabel: string;
+  ariaLabel: string;
+  caption: string;
+};
+
+export const FOUNDER_FULLSCREEN_VIDEO: MarketingFullscreenVideoConfig = {
+  src: FOUNDER_VIDEO_SRC,
+  poster: FOUNDER_VIDEO_POSTER_SRC,
+  durationLabel: FOUNDER_VIDEO_DURATION_LABEL,
+  ariaLabel: "A note from the founder",
+  caption: `A note from Al (${FOUNDER_VIDEO_DURATION_LABEL})`,
+};
+
+export const ONBOARDING_HOOK_FULLSCREEN_VIDEO: MarketingFullscreenVideoConfig =
+  {
+    src: ONBOARDING_HOOK_VIDEO_SRC,
+    poster: ONBOARDING_HOOK_VIDEO_POSTER_SRC,
+    durationLabel: ONBOARDING_HOOK_VIDEO_DURATION_LABEL,
+    ariaLabel: "FlintApply product intro",
+    caption: ONBOARDING_HOOK_FULLSCREEN_CAPTION,
+  };
 
 interface Props {
   onDismiss: () => void;
+  video?: MarketingFullscreenVideoConfig;
 }
 
 type SoundState = "trying" | "playing" | "needs-prompt";
@@ -18,7 +50,10 @@ type SoundState = "trying" | "playing" | "needs-prompt";
 /**
  * First-run only: cinematic fullscreen with autoplay (sound when allowed) + Skip.
  */
-export function FounderVideoFullscreen({ onDismiss }: Props) {
+export function FounderVideoFullscreen({
+  onDismiss,
+  video = ONBOARDING_HOOK_FULLSCREEN_VIDEO,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [soundState, setSoundState] = useState<SoundState>("trying");
   const [fading, setFading] = useState(false);
@@ -96,7 +131,7 @@ export function FounderVideoFullscreen({ onDismiss }: Props) {
       }`}
       role="dialog"
       aria-modal="true"
-      aria-label="A note from the founder"
+      aria-label={video.ariaLabel}
     >
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(245,158,11,0.22)_0%,rgba(0,0,0,0.92)_55%,#000_100%)]"
@@ -118,8 +153,8 @@ export function FounderVideoFullscreen({ onDismiss }: Props) {
           <video
             ref={videoRef}
             className="w-full rounded-lg bg-black aspect-video"
-            src={FOUNDER_VIDEO_SRC}
-            poster={FOUNDER_VIDEO_POSTER_SRC}
+            src={video.src}
+            poster={video.poster}
             playsInline
             controls
             preload="auto"
@@ -132,7 +167,7 @@ export function FounderVideoFullscreen({ onDismiss }: Props) {
           />
         </div>
         <p className="mt-3 text-center text-sm text-amber-100/80">
-          A note from Al ({FOUNDER_VIDEO_DURATION_LABEL})
+          {video.caption}
         </p>
       </div>
     </div>

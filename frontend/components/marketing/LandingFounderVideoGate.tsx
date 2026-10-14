@@ -10,8 +10,9 @@ import {
 } from "@/lib/marketing/founderVideo";
 
 /**
- * First-run visitors: fullscreen founder video after brand intro (or immediately
- * if intro is skipped). Return visitors: renders nothing.
+ * First-run visitors: fullscreen product intro (~1 min) after brand intro (or
+ * immediately if intro is skipped). Return visitors: renders nothing.
+ * `?founder=1` replays the first-run fullscreen.
  */
 export function LandingFounderVideoGate() {
   const [open, setOpen] = useState(false);
