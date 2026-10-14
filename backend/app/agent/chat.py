@@ -219,7 +219,10 @@ def _master_resume_context(session: Session) -> str:
             if year:
                 line = f"{line} ({year})" if line else year
             edu_lines.append(f"- {line or 'Program'}")
-            for bullet in edu.bullets or []:
+            notes = (getattr(edu, "notes", None) or "").strip()
+            if notes:
+                edu_lines.append(f"    • {notes}")
+            for bullet in getattr(edu, "bullets", None) or []:
                 text = str(bullet).strip()
                 if text:
                     edu_lines.append(f"    • {text}")
@@ -279,7 +282,11 @@ async def run(
     ]
     jd_text = session.jd_raw or ""
 
-    master_resume_context = _master_resume_context(session)
+    try:
+        master_resume_context = _master_resume_context(session)
+    except Exception as exc:
+        log.warning("master_resume_context_failed", error=str(exc))
+        master_resume_context = ""
 
     # Inject Phase 4 QA results when available so the agent can answer
     # "what's missing" questions precisely without re-deriving them.
