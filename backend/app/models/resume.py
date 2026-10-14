@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.models.contact_link import ContactLink
 
 
 class ContactInfo(BaseModel):
@@ -11,6 +13,7 @@ class ContactInfo(BaseModel):
     github: str | None = None
     location: str | None = None
     website: str | None = None
+    contact_links: list[ContactLink] = Field(default_factory=list)
 
 
 class ExperienceEntry(BaseModel):

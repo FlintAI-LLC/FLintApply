@@ -320,6 +320,15 @@ export function projectReplaceAllSuggestion(
   );
 }
 
+export function projectBulletAddSuggestions(
+  suggestions: ResumeSuggestion[],
+  projectName: string,
+): ResumeSuggestion[] {
+  return projectEditSuggestions(suggestions, projectName).filter(
+    (s) => s.status === "pending" && !!s.patch.add_project_bullet?.trim(),
+  );
+}
+
 export function projectTitleSuggestion(
   suggestions: ResumeSuggestion[],
   projectName: string,
@@ -505,6 +514,7 @@ export function isPatchPlaceable(
       );
       if (projIdx < 0) return false;
       const proj = resume.projects[projIdx] as Record<string, unknown>;
+      if (patch.add_project_bullet?.trim()) return true;
       if (patch.project_bullet_old?.trim()) {
         const bullets = Array.isArray((proj as Record<string, unknown>).bullets)
           ? ((proj as Record<string, unknown>).bullets as string[])

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.models.rewrite import TailoredResumeOutput
+from app.models.contact_link import ContactLink
 from app.models.userinfo import UserInfo
 from app.services.contact_authority import apply_authoritative_contact, authoritative_contact
 
@@ -62,3 +63,23 @@ def test_profile_name_used_when_tailored_matches() -> None:
         user_info=UserInfo(name="Alireza Barzin Zanganeh"),
     )
     assert merged["name"] == "Alireza Barzin Zanganeh"
+
+
+def test_label_only_website_stripped() -> None:
+    merged = authoritative_contact({"website": "Website", "email": "a@b.com"})
+    assert "website" not in merged
+    assert merged["email"] == "a@b.com"
+
+
+def test_contact_links_from_user_info() -> None:
+    merged = authoritative_contact(
+        {"website": "Website"},
+        user_info=UserInfo(
+            contact_links=[
+                ContactLink(label="LinkedIn", url="https://linkedin.com/in/ali"),
+            ],
+        ),
+    )
+    assert merged["contact_links"] == [
+        {"label": "LinkedIn", "url": "https://linkedin.com/in/ali"},
+    ]

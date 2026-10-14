@@ -1380,6 +1380,7 @@ export interface ResumePatch {
   delete_experience?: boolean;
   new_experience?: { title?: string; company?: string; dates?: string; bullets?: string[] };
   add_bullet?: string;
+  add_project_bullet?: string;
   move_direction?: "up" | "down";
   // Certifications
   remove_certifications?: string[];

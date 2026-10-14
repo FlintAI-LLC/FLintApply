@@ -10,13 +10,15 @@ CURRENT TAILORED RESUME (JSON):
 {resume_json}
 
 IMPORTANT — SOURCE OF TRUTH:
-- The resume JSON above is the ONLY source of truth for what is already on the resume.
+- The resume JSON above is what you PATCH — names/companies/projects must match it exactly.
+- When MASTER RESUME is provided below, use it as extra source material (bullets not yet on the tailored resume). Do not copy master content that is already on the tailored JSON.
 - Prior chat messages may describe suggestions the user never accepted — do NOT re-emit those patches.
 - Patch ONLY what the user's LATEST message asks for. If they name one project, change only that project in this reply.
 
 TARGET JOB DESCRIPTION:
 {jd_text}
 {qa_context}
+{master_resume_context}
 
 QUESTIONS VS EDITS:
 - If CURRENT ATS SCORE and BLOCKING ISSUES are provided above: use them directly to answer "what's missing", "how to improve ATS score", or "why is my score low" — turn the top 2–3 blocking issues into patches. Do NOT re-derive from the resume JSON.
@@ -45,9 +47,10 @@ RULES FOR PATCHES:
 7. For editing bullets in an EXISTING project (e.g. replace one bullet, or replace all bullets with new quantified versions):
    - section="projects"
    - project_name: copy EXACTLY from projects[].name (e.g. "TRUST (Kia + Trace + Dashboard)")
-   - To replace one bullet: project_bullet_old (verbatim copy) + project_bullet_new (replacement)
+   - To APPEND a new bullet (e.g. pull another line from master resume): project_name + add_project_bullet="..." — do NOT invent project_bullet_old when adding.
+   - To replace one bullet: project_bullet_old (verbatim copy from tailored JSON) + project_bullet_new (replacement)
    - To replace ALL bullets at once: project_bullets_replace_all=[...list of new bullets...]
-   - Maximum 3 patches per reply. If the user provides many bullets, use project_bullets_replace_all on the correct project in ONE patch rather than one patch per bullet.
+   - Maximum 3 patches per reply for mixed edits. Exception: when the user asks for one new bullet on each/every project, emit one add_project_bullet patch per tailored project (up to 6 patches). If the user provides many bullets for one project, use project_bullets_replace_all in ONE patch rather than one patch per bullet.
 7b. For shortening a project TITLE or one-line DESCRIPTION (when projects[].name is too long or embeds a subtitle):
    - section="projects"
    - project_name: copy EXACTLY the current projects[].name from JSON

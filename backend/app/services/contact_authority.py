@@ -21,6 +21,49 @@ _PLACEHOLDER_EMAILS = {
     "",
 }
 _PLACEHOLDER_PHONES = {"123-456-7890", "(123) 456-7890", "555-555-5555", ""}
+_LABEL_ONLY_URL = frozenset(
+    {"website", "web", "linkedin", "github", "portfolio", "link", "url"}
+)
+
+
+def _is_label_only_url(value: str) -> bool:
+    text = (value or "").strip().lower()
+    if not text:
+        return True
+    if text in _LABEL_ONLY_URL:
+        return True
+    return not (text.startswith("http") or "." in text or "/" in text)
+
+
+def _parse_contact_links(raw: object) -> list[dict[str, str]]:
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, str]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label", "")).strip()
+        url = str(item.get("url", "")).strip()
+        if not label or _is_label_only_url(url):
+            continue
+        if not url.lower().startswith(("http://", "https://")):
+            url = f"https://{url.lstrip('/')}"
+        out.append({"label": label, "url": url})
+    return out
+
+
+def _links_from_legacy(contact: dict[str, Any]) -> list[dict[str, str]]:
+    links: list[dict[str, str]] = []
+    linkedin = str(contact.get("linkedin") or "").strip()
+    if linkedin and not _is_label_only_url(linkedin):
+        links.append({"label": "LinkedIn", "url": linkedin})
+    github = str(contact.get("github") or "").strip()
+    if github and not _is_label_only_url(github):
+        links.append({"label": "GitHub", "url": github})
+    website = str(contact.get("website") or "").strip()
+    if website and not _is_label_only_url(website):
+        links.append({"label": "Portfolio", "url": website})
+    return links
 
 
 def authoritative_contact(
@@ -79,8 +122,27 @@ def authoritative_contact(
             result["github"] = user_info.github
         if not result.get("location") and user_info.location:
             result["location"] = user_info.location
-        if not result.get("website") and user_info.website:
-            result["website"] = user_info.website
+        website_val = str(user_info.website or "").strip()
+        if not result.get("website") and website_val and not _is_label_only_url(website_val):
+            result["website"] = website_val
+
+    for key in ("linkedin", "github", "website"):
+        val = str(result.get(key) or "").strip()
+        if val and _is_label_only_url(val):
+            result.pop(key, None)
+
+    info_links = (
+        [link.model_dump() for link in user_info.contact_links]
+        if user_info and user_info.contact_links
+        else []
+    )
+    tailored_links = _parse_contact_links(result.get("contact_links"))
+    if info_links:
+        result["contact_links"] = info_links
+    elif tailored_links:
+        result["contact_links"] = tailored_links
+    else:
+        result["contact_links"] = _links_from_legacy(result)
 
     return result
 
