@@ -2,6 +2,7 @@ import { resolveBulletAtAnchor } from "@/lib/anchoredPatch";
 import {
   bulletsTextMatch,
   findUniqueExperienceIndex,
+  findProjectIndexForPatch,
   findUniqueProjectIndex,
   inferEducationInstitution,
   matchEducationInstitution,
@@ -508,18 +509,25 @@ export function isPatchPlaceable(
       );
     }
     if (patch.project_name?.trim()) {
-      const projIdx = findUniqueProjectIndex(
+      const projIdx = findProjectIndexForPatch(
         resume.projects as Record<string, unknown>[],
         patch.project_name!,
       );
       if (projIdx < 0) return false;
       const proj = resume.projects[projIdx] as Record<string, unknown>;
       if (patch.add_project_bullet?.trim()) return true;
+      if (patch.project_bullet_new?.trim() && !patch.project_bullet_old?.trim()) {
+        return true;
+      }
       if (patch.project_bullet_old?.trim()) {
         const bullets = Array.isArray((proj as Record<string, unknown>).bullets)
           ? ((proj as Record<string, unknown>).bullets as string[])
           : [];
-        return bullets.some((b) => bulletsTextMatch(b, patch.project_bullet_old!));
+        if (bullets.some((b) => bulletsTextMatch(b, patch.project_bullet_old!))) {
+          return true;
+        }
+        if (patch.project_bullet_new?.trim()) return true;
+        return false;
       }
       if ((patch.project_bullets_replace_all?.length ?? 0) > 0) return true;
       if (patch.new_project_title?.trim() || patch.new_project_description != null) {

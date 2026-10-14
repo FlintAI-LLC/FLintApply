@@ -48,6 +48,7 @@ RULES FOR PATCHES:
    - section="projects"
    - project_name: copy EXACTLY from projects[].name (e.g. "TRUST (Kia + Trace + Dashboard)")
    - To APPEND a new bullet (e.g. pull another line from master resume): project_name + add_project_bullet="..." — do NOT invent project_bullet_old when adding.
+   - Never set project_bullet_old to ATS coaching text (e.g. "Open with a stronger verb: …") — only verbatim bullets from the tailored JSON, or use add_project_bullet.
    - To replace one bullet: project_bullet_old (verbatim copy from tailored JSON) + project_bullet_new (replacement)
    - To replace ALL bullets at once: project_bullets_replace_all=[...list of new bullets...]
    - Maximum 3 patches per reply for mixed edits. Exception: when the user asks for one new bullet on each/every project, emit one add_project_bullet patch per tailored project (up to 6 patches). If the user provides many bullets for one project, use project_bullets_replace_all in ONE patch rather than one patch per bullet.
