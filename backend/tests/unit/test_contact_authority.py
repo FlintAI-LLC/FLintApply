@@ -83,3 +83,14 @@ def test_contact_links_from_user_info() -> None:
     assert merged["contact_links"] == [
         {"label": "LinkedIn", "url": "https://linkedin.com/in/ali"},
     ]
+
+
+def test_tailored_contact_links_used_when_no_user_links() -> None:
+    merged = authoritative_contact(
+        {
+            "email": "a@b.com",
+            "contact_links": [{"label": "GitHub", "url": "https://github.com/example"}],
+        },
+        user_info=UserInfo(email="a@b.com"),
+    )
+    assert merged["contact_links"][0]["label"] == "GitHub"

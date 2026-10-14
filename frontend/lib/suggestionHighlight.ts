@@ -8,6 +8,7 @@ import {
   matchEducationInstitution,
   matchExperienceCompany,
   matchProjectName,
+  normalizeResumePatch,
 } from "@/lib/applyResumePatch";
 import type { ResumePatch, TailoredEducation, TailoredResumeOutput } from "@/lib/api";
 import type { ResumeSuggestion } from "@/lib/suggestions";
@@ -547,7 +548,8 @@ export function countPlaceablePatches(
 ): { placeable: number; unplaceable: number } {
   let placeable = 0;
   for (const patch of patches) {
-    if (isPatchPlaceable(patch, resume)) placeable += 1;
+    const normalized = normalizeResumePatch(resume, patch);
+    if (isPatchPlaceable(normalized, resume)) placeable += 1;
   }
   return { placeable, unplaceable: patches.length - placeable };
 }

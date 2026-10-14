@@ -60,7 +60,7 @@ test("truncated project bullet patch is placeable and applies", () => {
   )
 })
 
-test("project bullet patch without matching bullet text is not placeable", () => {
+test("project bullet patch with wrong old text but new text is placeable (append path)", () => {
   const withProject: TailoredResumeOutput = {
     ...tailored,
     projects: [
@@ -72,11 +72,12 @@ test("project bullet patch without matching bullet text is not placeable", () =>
   }
   const patch = {
     section: "projects" as const,
+    description: "Add bullet",
     project_name: "FlintApply",
     project_bullet_old: "Totally different bullet.",
-    project_bullet_new: "Led AI-powered job-search SaaS.",
+    project_bullet_new: "Led AI-powered job-search SaaS with Stripe billing.",
   }
-  assert.equal(isPatchPlaceable(patch, withProject), false)
+  assert.equal(isPatchPlaceable(patch, withProject), true)
 })
 
 test("retargeted orphan patch applies to real employer", () => {
