@@ -3,6 +3,7 @@ import {
   bulletsTextMatch,
   coerceEducationPatch,
   MIN_FUZZY_BULLET_LEN,
+  normalizeResumePatch,
 } from "@/lib/applyResumePatch";
 import type { ResumePatch, TailoredResumeOutput } from "@/lib/api";
 
@@ -277,6 +278,18 @@ function runTests() {
   };
   const appendResult = applyResumePatch(withBullets, appendProjectBulletPatch);
   assert(appendResult.applied, "add_project_bullet applies");
+
+  const atsStylePatch: ResumePatch = {
+    section: "projects",
+    description: "Add from master",
+    project_name: "TRUST",
+    project_bullet_old: "Open with a stronger verb: Applied Design Patterns…",
+    project_bullet_new: "Architected scalable services using OOP and design patterns.",
+  };
+  const coerced = normalizeResumePatch(withBullets, atsStylePatch);
+  assert(coerced.add_project_bullet?.includes("Architected"), "ATS-style old coerces to add");
+  const atsApply = applyResumePatch(withBullets, coerced);
+  assert(atsApply.applied, "coerced ATS patch appends bullet");
   const trustAppend = appendResult.updated.projects[0] as Record<string, unknown>;
   assert(
     (trustAppend.bullets as string[]).some((b) => b.includes("zero-trust")),

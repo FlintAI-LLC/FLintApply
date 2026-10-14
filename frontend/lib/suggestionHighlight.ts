@@ -2,11 +2,13 @@ import { resolveBulletAtAnchor } from "@/lib/anchoredPatch";
 import {
   bulletsTextMatch,
   findUniqueExperienceIndex,
+  findProjectIndexForPatch,
   findUniqueProjectIndex,
   inferEducationInstitution,
   matchEducationInstitution,
   matchExperienceCompany,
   matchProjectName,
+  normalizeResumePatch,
 } from "@/lib/applyResumePatch";
 import type { ResumePatch, TailoredEducation, TailoredResumeOutput } from "@/lib/api";
 import type { ResumeSuggestion } from "@/lib/suggestions";
@@ -508,18 +510,25 @@ export function isPatchPlaceable(
       );
     }
     if (patch.project_name?.trim()) {
-      const projIdx = findUniqueProjectIndex(
+      const projIdx = findProjectIndexForPatch(
         resume.projects as Record<string, unknown>[],
         patch.project_name!,
       );
       if (projIdx < 0) return false;
       const proj = resume.projects[projIdx] as Record<string, unknown>;
       if (patch.add_project_bullet?.trim()) return true;
+      if (patch.project_bullet_new?.trim() && !patch.project_bullet_old?.trim()) {
+        return true;
+      }
       if (patch.project_bullet_old?.trim()) {
         const bullets = Array.isArray((proj as Record<string, unknown>).bullets)
           ? ((proj as Record<string, unknown>).bullets as string[])
           : [];
-        return bullets.some((b) => bulletsTextMatch(b, patch.project_bullet_old!));
+        if (bullets.some((b) => bulletsTextMatch(b, patch.project_bullet_old!))) {
+          return true;
+        }
+        if (patch.project_bullet_new?.trim()) return true;
+        return false;
       }
       if ((patch.project_bullets_replace_all?.length ?? 0) > 0) return true;
       if (patch.new_project_title?.trim() || patch.new_project_description != null) {
@@ -539,7 +548,8 @@ export function countPlaceablePatches(
 ): { placeable: number; unplaceable: number } {
   let placeable = 0;
   for (const patch of patches) {
-    if (isPatchPlaceable(patch, resume)) placeable += 1;
+    const normalized = normalizeResumePatch(resume, patch);
+    if (isPatchPlaceable(normalized, resume)) placeable += 1;
   }
   return { placeable, unplaceable: patches.length - placeable };
 }
@@ -550,7 +560,8 @@ export function placedSuggestionIds(
 ): Set<string> {
   const placed = new Set<string>();
   for (const s of suggestions) {
-    if (isPatchPlaceable(s.patch, resume)) {
+    const normalized = normalizeResumePatch(resume, s.patch);
+    if (isPatchPlaceable(normalized, resume)) {
       placed.add(s.id);
     }
   }

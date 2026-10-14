@@ -248,6 +248,9 @@ def hydrate_patch_from_anchor(
         patch.section = "projects"
         patch.project_name = resolved["project_name"]
         patch.project_bullet_old = resolved["project_bullet_old"]
+        if patch.add_project_bullet and patch.add_project_bullet.strip():
+            patch.project_bullet_new = patch.add_project_bullet.strip()
+            patch.add_project_bullet = None
     elif resolved["section"] == "education":
         patch.section = "education"
         patch.institution = resolved["institution"]
@@ -341,7 +344,7 @@ def match_anchor_for_patch(
             if project_name and _names_match(project_name, resolved["project_name"]):
                 matches.append(issue.anchor)
                 continue
-            if patch.project_bullet_new and not project_name:
+            if (patch.project_bullet_new or patch.add_project_bullet) and not project_name:
                 matches.append(issue.anchor)
     if len(matches) == 1:
         return matches[0]

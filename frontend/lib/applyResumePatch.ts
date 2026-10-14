@@ -172,6 +172,28 @@ export function findUniqueProjectIndex(
   );
 }
 
+/** Resolve project when LLM uses master-resume title vs shortened tailored name. */
+export function findProjectIndexForPatch(
+  projects: Record<string, unknown>[],
+  patchName: string,
+): number {
+  const unique = findUniqueProjectIndex(projects, patchName);
+  if (unique >= 0) return unique;
+
+  const matches = projects
+    .map((_, index) => index)
+    .filter((index) => matchProjectName(projectDisplayName(projects[index]!), patchName));
+  if (matches.length === 1) return matches[0]!;
+  if (matches.length > 1) {
+    const head = projectNameHead(patchName);
+    const headMatches = matches.filter(
+      (index) => projectNameHead(projectDisplayName(projects[index]!)) === head,
+    );
+    if (headMatches.length === 1) return headMatches[0]!;
+  }
+  return -1;
+}
+
 function findExperienceIndex(
   experience: TailoredExperience[],
   patchCompany: string,
@@ -183,7 +205,18 @@ function findProjectIndex(
   projects: Record<string, unknown>[],
   patchName: string,
 ): number {
-  return findUniqueProjectIndex(projects, patchName);
+  return findProjectIndexForPatch(projects, patchName);
+}
+
+const ATS_BULLET_HINT_RE =
+  /^(?:open with a stronger verb|suggestion|strong action verbs?|rewrite|fix)\s*:?\s*/i;
+
+function stripAtsBulletHint(text: string): string {
+  return text.replace(ATS_BULLET_HINT_RE, "").trim();
+}
+
+function projectBullets(project: Record<string, unknown>): string[] {
+  return Array.isArray(project.bullets) ? (project.bullets as string[]) : [];
 }
 
 function anchorBulletStillMatches(
@@ -380,23 +413,69 @@ export function coerceProjectsPatch(
 ): ResumePatch {
   if (patch.section !== "projects") return patch;
   if (patch.new_project?.name?.trim()) return patch;
-  if (!patch.project_name?.trim()) return patch;
-  if ((patch.project_bullets_replace_all?.length ?? 0) === 0) return patch;
+
+  let next: ResumePatch = { ...patch };
+
+  if (next.project_name?.trim()) {
+    const idx = findProjectIndex(projects, next.project_name);
+    if (idx >= 0) {
+      next = { ...next, project_name: projectDisplayName(projects[idx]!) };
+      const bullets = projectBullets(projects[idx] as Record<string, unknown>);
+      const oldRaw = next.project_bullet_old?.trim() ?? "";
+      const newText =
+        next.project_bullet_new?.trim() ||
+        next.add_project_bullet?.trim() ||
+        "";
+
+      if (newText && !next.add_project_bullet?.trim()) {
+        if (!oldRaw) {
+          next = {
+            ...next,
+            project_bullet_new: undefined,
+            add_project_bullet: newText,
+          };
+        } else {
+          let oldText = oldRaw;
+          let matchIdx = findMatchingBulletIndex(bullets, oldText);
+          if (matchIdx < 0) {
+            const stripped = stripAtsBulletHint(oldText);
+            if (stripped !== oldText) {
+              matchIdx = findMatchingBulletIndex(bullets, stripped);
+              if (matchIdx >= 0) oldText = stripped;
+            }
+          }
+          if (matchIdx < 0) {
+            next = {
+              ...next,
+              project_bullet_old: undefined,
+              project_bullet_new: undefined,
+              add_project_bullet: newText,
+            };
+          } else if (oldText !== oldRaw) {
+            next = { ...next, project_bullet_old: oldText };
+          }
+        }
+      }
+    }
+  }
+
+  if (!next.project_name?.trim()) return next;
+  if ((next.project_bullets_replace_all?.length ?? 0) === 0) return next;
 
   const exists = projects.some((p) =>
-    matchProjectName(projectDisplayName(p), patch.project_name!),
+    matchProjectName(projectDisplayName(p), next.project_name!),
   );
-  if (exists) return patch;
+  if (exists) return next;
 
-  const { name, description } = splitProjectTitle(patch.project_name);
+  const { name, description } = splitProjectTitle(next.project_name);
   return {
-    ...patch,
+    ...next,
     project_name: undefined,
     project_bullets_replace_all: undefined,
     new_project: {
       name,
       description,
-      bullets: patch.project_bullets_replace_all!,
+      bullets: next.project_bullets_replace_all!,
     },
   };
 }
@@ -426,7 +505,11 @@ function tryApplyByAnchor(
     return { updated, applied: true };
   }
 
-  if (anchor.section === "projects" && patch.project_bullet_new?.trim()) {
+  if (
+    anchor.section === "projects" &&
+    (patch.project_bullet_new?.trim() || patch.add_project_bullet?.trim())
+  ) {
+    const replacement = (patch.project_bullet_new ?? patch.add_project_bullet)!.trim();
     const projects = updated.projects ?? [];
     const project = projects[anchor.entry_index] as Record<string, unknown> | undefined;
     if (!project) return null;
@@ -434,7 +517,7 @@ function tryApplyByAnchor(
     const bulletIndex = anchor.bullet_index;
     if (bulletIndex >= bullets.length) return null;
     if (!anchorBulletStillMatches(bullets[bulletIndex]!, patch.project_bullet_old)) return null;
-    bullets[bulletIndex] = patch.project_bullet_new.trim();
+    bullets[bulletIndex] = replacement;
     const nextProject = { ...project, bullets };
     updated.projects = projects.map((row, index) =>
       index === anchor.entry_index ? nextProject : row,
@@ -824,12 +907,25 @@ export function applyResumePatch(
         effectivePatch.project_bullet_new?.trim()
       ) {
         const oldText = effectivePatch.project_bullet_old.trim();
-        const matchIdx = findMatchingBulletIndex(bullets, oldText);
+        let matchIdx = findMatchingBulletIndex(bullets, oldText);
         if (matchIdx < 0) {
+          const stripped = stripAtsBulletHint(oldText);
+          if (stripped !== oldText) {
+            matchIdx = findMatchingBulletIndex(bullets, stripped);
+          }
+        }
+        if (matchIdx < 0) {
+          const append = effectivePatch.project_bullet_new.trim();
+          if (!bullets.some((b) => normalizeBulletText(b) === normalizeBulletText(append))) {
+            bullets.push(append);
+            proj.bullets = bullets;
+            updated.projects = before.map((p, i) => (i === projIdx ? proj : p));
+            return { updated, applied: true };
+          }
           return {
             updated,
             applied: false,
-            failureReason: "Bullet text did not match any bullet in this project.",
+            failureReason: "That bullet already exists in this project.",
           };
         }
         bullets[matchIdx] = effectivePatch.project_bullet_new.trim();
