@@ -59,6 +59,29 @@ def test_hydrate_chat_patches_overwrites_llm_bullet_old() -> None:
     assert hydrated.anchor == issue.anchor
 
 
+def test_hydrate_add_project_bullet_becomes_replace_at_anchor() -> None:
+    from app.models.chat import ResumePatch
+
+    issue = BlockingIssue(
+        category="bullet",
+        description="Strong action verbs",
+        suggestion="Use a stronger verb",
+        impact="medium",
+        fix_effort="manual_rewrite",
+        anchor=IssueAnchor(section="projects", entry_index=0, bullet_index=0),
+    )
+    patch = ResumePatch(
+        section="projects",
+        description="Fix bullet",
+        add_project_bullet="Engineered local-first AI desktop co-pilot with Whisper transcription.",
+    )
+    hydrated = hydrate_chat_patches(RESUME, [patch], [issue])[0]
+    assert hydrated.add_project_bullet is None
+    assert hydrated.project_bullet_new
+    assert "Whisper" in hydrated.project_bullet_new
+    assert hydrated.project_bullet_old
+
+
 def test_match_anchor_for_patch_by_project_name() -> None:
     from app.models.chat import ResumePatch
 

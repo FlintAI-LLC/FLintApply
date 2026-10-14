@@ -27,6 +27,10 @@ export function patchFingerprint(patch: ResumePatch): string {
     (p.new_project?.bullets ?? []).join("\n"),
     (p.add_skills ?? []).join(","),
     (p.project_bullets_replace_all ?? []).join("\n"),
+    p.add_bullet?.trim() ?? "",
+    p.add_project_bullet?.trim() ?? "",
+    p.new_project_title?.trim() ?? "",
+    p.new_project_description?.trim() ?? "",
   ].join("|");
 }
 

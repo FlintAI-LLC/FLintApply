@@ -35,6 +35,18 @@ def _is_label_only_url(value: str) -> bool:
     return not (text.startswith("http") or "." in text or "/" in text)
 
 
+def _safe_contact_url(url: str) -> str | None:
+    raw = (url or "").strip()
+    if not raw or _is_label_only_url(raw):
+        return None
+    lower = raw.lower()
+    if lower.startswith(("javascript:", "data:", "vbscript:")):
+        return None
+    if lower.startswith(("http://", "https://", "mailto:")):
+        return raw
+    return f"https://{raw.lstrip('/')}"
+
+
 def _parse_contact_links(raw: object) -> list[dict[str, str]]:
     if not isinstance(raw, list):
         return []
@@ -44,24 +56,25 @@ def _parse_contact_links(raw: object) -> list[dict[str, str]]:
             continue
         label = str(item.get("label", "")).strip()
         url = str(item.get("url", "")).strip()
-        if not label or _is_label_only_url(url):
+        if not label:
             continue
-        if not url.lower().startswith(("http://", "https://")):
-            url = f"https://{url.lstrip('/')}"
-        out.append({"label": label, "url": url})
+        safe = _safe_contact_url(url)
+        if not safe:
+            continue
+        out.append({"label": label, "url": safe})
     return out
 
 
 def _links_from_legacy(contact: dict[str, Any]) -> list[dict[str, str]]:
     links: list[dict[str, str]] = []
-    linkedin = str(contact.get("linkedin") or "").strip()
-    if linkedin and not _is_label_only_url(linkedin):
+    linkedin = _safe_contact_url(str(contact.get("linkedin") or ""))
+    if linkedin:
         links.append({"label": "LinkedIn", "url": linkedin})
-    github = str(contact.get("github") or "").strip()
-    if github and not _is_label_only_url(github):
+    github = _safe_contact_url(str(contact.get("github") or ""))
+    if github:
         links.append({"label": "GitHub", "url": github})
-    website = str(contact.get("website") or "").strip()
-    if website and not _is_label_only_url(website):
+    website = _safe_contact_url(str(contact.get("website") or ""))
+    if website:
         links.append({"label": "Portfolio", "url": website})
     return links
 
@@ -106,6 +119,8 @@ def authoritative_contact(
         result["name"] = info_name
     elif llm_name.lower() not in _PLACEHOLDER_NAMES:
         result["name"] = llm_name
+    else:
+        result["name"] = ""
 
     llm_phone = (c.get("phone") or "").strip()
     info_phone = (user_info.phone if user_info else None) or ""
@@ -131,7 +146,7 @@ def authoritative_contact(
         if val and _is_label_only_url(val):
             result.pop(key, None)
 
-    info_links = (
+    info_links = _parse_contact_links(
         [link.model_dump() for link in user_info.contact_links]
         if user_info and user_info.contact_links
         else []

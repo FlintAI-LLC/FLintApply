@@ -505,7 +505,11 @@ function tryApplyByAnchor(
     return { updated, applied: true };
   }
 
-  if (anchor.section === "projects" && patch.project_bullet_new?.trim()) {
+  if (
+    anchor.section === "projects" &&
+    (patch.project_bullet_new?.trim() || patch.add_project_bullet?.trim())
+  ) {
+    const replacement = (patch.project_bullet_new ?? patch.add_project_bullet)!.trim();
     const projects = updated.projects ?? [];
     const project = projects[anchor.entry_index] as Record<string, unknown> | undefined;
     if (!project) return null;
@@ -513,7 +517,7 @@ function tryApplyByAnchor(
     const bulletIndex = anchor.bullet_index;
     if (bulletIndex >= bullets.length) return null;
     if (!anchorBulletStillMatches(bullets[bulletIndex]!, patch.project_bullet_old)) return null;
-    bullets[bulletIndex] = patch.project_bullet_new.trim();
+    bullets[bulletIndex] = replacement;
     const nextProject = { ...project, bullets };
     updated.projects = projects.map((row, index) =>
       index === anchor.entry_index ? nextProject : row,

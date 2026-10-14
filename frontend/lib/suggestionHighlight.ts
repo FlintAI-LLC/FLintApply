@@ -560,7 +560,8 @@ export function placedSuggestionIds(
 ): Set<string> {
   const placed = new Set<string>();
   for (const s of suggestions) {
-    if (isPatchPlaceable(s.patch, resume)) {
+    const normalized = normalizeResumePatch(resume, s.patch);
+    if (isPatchPlaceable(normalized, resume)) {
       placed.add(s.id);
     }
   }

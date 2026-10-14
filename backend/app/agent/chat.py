@@ -219,13 +219,9 @@ def _master_resume_context(session: Session) -> str:
             if year:
                 line = f"{line} ({year})" if line else year
             edu_lines.append(f"- {line or 'Program'}")
-            notes = (getattr(edu, "notes", None) or "").strip()
+            notes = (edu.notes or "").strip()
             if notes:
                 edu_lines.append(f"    • {notes}")
-            for bullet in getattr(edu, "bullets", None) or []:
-                text = str(bullet).strip()
-                if text:
-                    edu_lines.append(f"    • {text}")
         blocks.append("\n".join(edu_lines))
 
     if parsed.certifications:

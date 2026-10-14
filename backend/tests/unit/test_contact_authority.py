@@ -85,6 +85,19 @@ def test_contact_links_from_user_info() -> None:
     ]
 
 
+def test_unsafe_contact_url_dropped() -> None:
+    merged = authoritative_contact(
+        {
+            "contact_links": [
+                {"label": "X", "url": "javascript:alert(1)"},
+                {"label": "OK", "url": "https://example.com"},
+            ],
+        },
+    )
+    assert len(merged["contact_links"]) == 1
+    assert merged["contact_links"][0]["url"] == "https://example.com"
+
+
 def test_tailored_contact_links_used_when_no_user_links() -> None:
     merged = authoritative_contact(
         {
