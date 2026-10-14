@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.models.contact_link import ContactLink
 
 
 class UserInfo(BaseModel):
@@ -13,6 +15,7 @@ class UserInfo(BaseModel):
     github: str | None = None
     location: str | None = None
     website: str | None = None
+    contact_links: list[ContactLink] = Field(default_factory=list)
 
     # How far along the candidate is — drives page-length rules
     career_stage: Literal["student", "entry", "mid", "senior", "staff", "executive"] = "mid"

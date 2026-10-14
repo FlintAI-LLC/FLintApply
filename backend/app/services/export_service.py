@@ -143,15 +143,21 @@ def render_docx(session: Session) -> bytes:
     name = contact.get("name", "")
     email = contact.get("email", "")
     phone = contact.get("phone", "")
-    linkedin = contact.get("linkedin", "")
-    github = contact.get("github", "")
     location = contact.get("location", "")
-    website = contact.get("website", "")
+    links = contact.get("contact_links") or []
 
     doc.add_heading(name, level=0)
     if location:
         doc.add_paragraph(location)
-    contact_line_parts = [p for p in [email, phone, linkedin, github, website] if p]
+    contact_line_parts: list[str] = [p for p in [email, phone] if p]
+    for item in links:
+        if isinstance(item, dict) and item.get("label") and item.get("url"):
+            contact_line_parts.append(f"{item['label']}: {item['url']}")
+    if not links:
+        linkedin = contact.get("linkedin", "")
+        github = contact.get("github", "")
+        website = contact.get("website", "")
+        contact_line_parts.extend([p for p in [linkedin, github, website] if p])
     doc.add_paragraph("  |  ".join(contact_line_parts))
 
     # Summary
@@ -217,12 +223,18 @@ def render_txt(session: Session, *, account_email: str | None = None) -> str:
     name = contact.get("name", "")
     email = contact.get("email", "")
     phone = contact.get("phone", "")
-    linkedin = contact.get("linkedin", "")
-    github = contact.get("github", "")
     location = contact.get("location", "")
-    website = contact.get("website", "")
+    links = contact.get("contact_links") or []
 
-    contact_parts = [p for p in [email, phone, linkedin, github, website] if p]
+    contact_parts: list[str] = [p for p in [email, phone] if p]
+    for item in links:
+        if isinstance(item, dict) and item.get("label") and item.get("url"):
+            contact_parts.append(f"{item['label']}: {item['url']}")
+    if not links:
+        linkedin = contact.get("linkedin", "")
+        github = contact.get("github", "")
+        website = contact.get("website", "")
+        contact_parts.extend([p for p in [linkedin, github, website] if p])
     lines += [name.upper()]
     if location:
         lines.append(location)

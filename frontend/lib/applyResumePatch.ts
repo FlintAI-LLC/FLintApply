@@ -784,6 +784,22 @@ export function applyResumePatch(
 
       const proj = { ...(before[projIdx] as Record<string, unknown>) };
 
+      if (effectivePatch.add_project_bullet?.trim()) {
+        const bullets = Array.isArray(proj.bullets) ? [...(proj.bullets as string[])] : [];
+        const bullet = effectivePatch.add_project_bullet.trim();
+        if (bullets.some((b) => b.trim() === bullet)) {
+          return {
+            updated,
+            applied: false,
+            failureReason: "That bullet already exists in this project.",
+          };
+        }
+        bullets.push(bullet);
+        proj.bullets = bullets;
+        updated.projects = before.map((p, i) => (i === projIdx ? proj : p));
+        return { updated, applied: true };
+      }
+
       if (effectivePatch.new_project_title?.trim()) {
         proj.name = effectivePatch.new_project_title.trim();
         applied = true;

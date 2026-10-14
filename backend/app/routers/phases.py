@@ -21,12 +21,15 @@ from app.llm.factory import get_llm_client_for_step
 from app.llm.model_registry import phase_step
 from app.limiter import limiter
 from app.models.audit import AuditOutput
+from app.models.contact_link import ContactLink
 from app.models.rewrite import (
     ResumeVersion,
     TailoredEducationEntry,
     TailoredExperienceEntry,
     TailoredResumeOutput,
 )
+from app.models.userinfo import UserInfo
+from app.services.contact_authority import _is_label_only_url, _parse_contact_links
 from app.models.session import Phase3Charge, PhaseRunScope, PhaseStatus
 from app.models.user import User
 from app.services.auth.dependencies import assert_user_email_verified
@@ -706,6 +709,43 @@ async def patch_tailored_resume(
             contact["name"] = str(body["new_name"]).strip()
             output.contact = contact
             label = "User edit: contact/name"
+        elif section == "contact" and body.get("contact_updates") is not None:
+            updates = body["contact_updates"]
+            if not isinstance(updates, dict):
+                raise HTTPException(
+                    status_code=422,
+                    detail="contact_updates must be an object",
+                )
+            contact = dict(output.contact or {})
+            for key in ("email", "phone", "location"):
+                if key in updates and updates[key] is not None:
+                    contact[key] = str(updates[key]).strip()
+            if "contact_links" in updates:
+                contact["contact_links"] = _parse_contact_links(updates["contact_links"])
+            for legacy in ("linkedin", "github", "website"):
+                val = str(contact.get(legacy) or "").strip()
+                if val and _is_label_only_url(val):
+                    contact.pop(legacy, None)
+            website = str(contact.get("website") or "").strip()
+            if website and _is_label_only_url(website):
+                contact.pop("website", None)
+            output.contact = contact
+
+            ui = session.user_info.model_copy() if session.user_info else UserInfo()
+            if contact.get("email"):
+                ui.email = str(contact["email"])
+            if contact.get("phone"):
+                ui.phone = str(contact["phone"])
+            if contact.get("location"):
+                ui.location = str(contact["location"])
+            raw_links = contact.get("contact_links") or []
+            ui.contact_links = [
+                ContactLink(label=str(item["label"]), url=str(item["url"]))
+                for item in raw_links
+                if isinstance(item, dict) and item.get("label") and item.get("url")
+            ]
+            session.user_info = ui
+            label = "User edit: contact"
         elif section == "experience" and body.get("add_experience") is not None:
             raw = body["add_experience"]
             if isinstance(raw, dict):

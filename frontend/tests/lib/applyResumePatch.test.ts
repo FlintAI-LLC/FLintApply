@@ -269,6 +269,20 @@ function runTests() {
     "single bullet replaced",
   );
 
+  const appendProjectBulletPatch: ResumePatch = {
+    section: "projects",
+    description: "Add TRUST bullet from master resume",
+    project_name: "TRUST (Kia + Trace + Dashboard)",
+    add_project_bullet: "Shipped zero-trust mTLS between all services.",
+  };
+  const appendResult = applyResumePatch(withBullets, appendProjectBulletPatch);
+  assert(appendResult.applied, "add_project_bullet applies");
+  const trustAppend = appendResult.updated.projects[0] as Record<string, unknown>;
+  assert(
+    (trustAppend.bullets as string[]).some((b) => b.includes("zero-trust")),
+    "appended bullet present",
+  );
+
   const addProjectPatch: ResumePatch = {
     section: "projects",
     description: "Add Fraud Shield AI project",

@@ -131,6 +131,8 @@ def _synthesize_description(patch: ResumePatch) -> str:
             return f"Update title at {patch.company or 'experience'}"
         if patch.new_dates:
             return f"Update dates at {patch.company or 'experience'}"
+        if patch.add_bullet:
+            return f"Add bullet at {patch.company or 'experience'}"
     if section == "projects":
         if patch.new_project:
             return f"Add project: {patch.new_project.name}"
@@ -142,6 +144,8 @@ def _synthesize_description(patch: ResumePatch) -> str:
             return f"Update project subtitle for {patch.project_name}"
         if patch.project_bullets_replace_all and patch.project_name:
             return f"Rewrite bullets in {patch.project_name}"
+        if patch.add_project_bullet and patch.project_name:
+            return f"Add bullet to {patch.project_name}"
         if patch.project_bullet_old and patch.project_name:
             return f"Rewrite a bullet in {patch.project_name}"
     if section == "education":
@@ -157,6 +161,87 @@ def _synthesize_description(patch: ResumePatch) -> str:
     if section == "contact" and patch.new_name:
         return f"Update name to {patch.new_name}"
     return f"Update {section}"
+
+
+_MASTER_RESUME_CONTEXT_MAX_CHARS = 14_000
+
+
+def _master_resume_context(session: Session) -> str:
+    """Compact master resume text for chat — source material beyond tailored JSON."""
+
+    parsed = session.resume_parsed
+    if not parsed:
+        return ""
+
+    blocks: list[str] = []
+    summary = (parsed.summary or "").strip()
+    if summary:
+        blocks.append(f"Summary:\n{summary}")
+
+    if parsed.experience:
+        exp_lines: list[str] = ["Experience:"]
+        for entry in parsed.experience:
+            title = (entry.title or "").strip()
+            company = (entry.company or "").strip()
+            dates = (entry.dates or "").strip()
+            header = " — ".join(p for p in [title, company] if p)
+            if dates:
+                header = f"{header} ({dates})" if header else dates
+            exp_lines.append(f"- {header or 'Role'}")
+            for bullet in entry.bullets or []:
+                text = str(bullet).strip()
+                if text:
+                    exp_lines.append(f"    • {text}")
+        blocks.append("\n".join(exp_lines))
+
+    if parsed.projects:
+        proj_lines: list[str] = ["Projects:"]
+        for proj in parsed.projects:
+            name = (proj.name or "").strip()
+            if not name:
+                continue
+            desc = (proj.description or "").strip()
+            proj_lines.append(f"- {name}" + (f" — {desc}" if desc else ""))
+            for bullet in proj.bullets or []:
+                text = str(bullet).strip()
+                if text:
+                    proj_lines.append(f"    • {text}")
+        if len(proj_lines) > 1:
+            blocks.append("\n".join(proj_lines))
+
+    if parsed.education:
+        edu_lines: list[str] = ["Education:"]
+        for edu in parsed.education:
+            degree = (edu.degree or "").strip()
+            inst = (edu.institution or "").strip()
+            year = (edu.year or "").strip()
+            line = " — ".join(p for p in [degree, inst] if p)
+            if year:
+                line = f"{line} ({year})" if line else year
+            edu_lines.append(f"- {line or 'Program'}")
+            for bullet in edu.bullets or []:
+                text = str(bullet).strip()
+                if text:
+                    edu_lines.append(f"    • {text}")
+        blocks.append("\n".join(edu_lines))
+
+    if parsed.certifications:
+        blocks.append("Certifications:\n- " + "\n- ".join(parsed.certifications))
+
+    if not blocks:
+        return ""
+
+    body = "\n\n".join(blocks)
+    intro = (
+        "\n\nMASTER RESUME (uploaded source — NOT the tailored JSON above):\n"
+        "Use this when the user asks to pull content from their master resume. "
+        "Always patch the TAILORED resume: match experience[].company / projects[].name "
+        "exactly, then use add_bullet or add_project_bullet (or bullet_old/bullet_new to replace).\n"
+    )
+    text = intro + body
+    if len(text) > _MASTER_RESUME_CONTEXT_MAX_CHARS:
+        return text[:_MASTER_RESUME_CONTEXT_MAX_CHARS] + "\n…(master resume truncated for length)\n"
+    return text
 
 
 def _fill_missing_descriptions(response: ChatResponse) -> ChatResponse:
@@ -194,6 +279,8 @@ async def run(
     ]
     jd_text = session.jd_raw or ""
 
+    master_resume_context = _master_resume_context(session)
+
     # Inject Phase 4 QA results when available so the agent can answer
     # "what's missing" questions precisely without re-deriving them.
     qa_context = ""
@@ -215,6 +302,7 @@ async def run(
         .replace("{resume_json}", resume_json)
         .replace("{jd_text}", jd_text)
         .replace("{qa_context}", qa_context)
+        .replace("{master_resume_context}", master_resume_context)
     )
 
     anchor_block = ""
@@ -228,7 +316,7 @@ async def run(
             + build_anchor_target_block(resume_data, target_issues)
             + f"\n\nReturn exactly {len(target_issues)} patches — one per target above, in order "
             f"(ignore the default 3-patch limit for this anchored batch). "
-            "For anchored targets, only supply bullet_new (or project_bullet_new). "
+            "For anchored targets, only supply bullet_new (or project_bullet_new / add_project_bullet). "
             "Do NOT set company, project_name, institution, or bullet_old — the server fills those from the anchor."
         )
 

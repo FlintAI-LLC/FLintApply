@@ -220,6 +220,14 @@ class ResumePatch(BaseModel):
             "project_bullet_old/new takes priority when both are set."
         ),
     )
+    add_project_bullet: str | None = Field(
+        default=None,
+        description=(
+            "Append a bullet to the project matched by project_name. "
+            "Use when adding new content (e.g. from master resume) without replacing an existing bullet. "
+            "Only set when section='projects'."
+        ),
+    )
     new_project_title: str | None = Field(
         default=None,
         description=(

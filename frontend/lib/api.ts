@@ -892,8 +892,19 @@ export interface TailoredEducation {
   bullets: string[];
 }
 
+export interface TailoredContact {
+  name?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  linkedin?: string;
+  github?: string;
+  website?: string;
+  contact_links?: Array<{ label: string; url: string }>;
+}
+
 export interface TailoredResumeOutput {
-  contact: Record<string, string>;
+  contact: TailoredContact & Record<string, unknown>;
   summary: string;
   skills: string[];
   experience: TailoredExperience[];
@@ -1380,6 +1391,7 @@ export interface ResumePatch {
   delete_experience?: boolean;
   new_experience?: { title?: string; company?: string; dates?: string; bullets?: string[] };
   add_bullet?: string;
+  add_project_bullet?: string;
   move_direction?: "up" | "down";
   // Certifications
   remove_certifications?: string[];

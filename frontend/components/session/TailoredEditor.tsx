@@ -49,6 +49,7 @@ import {
   pendingSuggestionCount,
   projectRemovalPending,
   projectReplaceAllSuggestion,
+  projectBulletAddSuggestions,
   projectTitleSuggestion,
   projectDescriptionSuggestion,
   dismissProjectMetaSuggestions,
@@ -881,6 +882,42 @@ export function TailoredEditor({ initial, sessionId, editorSyncKey = 0, onSaved,
   const skippedChunks = data.skipped_chunks ?? [];
   const displayName = String(data.contact?.name ?? "").trim();
 
+  type ContactLinkRow = { label: string; url: string };
+
+  function contactLinksFromRecord(contact: Record<string, unknown> | undefined): ContactLinkRow[] {
+    const raw = contact?.contact_links;
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw
+        .filter((item): item is Record<string, unknown> => item && typeof item === "object")
+        .map((item) => ({
+          label: String(item.label ?? "").trim(),
+          url: String(item.url ?? "").trim(),
+        }))
+        .filter((row) => row.label && row.url);
+    }
+    const legacy: ContactLinkRow[] = [];
+    const linkedin = String(contact?.linkedin ?? "").trim();
+    const github = String(contact?.github ?? "").trim();
+    const website = String(contact?.website ?? "").trim();
+    if (linkedin && !/^(website|linkedin|github)$/i.test(linkedin)) legacy.push({ label: "LinkedIn", url: linkedin });
+    if (github && !/^(website|linkedin|github)$/i.test(github)) legacy.push({ label: "GitHub", url: github });
+    if (website && !/^(website|web)$/i.test(website)) legacy.push({ label: "Portfolio", url: website });
+    return legacy;
+  }
+
+  const [editingContactDetails, setEditingContactDetails] = useState(false);
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactLinkRows, setContactLinkRows] = useState<ContactLinkRow[]>([]);
+
+  useEffect(() => {
+    if (editingContactDetails) return;
+    const c = data.contact ?? {};
+    setContactEmail(String(c.email ?? "").trim());
+    setContactPhone(String(c.phone ?? "").trim());
+    setContactLinkRows(contactLinksFromRecord(c as Record<string, unknown>));
+  }, [data.contact, editingContactDetails]);
+
   // ── Contact ──────────────────────────────────────────────────────────────
 
   async function saveContactName(name: string) {
@@ -896,6 +933,28 @@ export function TailoredEditor({ initial, sessionId, editorSyncKey = 0, onSaved,
       onDismissSuggestion,
       (s) => s.patch.section === "contact",
     );
+  }
+
+  async function saveContactDetails() {
+    const email = contactEmail.trim();
+    const phone = contactPhone.trim();
+    const links = contactLinkRows
+      .map((row) => ({ label: row.label.trim(), url: row.url.trim() }))
+      .filter((row) => row.label && row.url);
+    await patch({
+      section: "contact",
+      contact_updates: { email, phone, contact_links: links },
+    });
+    updateLocal((p) => ({
+      ...p,
+      contact: {
+        ...(p.contact ?? {}),
+        email,
+        phone,
+        contact_links: links,
+      },
+    }));
+    setEditingContactDetails(false);
   }
 
   // ── Summary ──────────────────────────────────────────────────────────────
@@ -1604,6 +1663,116 @@ export function TailoredEditor({ initial, sessionId, editorSyncKey = 0, onSaved,
               <Pencil className="w-3.5 h-3.5" />
             </button>
           </span>
+        )}
+      </section>
+
+      <section>
+        <SectionHeader title="Contact on PDF" />
+        <p className="text-xs text-slate-600 dark:text-slate-400 mb-2">
+          Email, phone, and labeled links (LinkedIn, GitHub, portfolio) appear in the resume header on export.
+        </p>
+        {editingContactDetails ? (
+          <div className="space-y-3 max-w-xl">
+            <label className="block text-xs text-slate-600 dark:text-slate-400">
+              Email
+              <input
+                type="email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                className="mt-1 w-full bg-white dark:bg-slate-900 border border-slate-400 dark:border-slate-600 rounded px-2 py-1 text-sm text-slate-900 dark:text-slate-100"
+              />
+            </label>
+            <label className="block text-xs text-slate-600 dark:text-slate-400">
+              Phone
+              <input
+                type="tel"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                className="mt-1 w-full bg-white dark:bg-slate-900 border border-slate-400 dark:border-slate-600 rounded px-2 py-1 text-sm text-slate-900 dark:text-slate-100"
+              />
+            </label>
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Links</p>
+              {contactLinkRows.map((row, idx) => (
+                <div key={idx} className="flex flex-wrap items-center gap-2">
+                  <input
+                    placeholder="Title (e.g. LinkedIn)"
+                    value={row.label}
+                    onChange={(e) => {
+                      const next = [...contactLinkRows];
+                      next[idx] = { ...next[idx]!, label: e.target.value };
+                      setContactLinkRows(next);
+                    }}
+                    className="flex-1 min-w-[7rem] bg-white dark:bg-slate-900 border border-slate-400 dark:border-slate-600 rounded px-2 py-1 text-sm"
+                  />
+                  <input
+                    placeholder="https://…"
+                    value={row.url}
+                    onChange={(e) => {
+                      const next = [...contactLinkRows];
+                      next[idx] = { ...next[idx]!, url: e.target.value };
+                      setContactLinkRows(next);
+                    }}
+                    className="flex-[2] min-w-[10rem] bg-white dark:bg-slate-900 border border-slate-400 dark:border-slate-600 rounded px-2 py-1 text-sm"
+                  />
+                  <button
+                    type="button"
+                    title="Remove link"
+                    onClick={() => setContactLinkRows(contactLinkRows.filter((_, i) => i !== idx))}
+                    className="p-1 rounded text-slate-500 hover:text-red-500"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setContactLinkRows([...contactLinkRows, { label: "", url: "" }])}
+                className="text-xs text-amber-800 dark:text-amber-400 hover:underline inline-flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" /> Add link
+              </button>
+            </div>
+            <span className="inline-flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void saveContactDetails()}
+                className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs"
+              >
+                Save contact
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingContactDetails(false)}
+                className="px-2 py-1 rounded bg-slate-600 text-slate-100 text-xs"
+              >
+                Cancel
+              </button>
+            </span>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-800 dark:text-slate-200 space-y-1">
+            {contactEmail && <p>{contactEmail}</p>}
+            {contactPhone && <p>{contactPhone}</p>}
+            {contactLinkRows.map((row, i) => (
+              <p key={i}>
+                <span className="text-slate-600 dark:text-slate-400">{row.label}:</span>{" "}
+                <a href={row.url} className="text-amber-800 dark:text-amber-400 hover:underline break-all">
+                  {row.url}
+                </a>
+              </p>
+            ))}
+            {!contactEmail && !contactPhone && contactLinkRows.length === 0 && (
+              <p className="text-slate-500 text-xs">No contact details yet.</p>
+            )}
+            <button
+              type="button"
+              onClick={() => setEditingContactDetails(true)}
+              className="mt-1 text-xs text-amber-800 dark:text-amber-400 hover:underline inline-flex items-center gap-1"
+            >
+              <Pencil className="w-3 h-3" /> Edit contact
+            </button>
+          </div>
         )}
       </section>
 
@@ -2659,6 +2828,7 @@ export function TailoredEditor({ initial, sessionId, editorSyncKey = 0, onSaved,
               const bullets = (p.bullets as string[]) ?? [];
               const removalSug = projectRemovalPending(suggestions, projectName);
               const replaceAllSug = projectReplaceAllSuggestion(suggestions, projectName);
+              const projectBulletAddSugs = projectBulletAddSuggestions(suggestions, projectName);
               const titleSug = projectTitleSuggestion(suggestions, projectName);
               const descSug = projectDescriptionSuggestion(suggestions, projectName);
               const removalTone = removalSug?.status === "accepted"
@@ -2873,6 +3043,20 @@ export function TailoredEditor({ initial, sessionId, editorSyncKey = 0, onSaved,
                       addPlaceholder="Action + metric + tech…"
                     />
                   )}
+
+                  {projectBulletAddSugs.map((sug) => (
+                    <PendingAdditionCard
+                      key={sug.id}
+                      suggestion={sug}
+                      onAccept={acceptSug}
+                      onReject={rejectSug}
+                    >
+                      <p className="text-amber-900 dark:text-amber-100 text-sm flex gap-2">
+                        <span className="text-amber-700 dark:text-amber-400 shrink-0">+</span>
+                        {sug.patch.add_project_bullet}
+                      </p>
+                    </PendingAdditionCard>
+                  ))}
 
                   {removalSug?.status === "pending" && (
                     <div className="flex items-center justify-between mt-2 pt-2 border-t border-red-500/30">

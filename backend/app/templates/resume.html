@@ -112,9 +112,16 @@
   {% if c.get('location') %}{{ c.get('location') }}<br>{% endif %}
   {{ c.get('email', user.email if user else '') }}
   {% if c.get('phone') %} &nbsp;|&nbsp; {{ c.get('phone') }}{% endif %}
+  {% for link in c.get('contact_links') or [] %}
+    {% if link.get('label') and link.get('url') %}
+   &nbsp;|&nbsp; <a href="{{ link.get('url') }}">{{ link.get('label') }}</a>
+    {% endif %}
+  {% endfor %}
+  {% if not (c.get('contact_links') or []) %}
   {% if c.get('linkedin') %} &nbsp;|&nbsp; <a href="{{ c.get('linkedin') }}">LinkedIn</a>{% endif %}
   {% if c.get('github') %} &nbsp;|&nbsp; <a href="{{ c.get('github') }}">GitHub</a>{% endif %}
   {% if c.get('website') %} &nbsp;|&nbsp; <a href="{{ c.get('website') }}">Website</a>{% endif %}
+  {% endif %}
 </div>
 
 <hr>
