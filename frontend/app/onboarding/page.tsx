@@ -18,6 +18,7 @@ import {
   Sparkles,
   Zap,
 } from "lucide-react"
+import { ProductIntroVideosGrid } from "@/components/marketing/ProductIntroVideosGrid"
 import { useRequireAuth } from "@/lib/auth/guards"
 import { PRODUCT_NAME } from "@/lib/brand"
 import { friendlyAuthError } from "@/lib/auth/errors"
@@ -421,6 +422,7 @@ function OnboardingPageContent() {
       case "welcome":
         return (
           <>
+            <ProductIntroVideosGrid />
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
               {PRODUCT_NAME} tailors your master resume to every job description with ATS keyword
               analysis and evidence-based quality rules. Upload an existing resume or paste text
