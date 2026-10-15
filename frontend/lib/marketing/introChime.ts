@@ -1,9 +1,9 @@
 /**
  * Short landing intro chime — plays while the logo and wordmark animate in.
- * Asset: `public/brand/intro-chime.mp3` (~6s).
+ * Asset: `public/marketing/wrong note.mp3` (stops at `INTRO_WORDMARK_COMPLETE_MS`).
  */
 
-export const INTRO_CHIME_SRC = "/brand/intro-chime.mp3" as const;
+export const INTRO_CHIME_SRC = "/marketing/wrong%20note.mp3" as const;
 
 let chimeAudio: HTMLAudioElement | null = null;
 let chimeStopTimer: ReturnType<typeof setTimeout> | null = null;
