@@ -258,7 +258,7 @@ export function DashboardStepStack({
           applyReady
             ? ""
             : hasTailored
-              ? `Return to the employer site with the ${PRODUCT_NAME} extension — autofill application forms from your tailored resume.`
+              ? `Return to the employer site with the ${PRODUCT_NAME} extension — autofill application forms from your tailored resume. Open a tailored resume and use 'Apply on employer site' on Score & Export to go straight back to the posting.`
               : "Recommended after you tailor a resume for the posting."
         }
         ready={applyReady}
