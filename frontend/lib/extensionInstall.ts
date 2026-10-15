@@ -13,7 +13,7 @@ const BETA_ZIP_PATH = "/downloads/flintapply-extension-beta.zip";
  * Bump with every flint-extension release — keep in sync with
  * flint-extension/manifest.json `version`.
  */
-export const EXTENSION_RELEASE_VERSION = "0.1.40";
+export const EXTENSION_RELEASE_VERSION = "0.1.41";
 
 /** True when the public site is the production deploy (Chrome Web Store is the install path). */
 export function isProductionAppEnv(): boolean {
