@@ -8,6 +8,13 @@ const STORE_URL =
 
 const BETA_ZIP_PATH = "/downloads/flintapply-extension-beta.zip";
 
+/**
+ * Default extension version shown on /extension (store + beta labels).
+ * Bump with every flint-extension release — keep in sync with
+ * flint-extension/manifest.json `version`.
+ */
+export const EXTENSION_RELEASE_VERSION = "0.1.41";
+
 /** True when the public site is the production deploy (Chrome Web Store is the install path). */
 export function isProductionAppEnv(): boolean {
   return process.env.NEXT_PUBLIC_APP_ENV === "production";
@@ -64,14 +71,16 @@ export function extensionBetaDownloadUrl(): string | null {
   return null;
 }
 
+/** Version string for the public Chrome Web Store listing (may lag latest beta by a release). */
 export function chromeWebStoreExtensionVersion(): string | null {
   const v = process.env.NEXT_PUBLIC_CHROME_WEB_STORE_EXTENSION_VERSION?.trim();
-  return v || "0.1.35";
+  return v || EXTENSION_RELEASE_VERSION;
 }
 
+/** Version string for the hosted beta .zip (latest engineering build). */
 export function extensionBetaVersion(): string | null {
   const v = process.env.NEXT_PUBLIC_EXTENSION_BETA_VERSION?.trim();
-  return v || "0.1.30";
+  return v || EXTENSION_RELEASE_VERSION;
 }
 
 /** @deprecated Prefer checking store + beta URLs directly in the install guide. */

@@ -2,8 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   EXTENSION_INSTALL_PATH,
+  EXTENSION_RELEASE_VERSION,
+  chromeWebStoreExtensionVersion,
   chromeWebStoreUrl,
   extensionBetaDownloadUrl,
+  extensionBetaVersion,
   extensionInstallMode,
   isProductionAppEnv,
 } from "@/lib/extensionInstall";
@@ -14,6 +17,22 @@ const DEFAULT_STORE =
 describe("extensionInstall", () => {
   it("uses a stable in-app path", () => {
     assert.equal(EXTENSION_INSTALL_PATH, "/extension");
+  });
+
+  it("defaults install guide version labels to EXTENSION_RELEASE_VERSION", () => {
+    const prevStore = process.env.NEXT_PUBLIC_CHROME_WEB_STORE_EXTENSION_VERSION;
+    const prevBeta = process.env.NEXT_PUBLIC_EXTENSION_BETA_VERSION;
+    delete process.env.NEXT_PUBLIC_CHROME_WEB_STORE_EXTENSION_VERSION;
+    delete process.env.NEXT_PUBLIC_EXTENSION_BETA_VERSION;
+    try {
+      assert.equal(chromeWebStoreExtensionVersion(), EXTENSION_RELEASE_VERSION);
+      assert.equal(extensionBetaVersion(), EXTENSION_RELEASE_VERSION);
+    } finally {
+      if (prevStore !== undefined) process.env.NEXT_PUBLIC_CHROME_WEB_STORE_EXTENSION_VERSION = prevStore;
+      else delete process.env.NEXT_PUBLIC_CHROME_WEB_STORE_EXTENSION_VERSION;
+      if (prevBeta !== undefined) process.env.NEXT_PUBLIC_EXTENSION_BETA_VERSION = prevBeta;
+      else delete process.env.NEXT_PUBLIC_EXTENSION_BETA_VERSION;
+    }
   });
 
   it("defaults to the public Chrome Web Store listing", () => {

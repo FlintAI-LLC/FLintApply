@@ -62,6 +62,11 @@ keys = (
     "RESEND_API_KEY",
     "SIGNUP_IP_DAILY_LIMIT",
     "STRIPE_SECRET_KEY",
+    "LAUNCH_AT",
+    "NEXT_PUBLIC_LAUNCH_AT",
+    "APP_ENV",
+    "TURNSTILE_SITE_KEY",
+    "TURNSTILE_SECRET_KEY",
 )
 values: dict[str, str] = {}
 root_stripe = ""
@@ -119,6 +124,36 @@ elif https_prod and stripe.startswith("sk_test_"):
     print("FAIL:STRIPE_SECRET_KEY must not be sk_test_* on production HTTPS deploy")
 elif https_prod and stripe.startswith("sk_live_"):
     print("OK:STRIPE_SECRET_KEY uses live key for production")
+
+launch_back = values.get("LAUNCH_AT", "")
+launch_front = values.get("NEXT_PUBLIC_LAUNCH_AT", "")
+if launch_back and launch_front and launch_back != launch_front:
+    print("FAIL:LAUNCH_AT and NEXT_PUBLIC_LAUNCH_AT must match (backend vs frontend env)")
+elif launch_back or launch_front:
+    print("OK:LAUNCH_AT / NEXT_PUBLIC_LAUNCH_AT present (empty uses compose default 2026-10-15)")
+
+dummy_turnstile = frozenset(
+    {
+        "1x00000000000000000000AA",
+        "2x00000000000000000000AB",
+        "1x0000000000000000000000000000000AA",
+        "2x0000000000000000000000000000000AA",
+    }
+)
+app_env = values.get("APP_ENV", "")
+site_key = values.get("TURNSTILE_SITE_KEY", "")
+secret_key = values.get("TURNSTILE_SECRET_KEY", "")
+if app_env == "staging" and (
+    site_key in dummy_turnstile or secret_key in dummy_turnstile
+):
+    print(
+        "WARN:Turnstile uses Cloudflare dummy keys while APP_ENV=staging — "
+        "signup CAPTCHA is ineffective on the public VM"
+    )
+elif app_env == "production" and (
+    site_key in dummy_turnstile or secret_key in dummy_turnstile
+):
+    print("FAIL:production APP_ENV refuses dummy Turnstile keys")
 PY
     )
   fi

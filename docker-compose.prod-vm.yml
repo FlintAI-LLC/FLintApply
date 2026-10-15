@@ -6,11 +6,27 @@
 # This file restores values from .env.staging for public HTTPS deploys.
 #
 # Set LAUNCH_PREVIEW_SECRET in .env.staging (same value for frontend + backend).
+# Caddy terminates TLS on 443; app ports bind loopback only so they are not public.
 
 services:
+  redis:
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+
   backend:
     ports: !override
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    mem_limit: 3g
+    memswap_limit: 4g
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\", timeout=5)"',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     environment:
       - ALLOWED_ORIGINS=["https://flintapply.com"]
       - FRONTEND_BASE_URL=https://flintapply.com
@@ -20,23 +36,39 @@ services:
 
   frontend:
     ports: !override
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+    mem_limit: 1g
+    memswap_limit: 1536m
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"require('http').get('http://127.0.0.1:3000/',(r)=>{r.resume();process.exit(r.statusCode&&r.statusCode<500?0:1)}).on('error',()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
     build:
       args:
         NEXT_PUBLIC_API_URL: https://api.flintapply.com
         NEXT_PUBLIC_SITE_URL: https://flintapply.com
         NEXT_PUBLIC_LAUNCH_AT: ${NEXT_PUBLIC_LAUNCH_AT:-2026-10-15T09:00:00-07:00}
         NEXT_PUBLIC_CHROME_WEB_STORE_EXTENSION_VERSION: ${NEXT_PUBLIC_CHROME_WEB_STORE_EXTENSION_VERSION:-0.1.35}
-        NEXT_PUBLIC_EXTENSION_BETA_VERSION: ${NEXT_PUBLIC_EXTENSION_BETA_VERSION:-0.1.30}
+        NEXT_PUBLIC_EXTENSION_BETA_VERSION: ${NEXT_PUBLIC_EXTENSION_BETA_VERSION:-0.1.41}
         NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY:-}
     environment:
       - NEXT_PUBLIC_API_URL=https://api.flintapply.com
       - NEXT_PUBLIC_SITE_URL=https://flintapply.com
       - NEXT_PUBLIC_CHROME_WEB_STORE_EXTENSION_VERSION=${NEXT_PUBLIC_CHROME_WEB_STORE_EXTENSION_VERSION:-0.1.35}
-      - NEXT_PUBLIC_EXTENSION_BETA_VERSION=${NEXT_PUBLIC_EXTENSION_BETA_VERSION:-0.1.30}
+      - NEXT_PUBLIC_EXTENSION_BETA_VERSION=${NEXT_PUBLIC_EXTENSION_BETA_VERSION:-0.1.41}
       - NEXTAUTH_URL=https://flintapply.com
       - AUTH_URL=https://flintapply.com
       - AUTH_TRUST_HOST=true
       - NEXT_PUBLIC_APP_ENV=production
       - NEXT_PUBLIC_LAUNCH_AT=${NEXT_PUBLIC_LAUNCH_AT:-2026-10-15T09:00:00-07:00}
       - LAUNCH_PREVIEW_SECRET=${LAUNCH_PREVIEW_SECRET:-}
+
+  postgres:
+    mem_limit: 1536m
+    memswap_limit: 2g
