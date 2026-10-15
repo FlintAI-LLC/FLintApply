@@ -51,6 +51,7 @@ import type { IssueAnchor } from "@/lib/api";
 import { resolvePhase3Delivery } from "@/lib/phase3Delivery";
 import { ExportButtons } from "@/components/session/ExportButtons";
 import { HumanProofreadNotice } from "@/components/session/HumanProofreadNotice";
+import { ApplyOnEmployerSiteButton } from "@/components/session/ApplyOnEmployerSiteButton";
 import { OpenInFlintButton } from "@/components/session/OpenInFlintButton";
 import { CoverLetterPanel } from "@/components/session/CoverLetterPanel";
 import { VersionHistory } from "@/components/session/VersionHistory";
@@ -166,6 +167,7 @@ function SessionContent() {
   const [sessionBulletFixes, setSessionBulletFixes] = useState<import("@/lib/api").BulletFixPayload[]>([]);
   const [sessionApprovedMetrics, setSessionApprovedMetrics] = useState<import("@/lib/api").ApprovedMetric[]>([]);
   const [exportCompany, setExportCompany] = useState<string | null>(null);
+  const [jobPostingUrl, setJobPostingUrl] = useState<string | null>(null);
   const [hasJd, setHasJd] = useState(false);
   const [jdRaw, setJdRaw] = useState("");
   const [costInfo, setCostInfo] = useState<{ cost_formatted: string; provider: string; model: string } | null>(null);
@@ -487,6 +489,7 @@ function SessionContent() {
     setHasJd(!!s.has_jd);
     setJdRaw(s.jd_raw ?? "");
     setExportCompany(s.export_company ?? null);
+    setJobPostingUrl(s.job_posting_url ?? null);
     setOriginalAtsScore(
       typeof s.original_ats_score === "number" ? s.original_ats_score : null,
     );
@@ -2353,6 +2356,10 @@ function SessionContent() {
                       companyName={exportCompany ?? undefined}
                       hasJd={hasJd}
                     />
+                  </div>
+                  <div>
+                    <h2 className="text-slate-700 dark:text-slate-300 font-semibold mb-3 text-sm">Apply to this job</h2>
+                    <ApplyOnEmployerSiteButton jobPostingUrl={jobPostingUrl} />
                   </div>
                   <div>
                     <h2 className="text-slate-700 dark:text-slate-300 font-semibold mb-3 text-sm">Prepare for the interview</h2>

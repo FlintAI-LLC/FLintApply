@@ -37,7 +37,9 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
             <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
               Capture full job descriptions from employer career sites in one click, send them
               into {PRODUCT_NAME} for tailoring, and autofill applications from your tailored
-              resume (beta on supported ATS forms).
+              resume (beta on supported ATS forms). After Score & Export, use &apos;Apply on
+              employer site&apos; to reopen the posting — autofill starts on the application form;
+              you do not click the toolbar icon.
             </p>
             {!compact && (
               <p className="text-xs text-slate-600 dark:text-slate-400">

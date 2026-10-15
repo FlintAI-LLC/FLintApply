@@ -133,6 +133,7 @@ export async function checkSession(
   user_extra_notes: string;
   bullet_fixes: BulletFixPayload[];
   approved_metrics: ApprovedMetric[];
+  job_posting_url?: string | null;
 }> {
   return request(`/api/sessions/${sessionId}`);
 }

@@ -4,6 +4,7 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
@@ -17,6 +18,7 @@ from app.llm.factory import get_llm_client_for_step
 from app.services.llm.plan_code_for_llm import resolve_plan_code_for_llm_user_id
 from app.llm.token_accounting import llm_accounting_context
 from app.models.chat import ChatRequest, ChatResponse
+from app.models.job_description import JobDescription
 from app.models.qa import QAOutput
 from app.agent.phase4_rescore import rescore_qa_output
 from app.models.dashboard import ResumeRecord
@@ -58,7 +60,52 @@ async def _resolve_user_id_for_restore(
         return None
 
 
-def _session_check_payload(session) -> dict:
+def _sanitize_job_posting_url(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    url = raw.strip()
+    if len(url) > 2048:
+        return None
+    if any(ord(ch) < 32 for ch in url):
+        return None
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+    if parsed.scheme not in ("http", "https"):
+        return None
+    if not parsed.hostname:
+        return None
+    if parsed.username or parsed.password:
+        return None
+    return url
+
+
+async def _job_posting_url_for_session(db: AsyncSession, session) -> str | None:
+    user_id = getattr(session, "user_id", None)
+    if not user_id:
+        return None
+    try:
+        session_user_uuid = uuid.UUID(str(user_id))
+    except ValueError:
+        return None
+    result = await db.execute(
+        select(JobDescription.url)
+        .where(
+            JobDescription.session_id == session.session_id,
+            JobDescription.user_id == session_user_uuid,
+            JobDescription.url.isnot(None),
+        )
+        .order_by(JobDescription.created_at.desc())
+        .limit(1)
+    )
+    raw_url = result.scalar_one_or_none()
+    if raw_url is None:
+        return None
+    return _sanitize_job_posting_url(raw_url)
+
+
+def _session_check_payload(session, job_posting_url: str | None = None) -> dict:
     def phase_payload(n: int) -> dict:
         status = getattr(session, f"phase{n}_status")
         output = getattr(session, f"phase{n}_output")
@@ -129,6 +176,7 @@ def _session_check_payload(session) -> dict:
         "user_extra_notes": session.user_extra_notes,
         "bullet_fixes": [bf.model_dump() for bf in session.bullet_fixes],
         "approved_metrics": [am.model_dump() for am in (session.approved_metrics or [])],
+        "job_posting_url": job_posting_url,
     }
 
 
@@ -173,7 +221,8 @@ async def check_session(
     session = await _load_session_for_check(session_id, authorization, db)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return _session_check_payload(session)
+    job_posting_url = await _job_posting_url_for_session(db, session)
+    return _session_check_payload(session, job_posting_url=job_posting_url)
 
 
 class TailoredEditRequest(BaseModel):
