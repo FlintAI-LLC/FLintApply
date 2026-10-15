@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Download, ExternalLink, Plug, Sparkles } from "lucide-react";
+import { AUTOFILL_BETA_EXPECTATION_SHORT } from "@/lib/autofillBetaExpectations";
 import { PRODUCT_NAME } from "@/lib/brand";
 import {
   chromeWebStoreExtensionVersion,
@@ -46,10 +47,12 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
           <div className="space-y-2 min-w-0">
             <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
               Capture full job descriptions from employer career sites in one click, send them
-              into {PRODUCT_NAME} for tailoring, and autofill applications from your tailored
-              resume (beta on supported ATS forms). After Score & Export, use &apos;Apply on
-              employer site&apos; to reopen the posting — autofill starts on the application form;
-              you do not click the toolbar icon.
+              into {PRODUCT_NAME} for tailoring, then use Apply on employer site after Score &
+              Export to reopen the posting. On the application form, Flint Apply can offer
+              Autofill (beta) — you do not click the toolbar icon for that flow.
+            </p>
+            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed border-l-2 border-amber-500/60 pl-3">
+              {AUTOFILL_BETA_EXPECTATION_SHORT}
             </p>
             {!compact && (
               <p className="text-xs text-slate-600 dark:text-slate-400">

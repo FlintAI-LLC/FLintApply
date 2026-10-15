@@ -1,3 +1,4 @@
+import { AUTOFILL_BETA_EXPECTATION_APPLY_HELPER } from "@/lib/autofillBetaExpectations";
 import { isAutofillAllowlistedUrl } from "@/lib/extensionAutofillAllowlist";
 
 export type ApplyEmployerSiteState = "A" | "B" | "C" | "D";
@@ -82,13 +83,10 @@ export function applyEmployerSiteHelperCopy(options: {
     return base;
   }
   if (state === "A" || state === "B") {
-    // Autofill only reaches the form after the employer's own Apply button, and
-    // only Greenhouse/Lever/Ashby are mapped today. Promising more than that is
-    // what makes the extension look broken on multi-step Workday forms.
     if (extensionDetected !== false) {
-      return "Opens the posting. Click the employer's Apply button to reach the form — Flint Apply offers to autofill Greenhouse, Lever and Ashby forms from this tailored resume. Multi-step forms such as Workday still need manual review.";
+      return AUTOFILL_BETA_EXPECTATION_APPLY_HELPER;
     }
-    return "Opens the posting. Install Flint Apply and sign in to autofill Greenhouse, Lever and Ashby application forms from this tailored resume.";
+    return "Opens the posting. Install Flint Apply and sign in — autofill (beta) only helps with a few contact fields on some forms; you will still complete most of the application by hand.";
   }
   return "";
 }

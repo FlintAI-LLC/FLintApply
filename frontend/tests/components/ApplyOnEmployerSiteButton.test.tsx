@@ -19,7 +19,7 @@ describe("ApplyOnEmployerSiteButton", () => {
     assert.match(html, /flintapply=apply/);
     assert.match(html, /boards\.greenhouse\.io/);
     assert.match(html, /Apply on employer site/);
-    assert.match(html, /offers to autofill/);
+    assert.match(html, /Autofill \(beta\)/);
   });
 
   it("renders state C label for SmartRecruiters", () => {

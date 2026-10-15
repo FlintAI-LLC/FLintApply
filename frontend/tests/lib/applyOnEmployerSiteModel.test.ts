@@ -69,10 +69,9 @@ test("allowlisted URLs map to A/B by detection", () => {
 
 test("helper copy transitions from in-flight A to timeout B", () => {
   const inFlight = applyEmployerSiteHelperCopy({ state: "A", extensionDetected: null });
-  assert.match(inFlight, /offers to autofill/);
-  // Must name the mapped platforms and not over-promise on multi-step forms.
-  assert.match(inFlight, /Greenhouse, Lever and Ashby/);
-  assert.match(inFlight, /Workday still need manual review/);
+  assert.match(inFlight, /Autofill \(beta\)/);
+  assert.match(inFlight, /contact fields/);
+  assert.match(inFlight, /manual entry/);
 
   const timedOut = applyEmployerSiteHelperCopy({ state: "B", extensionDetected: false });
   assert.match(timedOut, /Install Flint Apply/);
