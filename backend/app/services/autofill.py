@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import uuid
 from urllib.parse import urlparse
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.job_description import JobDescription
 from app.models.session import Session
+from app.services.dashboard.session_cache import restore_session_from_record
+from app.services.session_store import get_session
 
 GREENHOUSE_FIELD_SELECTORS: dict[str, str] = {
     "first_name": "[name='job_application[first_name]']",
@@ -31,6 +38,8 @@ def detect_platform(url: str | None) -> str:
         return "lever"
     if host.endswith("ashbyhq.com"):
         return "ashby"
+    if host.endswith("myworkdayjobs.com") or host.endswith("myworkday.com"):
+        return "workday"
     return "unknown"
 
 
@@ -99,3 +108,68 @@ def url_host(url: str | None) -> str:
     if not url:
         return ""
     return (urlparse(url).hostname or "").lower()
+
+
+async def resolve_tailored_session(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    session_id: str,
+) -> Session | None:
+    """Tailored session from Redis, falling back to the durable dashboard snapshot.
+
+    Redis sessions expire after SESSION_TTL_SECONDS, so autofill would otherwise
+    stop working a day after tailoring even though the resume is still on file.
+    """
+    session = await get_session(session_id)
+    if session is not None and session.phase3_output is not None:
+        return session
+    restored = await restore_session_from_record(
+        db, session_id=session_id, user_id=user_id
+    )
+    if restored is None or restored.phase3_output is None:
+        return None
+    return restored
+
+
+async def ensure_job_description_for_session(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    session_id: str,
+    title: str,
+    company: str,
+    jd_text: str,
+) -> JobDescription:
+    """Return the JobDescription bound to this session, creating one if absent.
+
+    Tailoring on the web never creates a row (only the extension's "Save job"
+    does), but the extension can only fetch a payload by jd_id — so a row is the
+    addressable handle. Idempotent, and never writes `url`: a web-tailored
+    session has no posting URL here and a fabricated one would poison host
+    matching in the extension's session picker.
+    """
+    existing = (
+        await db.execute(
+            select(JobDescription).where(
+                JobDescription.user_id == user_id,
+                JobDescription.session_id == session_id,
+            )
+        )
+    ).scalars().first()
+    if existing is not None:
+        return existing
+
+    row = JobDescription(
+        user_id=user_id,
+        url=None,
+        title=title or None,
+        company=company or None,
+        text=jd_text or "",
+        source="web",
+        session_id=session_id,
+    )
+    db.add(row)
+    # Commit stays owned by the get_db dependency; flush assigns row.id.
+    await db.flush()
+    return row

@@ -33,6 +33,26 @@ export function resolveApplyEmployerSiteStructural(
   return { structural: "allowlisted", href: safeUrl };
 }
 
+/** Query flag read by the extension popup to show apply/autofill UI instead of JD capture. */
+export const FLINT_APPLY_EMPLOYER_INTENT_PARAM = "flintapply";
+export const FLINT_APPLY_EMPLOYER_INTENT_VALUE = "apply";
+
+export function withApplyOnEmployerSiteIntent(postingUrl: string): string {
+  const parsed = new URL(postingUrl);
+  parsed.searchParams.set(FLINT_APPLY_EMPLOYER_INTENT_PARAM, FLINT_APPLY_EMPLOYER_INTENT_VALUE);
+  return parsed.href;
+}
+
+export function applyEmployerSiteNavigation(
+  jobPostingUrl: string | null | undefined,
+): { structural: ApplyEmployerSiteStructural; href: string | null } {
+  const resolved = resolveApplyEmployerSiteStructural(jobPostingUrl);
+  if (!resolved.href || resolved.structural !== "allowlisted") {
+    return resolved;
+  }
+  return { structural: resolved.structural, href: withApplyOnEmployerSiteIntent(resolved.href) };
+}
+
 export function toDisplayState(
   structural: ApplyEmployerSiteStructural,
   extensionDetected: boolean | null,
@@ -62,10 +82,13 @@ export function applyEmployerSiteHelperCopy(options: {
     return base;
   }
   if (state === "A" || state === "B") {
+    // Autofill only reaches the form after the employer's own Apply button, and
+    // only Greenhouse/Lever/Ashby are mapped today. Promising more than that is
+    // what makes the extension look broken on multi-step Workday forms.
     if (extensionDetected !== false) {
-      return "Opens the posting. Flint Apply will offer to autofill the application from this tailored resume.";
+      return "Opens the posting. Click the employer's Apply button to reach the form — Flint Apply offers to autofill Greenhouse, Lever and Ashby forms from this tailored resume. Multi-step forms such as Workday still need manual review.";
     }
-    return "Opens the posting. Install Flint Apply and stay signed in so the application form autofills — you do not need to click the toolbar icon.";
+    return "Opens the posting. Install Flint Apply and sign in to autofill Greenhouse, Lever and Ashby application forms from this tailored resume.";
   }
   return "";
 }

@@ -9,6 +9,9 @@ test("allowlisted ATS hosts", () => {
   assert.equal(isAutofillAllowlistedUrl("https://jobs.lever.co/acme/abc"), true);
   assert.equal(isAutofillAllowlistedUrl("https://jobs.ashbyhq.com/acme/abc"), true);
   assert.equal(isAutofillAllowlistedUrl("https://acme.myworkdayjobs.com/en-US/careers"), true);
+  // *.myworkday.com is the employee HRIS (payroll, personal info), not the
+  // external career site. It must never be offered as an autofill surface.
+  assert.equal(isAutofillAllowlistedUrl("https://acme.wd5.myworkday.com/acme/d/inst/home"), false);
   assert.equal(isAutofillAllowlistedUrl("https://careers.icims.com/jobs/1"), true);
   assert.equal(isAutofillAllowlistedUrl("https://acme.ukg.net/careers"), true);
   assert.equal(isAutofillAllowlistedUrl("https://jobright.ai/j/1"), true);
