@@ -20,6 +20,11 @@ GREENHOUSE_FIELD_SELECTORS: dict[str, str] = {
     "phone": "[name='job_application[phone]']",
     "resume": "[name='job_application[resume]']",
     "linkedin_url": "[name='job_application[urls][LinkedIn]']",
+    "website_url": (
+        "[name='job_application[urls][Website]'], "
+        "[name='job_application[urls][Portfolio]']"
+    ),
+    "github_url": "[name='job_application[urls][GitHub]']",
     "work_authorization": "[name='job_application[answers][work_authorization]']",
 }
 
@@ -78,6 +83,8 @@ def build_autofill_fields(contact: dict[str, str], platform: str) -> list[dict[s
         ("email", str(contact.get("email") or "")),
         ("phone", str(contact.get("phone") or "")),
         ("linkedin_url", str(contact.get("linkedin") or "")),
+        ("website_url", str(contact.get("website") or "")),
+        ("github_url", str(contact.get("github") or "")),
     ]
 
     fields: list[dict[str, str]] = []
