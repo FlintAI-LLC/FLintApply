@@ -106,9 +106,11 @@ export function extensionChromeReviewGuidance(storeVersion: string | null, betaV
   return `While Chrome Web Store review is in progress (live listing v${store}), install the latest zip in Developer mode for autofill and other new fixes (v${beta}+). Review in the dashboard can show a higher version than what’s published yet.`;
 }
 
-/** During launch, prefer the dev zip over the lagging Store listing when both are shown. */
+/**
+ * Prefer Developer-mode zip over Chrome Web Store when a beta download URL exists.
+ * (Store listing often lags review; autofill requires the latest engineering build.)
+ */
 export function extensionBetaRecommendedOverStore(): boolean {
   if (process.env.NEXT_PUBLIC_EXTENSION_BETA_RECOMMENDED === "false") return false;
-  if (process.env.NEXT_PUBLIC_EXTENSION_BETA_RECOMMENDED === "true") return true;
-  return isProductionAppEnv();
+  return extensionBetaDownloadUrl() !== null;
 }

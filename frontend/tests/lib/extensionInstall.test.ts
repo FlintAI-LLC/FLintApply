@@ -6,6 +6,7 @@ import {
   chromeWebStoreExtensionVersion,
   chromeWebStoreUrl,
   extensionBetaDownloadUrl,
+  extensionBetaRecommendedOverStore,
   extensionBetaVersion,
   extensionInstallMode,
   isProductionAppEnv,
@@ -131,8 +132,10 @@ describe("extensionInstall", () => {
   it("offers beta download on production during Chrome review lag", () => {
     const prevEnv = process.env.NEXT_PUBLIC_APP_ENV;
     const prevSite = process.env.NEXT_PUBLIC_SITE_URL;
+    const prevRec = process.env.NEXT_PUBLIC_EXTENSION_BETA_RECOMMENDED;
     process.env.NEXT_PUBLIC_APP_ENV = "production";
     process.env.NEXT_PUBLIC_SITE_URL = "https://flintapply.com";
+    delete process.env.NEXT_PUBLIC_EXTENSION_BETA_RECOMMENDED;
     try {
       assert.equal(isProductionAppEnv(), true);
       assert.equal(
@@ -140,11 +143,14 @@ describe("extensionInstall", () => {
         "https://flintapply.com/downloads/flintapply-extension-beta.zip",
       );
       assert.equal(extensionInstallMode(), "download");
+      assert.equal(extensionBetaRecommendedOverStore(), true);
     } finally {
       if (prevEnv !== undefined) process.env.NEXT_PUBLIC_APP_ENV = prevEnv;
       else delete process.env.NEXT_PUBLIC_APP_ENV;
       if (prevSite !== undefined) process.env.NEXT_PUBLIC_SITE_URL = prevSite;
       else delete process.env.NEXT_PUBLIC_SITE_URL;
+      if (prevRec !== undefined) process.env.NEXT_PUBLIC_EXTENSION_BETA_RECOMMENDED = prevRec;
+      else delete process.env.NEXT_PUBLIC_EXTENSION_BETA_RECOMMENDED;
     }
   });
 

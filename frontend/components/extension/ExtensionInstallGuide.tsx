@@ -65,16 +65,17 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
         <div className="rounded-2xl border border-emerald-500/35 bg-emerald-50/80 dark:bg-emerald-950/25 p-5 space-y-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-              Recommended until Store review finishes
+              Recommended — use this until Chrome Web Store review finishes
             </p>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white mt-1">
-              Latest build (Developer mode)
+              Latest build in Developer mode
               {betaVersion ? ` (v${betaVersion})` : ""}
             </h2>
             <p className="text-sm text-slate-700 dark:text-slate-300 mt-2 leading-relaxed">
-              For the first few weeks after launch, use this zip in Chrome Developer mode so you get
-              autofill and fixes while the Web Store listing catches up
-              {storeVersion ? ` (Store is still v${storeVersion})` : ""}.
+              The public Store listing
+              {storeVersion ? ` (v${storeVersion})` : ""} does not include the newest autofill fixes.
+              Download this zip, turn on Developer mode in{" "}
+              <code className="text-xs">chrome://extensions</code>, and choose Load unpacked.
             </p>
           </div>
           <a
@@ -100,31 +101,47 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
           className={
             storeIsPrimary
               ? "rounded-2xl border border-amber-400/40 bg-amber-500/10 dark:bg-amber-400/5 p-5 space-y-3"
-              : "rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-5 space-y-3"
+              : "rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100/80 dark:bg-slate-900/50 p-5 space-y-3 opacity-95"
           }
         >
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-              {storeIsPrimary ? "Recommended" : "Easiest install (updates automatically)"}
+            <p
+              className={
+                storeIsPrimary
+                  ? "text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300"
+                  : "text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+              }
+            >
+              {storeIsPrimary
+                ? "Recommended"
+                : betaRecommended
+                  ? "Not recommended yet — older public build"
+                  : "Optional — updates automatically"}
             </p>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white mt-1">
               Chrome Web Store
               {storeVersion ? ` (v${storeVersion})` : ""}
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
-              {storeIsPrimary
-                ? "Official listing with one-click install and automatic updates. Sign in with the same account you use on flintapply.com."
-                : "One-click install with automatic updates. Use this if you prefer not to use Developer mode."}
+              {betaRecommended
+                ? `Save job and paste JD still work from the Store build, but autofill and the latest fixes require the Developer mode zip above until Google publishes v${betaVersion ?? "latest"}.`
+                : storeIsPrimary
+                  ? "Official listing with one-click install and automatic updates. Sign in with the same account you use on flintapply.com."
+                  : "One-click install with automatic updates."}
             </p>
           </div>
           <a
             href={storeUrl!}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl text-sm"
+            className={
+              betaRecommended
+                ? "inline-flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-medium rounded-xl text-sm hover:bg-slate-200/60 dark:hover:bg-slate-800"
+                : "inline-flex items-center gap-2 px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl text-sm"
+            }
           >
             <ExternalLink className="w-4 h-4" />
-            Add to Chrome
+            {betaRecommended ? "Open Store listing (older build)" : "Add to Chrome"}
           </a>
         </div>
       )}
