@@ -16,6 +16,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.db.engine import get_db
 from app.limiter import limiter
+from app.models.dashboard import ResumeRecord
 from app.models.job_description import JobDescription
 from app.models.user import User
 from app.services.auth.dependencies import get_current_user
@@ -23,12 +24,13 @@ from app.services.autofill import (
     RECENT_TAILORED_LIMIT,
     build_autofill_fields,
     detect_platform,
+    ensure_job_description_for_session,
     extract_contact,
+    resolve_tailored_session,
     url_host,
 )
 from app.parsers.html_parser import strip_html_to_text
 from app.services.flint_handoff import create_jd_handoff_token
-from app.services.session_store import get_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["job-descriptions"])
@@ -108,12 +110,16 @@ async def list_recent_tailored_sessions(
     ).scalars().all()
 
     sessions: list[RecentTailoredSessionItem] = []
+    seen_session_ids: set[str] = set()
     for row in rows:
         if not row.session_id:
             continue
-        session = await get_session(row.session_id)
-        if session is None or session.phase3_output is None:
+        session = await resolve_tailored_session(
+            db, user_id=user.id, session_id=row.session_id
+        )
+        if session is None:
             continue
+        seen_session_ids.add(row.session_id)
         sessions.append(
             RecentTailoredSessionItem(
                 jd_id=str(row.id),
@@ -125,6 +131,51 @@ async def list_recent_tailored_sessions(
         )
         if len(sessions) >= RECENT_TAILORED_LIMIT:
             break
+
+    # Sessions tailored on the web have no JobDescription row, so they were
+    # invisible to autofill. Bind them lazily here — an entry is only listed
+    # when the payload endpoint would succeed for it, so the extension's
+    # session picker can never offer a row that 404s.
+    if len(sessions) < RECENT_TAILORED_LIMIT:
+        records = (
+            await db.execute(
+                select(ResumeRecord)
+                .where(
+                    ResumeRecord.user_id == user.id,
+                    ResumeRecord.deleted_at.is_(None),
+                )
+                .order_by(ResumeRecord.updated_at.desc())
+                .limit(RECENT_TAILORED_LIMIT * 3)
+            )
+        ).scalars().all()
+        for record in records:
+            if record.session_id in seen_session_ids:
+                continue
+            session = await resolve_tailored_session(
+                db, user_id=user.id, session_id=record.session_id
+            )
+            if session is None:
+                continue
+            jd = await ensure_job_description_for_session(
+                db,
+                user_id=user.id,
+                session_id=record.session_id,
+                title=record.jd_title,
+                company=record.jd_company,
+                jd_text=session.jd_raw or "",
+            )
+            seen_session_ids.add(record.session_id)
+            sessions.append(
+                RecentTailoredSessionItem(
+                    jd_id=str(jd.id),
+                    title=record.jd_title or "",
+                    company=record.jd_company or "",
+                    url_host=url_host(jd.url),
+                    tailored_at=record.updated_at.isoformat(),
+                )
+            )
+            if len(sessions) >= RECENT_TAILORED_LIMIT:
+                break
 
     return RecentTailoredSessionsResponse(sessions=sessions)
 
@@ -163,8 +214,10 @@ async def get_autofill_payload(
             detail={"code": "resume_not_tailored_yet"},
         )
 
-    session = await get_session(row.session_id)
-    if session is None or session.phase3_output is None:
+    session = await resolve_tailored_session(
+        db, user_id=user.id, session_id=row.session_id
+    )
+    if session is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "resume_not_tailored_yet"},

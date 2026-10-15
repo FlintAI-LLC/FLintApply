@@ -4,7 +4,9 @@ import test from "node:test";
 import {
   applyEmployerSiteHelperCopy,
   applyEmployerSiteLabel,
+  applyEmployerSiteNavigation,
   resolveApplyEmployerSiteStructural,
+  withApplyOnEmployerSiteIntent,
   sanitizeJobPostingUrl,
   showGetExtensionLink,
   toDisplayState,
@@ -47,6 +49,13 @@ test("state C off-allowlist with href", () => {
   assert.equal(applyEmployerSiteLabel("C"), "Open job posting");
 });
 
+test("withApplyOnEmployerSiteIntent adds flintapply=apply query param", () => {
+  const url = "https://boards.greenhouse.io/acme/jobs/1";
+  const withIntent = withApplyOnEmployerSiteIntent(url);
+  assert.match(withIntent, /flintapply=apply/);
+  assert.equal(applyEmployerSiteNavigation(url).href, withIntent);
+});
+
 test("allowlisted URLs map to A/B by detection", () => {
   const url = "https://boards.greenhouse.io/acme/jobs/1";
   const resolved = resolveApplyEmployerSiteStructural(url);
@@ -60,7 +69,10 @@ test("allowlisted URLs map to A/B by detection", () => {
 
 test("helper copy transitions from in-flight A to timeout B", () => {
   const inFlight = applyEmployerSiteHelperCopy({ state: "A", extensionDetected: null });
-  assert.match(inFlight, /will offer to autofill/);
+  assert.match(inFlight, /offers to autofill/);
+  // Must name the mapped platforms and not over-promise on multi-step forms.
+  assert.match(inFlight, /Greenhouse, Lever and Ashby/);
+  assert.match(inFlight, /Workday still need manual review/);
 
   const timedOut = applyEmployerSiteHelperCopy({ state: "B", extensionDetected: false });
   assert.match(timedOut, /Install Flint Apply/);

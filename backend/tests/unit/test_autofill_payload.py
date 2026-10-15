@@ -17,7 +17,10 @@ def test_detect_platform_from_host() -> None:
     assert detect_platform("https://www.linkedin.com/jobs/view/123") == "linkedin"
     assert detect_platform("https://jobs.lever.co/acme/abc") == "lever"
     assert detect_platform("https://jobs.ashbyhq.com/acme/abc") == "ashby"
+    assert detect_platform("https://workday.wd5.myworkdayjobs.com/job/1") == "workday"
+    assert detect_platform("https://acme.wd3.myworkday.com/job/1") == "workday"
     assert detect_platform("https://example.com/jobs/1") == "unknown"
+    assert detect_platform(None) == "unknown"
 
 
 def test_split_name() -> None:

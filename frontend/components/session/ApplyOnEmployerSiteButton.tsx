@@ -6,7 +6,7 @@ import { EXTENSION_INSTALL_PATH } from "@/lib/extensionInstall";
 import {
   applyEmployerSiteHelperCopy,
   applyEmployerSiteLabel,
-  resolveApplyEmployerSiteStructural,
+  applyEmployerSiteNavigation,
   showGetExtensionLink,
   toDisplayState,
 } from "@/lib/applyOnEmployerSiteModel";
@@ -33,7 +33,7 @@ function GetExtensionLink() {
 
 export function ApplyOnEmployerSiteButton({ jobPostingUrl }: Props) {
   const extensionDetected = useFlintApplyExtensionInstalled();
-  const { structural, href } = resolveApplyEmployerSiteStructural(jobPostingUrl);
+  const { structural, href } = applyEmployerSiteNavigation(jobPostingUrl);
   const state = toDisplayState(structural, extensionDetected);
   const label = applyEmployerSiteLabel(state);
   const helper = applyEmployerSiteHelperCopy({ state, extensionDetected });

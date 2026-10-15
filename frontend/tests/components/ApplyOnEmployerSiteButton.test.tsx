@@ -16,9 +16,10 @@ describe("ApplyOnEmployerSiteButton", () => {
   it("renders enabled greenhouse link for allowlisted URL", () => {
     const url = "https://boards.greenhouse.io/acme/jobs/1";
     const html = renderToStaticMarkup(<ApplyOnEmployerSiteButton jobPostingUrl={url} />);
-    assert.match(html, new RegExp(`href="${url}"`));
+    assert.match(html, /flintapply=apply/);
+    assert.match(html, /boards\.greenhouse\.io/);
     assert.match(html, /Apply on employer site/);
-    assert.match(html, /will offer to autofill/);
+    assert.match(html, /offers to autofill/);
   });
 
   it("renders state C label for SmartRecruiters", () => {
