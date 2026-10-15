@@ -53,9 +53,8 @@ export function chromeWebStoreUrl(): string | null {
   return sanitizeChromeWebStoreUrl(process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL);
 }
 
-/** Hosted .zip for private beta (unpacked load in Chrome). Hidden on production. */
+/** Hosted .zip for latest extension (Developer mode). Available on production during CWS review lag. */
 export function extensionBetaDownloadUrl(): string | null {
-  if (isProductionAppEnv()) return null;
   if (process.env.NEXT_PUBLIC_EXTENSION_BETA_DOWNLOAD_ENABLED === "false") {
     return null;
   }
@@ -98,4 +97,18 @@ export function extensionInstallHeadline(): string {
 
 export function extensionBetaSupportLine(): string {
   return `Private beta builds are installed manually in Chrome. If the download link is unavailable, email ${PRIVACY_EMAIL} from the address on your account and ask for the beta extension zip.`;
+}
+
+/** Short copy when Store listing lags the engineering build (Chrome review). */
+export function extensionChromeReviewGuidance(storeVersion: string | null, betaVersion: string | null): string {
+  const store = storeVersion ?? "the Store build";
+  const beta = betaVersion ?? EXTENSION_RELEASE_VERSION;
+  return `While Chrome Web Store review is in progress (live listing v${store}), install the latest zip in Developer mode for autofill and other new fixes (v${beta}+). Review in the dashboard can show a higher version than what’s published yet.`;
+}
+
+/** During launch, prefer the dev zip over the lagging Store listing when both are shown. */
+export function extensionBetaRecommendedOverStore(): boolean {
+  if (process.env.NEXT_PUBLIC_EXTENSION_BETA_RECOMMENDED === "false") return false;
+  if (process.env.NEXT_PUBLIC_EXTENSION_BETA_RECOMMENDED === "true") return true;
+  return isProductionAppEnv();
 }

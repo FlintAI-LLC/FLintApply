@@ -7,8 +7,10 @@ import {
   chromeWebStoreExtensionVersion,
   chromeWebStoreUrl,
   extensionBetaDownloadUrl,
+  extensionBetaRecommendedOverStore,
   extensionBetaSupportLine,
   extensionBetaVersion,
+  extensionChromeReviewGuidance,
 } from "@/lib/extensionInstall";
 
 const UNPACKED_STEPS = [
@@ -26,10 +28,18 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
   const betaVersion = extensionBetaVersion();
   const showBeta = Boolean(downloadUrl);
   const showStore = Boolean(storeUrl);
-  const storeIsPrimary = showStore && !showBeta;
+  const betaRecommended = extensionBetaRecommendedOverStore() && showBeta;
+  const storeIsPrimary = showStore && !betaRecommended;
 
   return (
     <div className={compact ? "space-y-4" : "space-y-8"}>
+      {showBeta && showStore && betaRecommended && (
+        <div className="rounded-2xl border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/30 p-4">
+          <p className="text-sm text-emerald-950 dark:text-emerald-100 leading-relaxed">
+            {extensionChromeReviewGuidance(storeVersion, betaVersion)}
+          </p>
+        </div>
+      )}
       <div className="rounded-2xl border border-amber-400/30 bg-amber-500/5 dark:bg-amber-400/5 p-5 space-y-4">
         <div className="flex items-start gap-3">
           <Plug className="w-5 h-5 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -51,6 +61,40 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
         </div>
       </div>
 
+      {showBeta && betaRecommended && (
+        <div className="rounded-2xl border border-emerald-500/35 bg-emerald-50/80 dark:bg-emerald-950/25 p-5 space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+              Recommended until Store review finishes
+            </p>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white mt-1">
+              Latest build (Developer mode)
+              {betaVersion ? ` (v${betaVersion})` : ""}
+            </h2>
+            <p className="text-sm text-slate-700 dark:text-slate-300 mt-2 leading-relaxed">
+              For the first few weeks after launch, use this zip in Chrome Developer mode so you get
+              autofill and fixes while the Web Store listing catches up
+              {storeVersion ? ` (Store is still v${storeVersion})` : ""}.
+            </p>
+          </div>
+          <a
+            href={downloadUrl!}
+            download
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm"
+          >
+            <Download className="w-4 h-4" />
+            Download latest extension (zip)
+          </a>
+          <ol className="list-decimal list-inside space-y-2 text-sm text-slate-700 dark:text-slate-300">
+            {UNPACKED_STEPS.map((step) => (
+              <li key={step} className="leading-relaxed">
+                {step}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       {showStore && (
         <div
           className={
@@ -61,7 +105,7 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
         >
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-              {storeIsPrimary ? "Recommended" : "Easiest install"}
+              {storeIsPrimary ? "Recommended" : "Easiest install (updates automatically)"}
             </p>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white mt-1">
               Chrome Web Store
@@ -85,7 +129,7 @@ export function ExtensionInstallGuide({ compact = false }: { compact?: boolean }
         </div>
       )}
 
-      {showBeta && (
+      {showBeta && !betaRecommended && (
         <div className="rounded-2xl border border-emerald-500/35 bg-emerald-50/80 dark:bg-emerald-950/25 p-5 space-y-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
