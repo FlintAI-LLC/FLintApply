@@ -82,6 +82,41 @@ def test_build_fields_skips_missing_contact_values() -> None:
     assert keys == {"email", "resume"}
 
 
+def test_build_greenhouse_fields_include_website_and_github_when_present() -> None:
+    # Regression: contact.website/contact.github were parsed and stored, but
+    # never surfaced to the extension — Greenhouse's "Portfolio Website"
+    # question was never even attempted, let alone filled.
+    fields = build_autofill_fields(
+        {
+            "name": "Alex Rivera",
+            "email": "alex@example.com",
+            "website": "https://alexrivera.dev",
+            "github": "https://github.com/alexrivera",
+        },
+        "greenhouse",
+    )
+    keys = {field["key"] for field in fields}
+    assert "website_url" in keys
+    assert "github_url" in keys
+
+    website = next(field for field in fields if field["key"] == "website_url")
+    assert website["value"] == "https://alexrivera.dev"
+    assert "urls][Website]" in website["selector"] or "urls][Portfolio]" in website["selector"]
+
+    github = next(field for field in fields if field["key"] == "github_url")
+    assert github["value"] == "https://github.com/alexrivera"
+    assert "urls][GitHub]" in github["selector"]
+
+
+def test_build_fields_omits_website_and_github_when_absent() -> None:
+    fields = build_autofill_fields(
+        {"name": "Alex Rivera", "email": "alex@example.com"}, "greenhouse"
+    )
+    keys = {field["key"] for field in fields}
+    assert "website_url" not in keys
+    assert "github_url" not in keys
+
+
 def test_extract_contact_prefers_phase3_output() -> None:
     session = Session(
         session_id="sess-1",
